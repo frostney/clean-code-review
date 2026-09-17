@@ -3,18 +3,18 @@
 import { type RefObject, useRef, useState } from "react";
 import type { Preset } from "@/agent/lib/presets";
 import { SESSION_BUDGET_USD } from "@/lib/budget";
-import { meanVerdict, smellCount, smellLabel, verdictOf, verdictScore } from "@/lib/display";
 import type { PullRequestContext, ReviewState } from "@/lib/useReview";
 import { PullRequestBody } from "./PullRequestBody";
 
 /**
- * The top of a pull request: what this is, what the reviewer concluded, and
- * the numbers behind it.
+ * The top of a pull request: what is being reviewed, and how it got here.
  *
- * A pull request is the way in, so it is the first thing under the title: one
+ * A pull request is the way in, so it is the first thing on the page: one
  * field with `github.com/` already typed into it. The examples and the paste
  * box sit below as the secondary way in, because choosing what to review is
- * part of the same header, not a sidebar.
+ * part of the same header, not a sidebar. The conclusion is not here — the
+ * verdict, the smell count and the status ride on the overall review card,
+ * beside the decision they belong with.
  */
 export function ReviewHeader({
   review,
@@ -44,36 +44,10 @@ export function ReviewHeader({
   fileCount: number;
   lineCount: number;
 }) {
-  // The review's own verdict: what Jev said about every file it has judged.
-  const judged = Object.values(review.judgments);
-  const verdict = verdictOf(meanVerdict(judged.map((j) => verdictScore(j.answers))));
-  const smells = judged.reduce((total, j) => total + smellCount(j.answers), 0);
   const cached = review.cached || review.summary.cached;
 
   return (
     <header className="mb-4">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h1 className="text-xl font-semibold tracking-tight text-ink">Clean Code Judge</h1>
-        <span
-          data-verdict={verdict.key}
-          className={`flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${verdict.className}`}
-        >
-          {verdict.key === "pending" && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted" />}
-          {verdict.label}
-        </span>
-        {judged.length > 0 && (
-          <span
-            data-smells-total={smells}
-            className={`rounded-full px-2.5 py-0.5 text-[12px] font-semibold ${
-              smells ? "bg-bad-bg text-bad" : "bg-track text-muted"
-            }`}
-          >
-            {smellLabel(smells)}
-          </span>
-        )}
-        <Status review={review} />
-      </div>
-
       <PullRequestField onOpen={onOpenPullRequest} busy={fetching} />
 
       <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
@@ -197,7 +171,6 @@ function PullRequestField({ onOpen, busy }: { onOpen: (url: string) => void; bus
 
   return (
     <form
-      className="mt-3"
       onSubmit={(e) => {
         e.preventDefault();
         if (!ready || busy) return;
@@ -262,44 +235,4 @@ function PullRequestField({ onOpen, busy }: { onOpen: (url: string) => void; bus
       <p className="mt-1 text-[11px] text-muted">public repositories only</p>
     </form>
   );
-}
-
-/**
- * A dot and a word, and nothing at all when nothing is happening. Two models
- * answer here and they take different amounts of time, so this says which one
- * is working: Jev judging, or Luna writing the review.
- */
-function Status({ review }: { review: ReviewState }) {
-  const base = "flex items-center gap-2 text-[12px]";
-  if (review.budgetSpent) {
-    return (
-      <span data-status="budget-spent" className={`${base} text-muted`}>
-        budget spent
-      </span>
-    );
-  }
-  if (review.error) {
-    return (
-      <span data-status="error" className={`${base} text-bad`}>
-        {review.error}
-      </span>
-    );
-  }
-  if (review.asking) {
-    return (
-      <span data-status="judging" className={`${base} text-muted`}>
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warn" />
-        judging…
-      </span>
-    );
-  }
-  if (review.summary.running) {
-    return (
-      <span data-status="reviewing" className={`${base} text-muted`}>
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-        reviewing…
-      </span>
-    );
-  }
-  return null;
 }

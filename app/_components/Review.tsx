@@ -16,9 +16,10 @@ import { Notice } from "./Notice";
 import { Paste } from "./Paste";
 import { ReviewHeader } from "./ReviewHeader";
 import { ReviewNote } from "./ReviewNote";
+import { ReviewPills } from "./ReviewPills";
 
-/** Only rendered when the deploy knows where its own source lives. */
-const SOURCE_URL = process.env.NEXT_PUBLIC_SOURCE_URL;
+/** Where this page's own source lives. A deploy elsewhere can point it away. */
+const SOURCE_URL = process.env.NEXT_PUBLIC_SOURCE_URL || "https://github.com/frostney/clean-code-review";
 
 interface OpenReview {
   /** Changes whenever a different set of files is opened, never on an edit. */
@@ -142,6 +143,9 @@ export function Review() {
   );
 
   const allCollapsed = review.files.length > 0 && review.files.every((file) => collapsed[file.path]);
+
+  /** Whether anything has been judged yet, which is what the review is of. */
+  const judged = Object.keys(judge.judgments).length > 0;
 
   // Folding is about this review's files; another example is a fresh page.
   useEffect(() => {
@@ -270,15 +274,27 @@ export function Review() {
       />
 
       <div className="mb-4">
-        <ReviewNote
-          tone="overall"
-          status={overallSummaryStatus(judge.summary)}
-          text={judge.summary.overall}
-          decision={judge.summary.decision}
-          error={judge.summary.error}
-          model={judge.summary.model}
-          writing={isWriting(judge.summary, "overall")}
-        />
+        {judged ? (
+          <ReviewNote
+            tone="overall"
+            status={overallSummaryStatus(judge.summary)}
+            text={judge.summary.overall}
+            decision={judge.summary.decision}
+            error={judge.summary.error}
+            model={judge.summary.model}
+            pills={<ReviewPills review={judge} />}
+            writing={isWriting(judge.summary, "overall")}
+          />
+        ) : (
+          // Nothing has been judged yet, so there is no review to carry the
+          // pills — but the page must never be without its verdict. The same
+          // row, in the same place, with the card stripped to just that line.
+          <section data-overall="placeholder" className="rounded-md border border-line bg-surface px-3 py-2">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <ReviewPills review={judge} />
+            </div>
+          </section>
+        )}
       </div>
 
       {judge.budgetSpent && <BudgetSpent spentUsd={judge.spentUsd} />}
@@ -352,11 +368,9 @@ export function Review() {
         <a href="https://eve.dev" target="_blank" rel="noreferrer" className="underline hover:text-ink">
           built with eve
         </a>
-        {SOURCE_URL && (
-          <a href={SOURCE_URL} target="_blank" rel="noreferrer" className="underline hover:text-ink">
-            view source
-          </a>
-        )}
+        <a href={SOURCE_URL} target="_blank" rel="noreferrer" className="underline hover:text-ink">
+          view source
+        </a>
       </footer>
     </div>
   );

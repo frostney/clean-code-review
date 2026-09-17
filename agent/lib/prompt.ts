@@ -10,7 +10,7 @@ import type { Answers } from "./schema";
  */
 export function buildInstructions(): string {
   return [
-    "# Clean Code Judge",
+    "# Clean Code Review",
     "",
     "This agent's model is Jev, TypeSafe AI's System One evaluation model, reached through the Vercel AI Gateway.",
     `A judge turn's user message is a review: up to ${REVIEW_LIMITS.maxFiles} files (whole files or per-file unified-diff hunks) of at most ${REVIEW_LIMITS.maxCharsPerFile} characters each, as JSON, or a single code snippet or diff as plain text. Every file is evaluated against the ${QUESTIONS.length} Clean Code questions in agent/lib/questions.ts in parallel, and the reply is a JSON payload of calibrated answers per file.`,

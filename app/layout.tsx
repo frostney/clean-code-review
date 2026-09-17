@@ -18,8 +18,8 @@ const mono = Geist_Mono({
   display: "swap",
 });
 
-const title = "Clean Code Judge";
-const description = `Paste a PR diff, a codebase, or a GitHub pull request. Jev, TypeSafe’s System One model, answers ${QUESTION_COUNT} Clean Code questions per file in one eve turn, and Luna writes the review.`;
+const title = "Clean Code Review";
+const description = `Point it at a GitHub pull request, a diff or a codebase. Jev, TypeSafe’s System One model, answers ${QUESTION_COUNT} Clean Code questions of every file in one eve turn, and Luna writes the review.`;
 
 export const metadata: Metadata = {
   title,

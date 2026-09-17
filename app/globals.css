@@ -140,8 +140,9 @@ textarea {
 
 /* The pull request's own description, rendered as GitHub-flavoured markdown.
    Compact on purpose: this is the author speaking above the review, not the
-   review, so the rhythm is tighter than a document's and the headings are one
-   size up from the body rather than three. */
+   review, so the rhythm is tighter than a document's. The body stays muted;
+   the headings do not, because a heading that shares the body's size and its
+   grey is not a heading — it is a bold line. */
 .markdown > :first-child {
   margin-top: 0;
 }
@@ -159,23 +160,56 @@ textarea {
   margin: 0.5em 0;
 }
 
+/* One step per level, all of them in the page's ink, with one margin pair for
+   the lot so the rhythm does not change with the size. */
 .markdown h1,
 .markdown h2,
 .markdown h3,
 .markdown h4,
 .markdown h5,
 .markdown h6 {
-  margin: 0.9em 0 0.35em;
-  font-size: 15px;
+  margin: 16px 0 6px;
   font-weight: 600;
   color: var(--color-ink);
-  line-height: 1.35;
+  line-height: 1.3;
 }
 
+.markdown h1 {
+  font-size: 18px;
+}
+
+.markdown h2 {
+  font-size: 16px;
+}
+
+.markdown h3 {
+  font-size: 14px;
+}
+
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  font-size: 13px;
+}
+
+/* Below h4 there is no size left to give, so the distinction is the shape of
+   the letters instead. */
+.markdown h5,
+.markdown h6 {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* The rule under the top two levels, as GitHub draws it. */
 .markdown h1,
 .markdown h2 {
-  padding-bottom: 0.2em;
+  padding-bottom: 0.25em;
   border-bottom: 1px solid var(--color-line);
+}
+
+/* A heading that opens the description has nothing above it to be spaced from. */
+.markdown > :first-child {
+  margin-top: 0;
 }
 
 .markdown ul,

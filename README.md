@@ -1,6 +1,7 @@
-# Clean Code Judge
+# Clean Code Review
 
-Live: https://clean-code-judge.vercel.app
+Live: https://clean-code-review.vercel.app
+Source: https://github.com/frostney/clean-code-review
 
 Type a GitHub pull request into the field at the top — the address is already
 on screen as `github.com/` `owner/repo` `/pull/` `123`, with only those two
@@ -59,8 +60,8 @@ browser ──POST /eve/v1/session──▶ eve agent (Vercel Workflow)
   from it.
 - Every yes/no question is phrased so that **yes is a finding**, which is what
   lets a card count its smells: a row Jev puts at even odds or better keeps its
-  dark bar and says "Yes" in red, and the rest fade. The header badge is the
-  total across the review.
+  dark bar and says "Yes" in red, and the rest fade. The badge beside the
+  overall decision is the total across the review.
 - Some rows are conditional (`questionsFor(file)`): "Leaves it worse than
   found" is a question about a change, so it is only asked of a diff, and
   "Unclear or multi-assert tests" only of a path that looks like a test. A row
@@ -138,10 +139,11 @@ browser ──POST /eve/v1/session──▶ eve agent (Vercel Workflow)
   Jev's answers cost a fraction of a cent; Luna's prose costs cents, so the cap
   is what a tab may spend on both together.
 - A GitHub pull request is the page's first input, not a panel behind a button.
-  The field under the title is the address itself, with its fixed parts already
-  printed and only the variable ones left to type: `github.com/` `owner/repo`
-  `/pull/` `123`. Enter in either box judges it, a whole URL pasted into the
-  first box is taken apart and fills both, and the number box takes digits only.
+  There is no page title above it: the field is the top of the page and is the
+  address itself, with its fixed parts already printed and only the variable
+  ones left to type: `github.com/` `owner/repo` `/pull/` `123`. Enter in either
+  box judges it, a whole URL pasted into the first box is taken apart and fills
+  both, and the number box takes digits only.
   Below it, on one line, sit the second ways in: "Or choose one of the examples:"
   and the five preset buttons, then "Paste code or a diff", which opens a modal
   `<dialog>` — one textarea for a diff, a file, or several files marked up with
@@ -252,20 +254,27 @@ npm run deploy
 
 `eve deploy` runs `vercel deploy --prod` for the linked project. The deployment
 authenticates to the AI Gateway with the project's OIDC identity, so no API key
-is needed. Set `NEXT_PUBLIC_SOURCE_URL` to show a "view source" link in the
-footer.
+is needed. The footer's "view source" link points at
+https://github.com/frostney/clean-code-review; set `NEXT_PUBLIC_SOURCE_URL` to
+point it somewhere else.
 
-## Before you share the URL widely
+## Abuse limits
 
-The channel admits anonymous traffic. The code has two brakes: a per-session
-spend cap (`maxTokenCostUsdPerSession` in `agent/agent.ts`) and a best-effort
-per-address limit on new sessions (`agent/channels/eve.ts`, counted in one
-function instance's memory, so it slows a loop rather than stopping one).
-Total spend is still bounded only by how many sessions people create. Before
-promoting the demo, add one of:
+The channel admits anonymous traffic, so the deployment carries four brakes,
+from the outside in:
 
-- a spend cap on the AI Gateway in the Vercel dashboard, or
-- a Vercel Firewall rate-limit rule on `POST /eve/v1/session`.
+- **Vercel Firewall rate limits** (published on the project, per client IP):
+  `POST /eve/v1/session` 30 per 10 minutes, `/api/github-pr` 20 per 10
+  minutes, and everything under `/eve/v1/` 120 per minute. Excess requests get
+  a 429 before they reach a function. Manage them with `vercel firewall rules`.
+- **An AI Gateway budget** of $15 per week on the project
+  (`vercel ai-gateway budgets set project clean-code-review --limit 15
+  --refresh-period weekly`). When it is spent the gateway answers 402 and
+  reviews stop until the week rolls over.
+- **A per-session spend cap** (`maxTokenCostUsdPerSession` in
+  `agent/agent.ts`), one durable session per browser tab.
+- **A best-effort per-address limit on new sessions** inside the agent
+  (`agent/channels/eve.ts`), counted in one function instance's memory.
 
 ## Change the questions
 
