@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { HighlighterCore, LanguageInput, ThemedToken } from 'shiki/types';
+import { bundledLanguages } from 'shiki/langs';
+import type { HighlighterCore, ThemedToken } from 'shiki/types';
 
 import type { Lang } from './language';
 import type { Theme } from './theme';
@@ -24,8 +25,7 @@ const THEMES: Record<Theme, string> = {
  * The JavaScript regex engine rather than the Oniguruma one: no WASM to fetch
  * or instantiate, which is what lets a card highlight itself the moment its
  * code appears. It starts with no grammars at all: a review is written in one
- * or two languages, and loading all thirteen would be most of a megabyte
- * fetched to colour a TypeScript diff.
+ * or two languages, and shiki ships more than two hundred.
  */
 let ready: Promise<HighlighterCore> | null = null;
 
@@ -48,40 +48,25 @@ function highlighter(): Promise<HighlighterCore> {
 }
 
 /**
- * One dynamic import per grammar, so only the ones on screen are fetched.
- * Partial: a language the page names but cannot colour (PHP, Swift) has no
- * entry and is tokenised as plain text instead.
+ * Shiki's own registry, not a list of ours: every grammar it bundles, each one
+ * behind its own dynamic import, which is what lets the bundler give each
+ * grammar a chunk and the page fetch only the languages a review is written
+ * in. A language reaches this by being named in `lib/language.ts`; nothing has
+ * to be added here for it to be coloured.
  */
-const GRAMMARS: Partial<Record<Lang, () => LanguageInput>> = {
-  bash: () => import('shiki/langs/bash.mjs'),
-  css: () => import('shiki/langs/css.mjs'),
-  diff: () => import('shiki/langs/diff.mjs'),
-  go: () => import('shiki/langs/go.mjs'),
-  html: () => import('shiki/langs/html.mjs'),
-  java: () => import('shiki/langs/java.mjs'),
-  javascript: () => import('shiki/langs/javascript.mjs'),
-  json: () => import('shiki/langs/json.mjs'),
-  python: () => import('shiki/langs/python.mjs'),
-  rust: () => import('shiki/langs/rust.mjs'),
-  tsx: () => import('shiki/langs/tsx.mjs'),
-  typescript: () => import('shiki/langs/typescript.mjs'),
-  yaml: () => import('shiki/langs/yaml.mjs'),
-};
+function grammarOf(lang: Lang) {
+  return lang === 'text' ? null : bundledLanguages[lang];
+}
 
 /** Grammars already fetched or in flight, so ten cards of one language fetch once. */
 const grammars = new Map<Lang, Promise<void>>();
-
-/** The grammar a language is tokenised with: "text" when it has none. */
-function grammarOf(lang: Lang): Lang {
-  return GRAMMARS[lang] ? lang : 'text';
-}
 
 /**
  * Make `lang` safe to tokenise with. "text" is shiki's own no-op grammar and
  * is always there; everything else is fetched on first use and kept.
  */
 function loadLanguage(lang: Lang): Promise<void> {
-  const grammar = GRAMMARS[lang];
+  const grammar = grammarOf(lang);
   if (!grammar) {
     return Promise.resolve();
   }
@@ -141,7 +126,7 @@ export function useTokens(
           return;
         }
         const result = shiki.codeToTokens(code, {
-          lang: grammarOf(lang),
+          lang,
           theme: THEMES[theme],
         });
         if (!live) {

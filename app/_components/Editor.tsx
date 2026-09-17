@@ -36,6 +36,11 @@ const INDENT = '  ';
  * Both kinds of example are edited through this: a whole file, and the body of
  * a diff. What changes between them is only what is drawn underneath and how
  * many gutters stand beside it.
+ *
+ * A null `onChange` drops the textarea and leaves the highlighted layer on its
+ * own, scrolling itself. That is what a prose file gets: a README is on the
+ * page to be read, nothing here judges it, and an editable card would promise
+ * that typing in it changes an answer.
  */
 function Overlay({
   path,
@@ -46,7 +51,8 @@ function Overlay({
 }: {
   path: string;
   content: string;
-  onChange: (next: string) => void;
+  /** Null for a file that is shown and not edited. */
+  onChange: ((next: string) => void) | null;
   gutters: ReactNode;
   children: ReactNode;
 }) {
@@ -72,7 +78,12 @@ function Overlay({
   /** Tab indents the file instead of leaving the editor. */
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     // While an IME composition is open, Tab belongs to the candidate list.
-    if (e.key !== 'Tab' || e.shiftKey || e.nativeEvent.isComposing) {
+    if (
+      !onChange ||
+      e.key !== 'Tab' ||
+      e.shiftKey ||
+      e.nativeEvent.isComposing
+    ) {
       return;
     }
     e.preventDefault();
@@ -98,23 +109,25 @@ function Overlay({
       {gutters}
       <div className="relative min-w-0 flex-1">
         <pre
-          aria-hidden="true"
-          className="code-line overflow-hidden"
+          aria-hidden={onChange ? 'true' : undefined}
+          className={`code-line ${onChange ? 'overflow-hidden' : 'overflow-auto'}`}
           ref={preRef}
         >
           {children}
         </pre>
-        <textarea
-          aria-label={`Edit ${path}`}
-          className="code-line absolute inset-0 w-full resize-none overflow-auto border-0 bg-transparent px-3 py-2 text-transparent caret-ink outline-none"
-          maxLength={REVIEW_LIMITS.maxCharsPerFile}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={onKeyDown}
-          ref={textareaRef}
-          spellCheck={false}
-          value={content}
-          wrap="off"
-        />
+        {onChange ? (
+          <textarea
+            aria-label={`Edit ${path}`}
+            className="code-line absolute inset-0 w-full resize-none overflow-auto border-0 bg-transparent px-3 py-2 text-transparent caret-ink outline-none"
+            maxLength={REVIEW_LIMITS.maxCharsPerFile}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={onKeyDown}
+            ref={textareaRef}
+            spellCheck={false}
+            value={content}
+            wrap="off"
+          />
+        ) : null}
         {/* A phone is narrower than almost any line of code, so the card's
             right edge is where the line continues rather than where it ends.
             A hairline of shadow says so — over a plain row and over a tinted
@@ -130,7 +143,7 @@ function Overlay({
   );
 }
 
-/** A whole file, editable in place. */
+/** A whole file, editable in place — or, with a null `onChange`, only read. */
 export function Editor({
   path,
   content,
@@ -138,7 +151,7 @@ export function Editor({
 }: {
   path: string;
   content: string;
-  onChange: (next: string) => void;
+  onChange: ((next: string) => void) | null;
 }) {
   const lines = useTokens(content, langOf(path), HIGHLIGHT_DEBOUNCE_MS);
   const numbers = useMemo(() => lines.map((_, i) => i + 1), [lines]);
@@ -172,7 +185,7 @@ export function PatchEditor({
 }: {
   path: string;
   content: string;
-  onChange: (next: string) => void;
+  onChange: ((next: string) => void) | null;
 }) {
   const lines = useMemo(() => parsePatch(content), [content]);
   const tokens = useDiffTokens(lines, langOf(path), HIGHLIGHT_DEBOUNCE_MS);

@@ -1,6 +1,10 @@
 'use client';
 
-import type { FileJudgment, ReviewFile } from '@/agent/lib/review';
+import {
+  type FileJudgment,
+  isProsePath,
+  type ReviewFile,
+} from '@/agent/lib/review';
 import {
   fileVerdict,
   smellCount,
@@ -8,7 +12,7 @@ import {
   verdictScore,
 } from '@/lib/display';
 
-import { FilePath, LangChip, SmellCount } from './FileCard';
+import { FilePath, LangChip, ProseChip, SmellCount } from './FileCard';
 
 /** The bar's fill is a fraction, and CSS wants it as a percentage. */
 const PERCENT = 100;
@@ -63,45 +67,59 @@ export function FileList({
       <div className="relative lg:contents">
         <ul className="flex gap-2 overflow-x-auto pb-2 lg:block lg:gap-0 lg:overflow-visible lg:pb-0">
           {files.map((file) => {
+            // Prose is listed but not judged, so the row says what the file is
+            // and stops: a verdict word and a bar at zero would both read as a
+            // judgment nobody made.
+            const prose = isProsePath(file.path);
             const answers = judgments[file.path]?.answers;
-            const score = verdictScore(answers);
-            const verdict = fileVerdict(score, {
-              empty: !file.content.trim(),
-              failed: failed[file.path] === true,
-            });
+            const score = prose ? null : verdictScore(answers);
+            const verdict = prose
+              ? null
+              : fileVerdict(score, {
+                  empty: !file.content.trim(),
+                  failed: failed[file.path] === true,
+                });
             return (
               <li className="shrink-0 lg:shrink" key={file.path}>
                 <button
                   className="w-72 cursor-pointer rounded-md px-2 py-1.5 text-left hover:bg-surface lg:w-full"
                   data-file={file.path}
-                  data-verdict={verdict.key}
+                  data-verdict={verdict?.key}
                   onClick={() => onSelect(file.path)}
                   type="button"
                 >
                   <FilePath path={file.path} stacked={true} />
                   <span className="mt-1 flex flex-wrap items-center gap-1.5">
                     <LangChip path={file.path} />
-                    <span
-                      className={`text-tiny text-muted ${verdict.key === 'pending' ? 'soft-pulse' : ''}`}
-                    >
-                      {verdict.label}
-                    </span>
-                    {answers ? (
+                    {verdict === null ? (
+                      <ProseChip />
+                    ) : (
                       <>
-                        <span className="text-tiny text-muted/60">·</span>
-                        <SmellCount count={smellCount(answers)} />
+                        <span
+                          className={`text-tiny text-muted ${verdict.key === 'pending' ? 'soft-pulse' : ''}`}
+                        >
+                          {verdict.label}
+                        </span>
+                        {answers ? (
+                          <>
+                            <span className="text-tiny text-muted/60">·</span>
+                            <SmellCount count={smellCount(answers)} />
+                          </>
+                        ) : null}
                       </>
-                    ) : null}
+                    )}
                   </span>
-                  <span className="mt-1 block h-1 w-full rounded-full bg-track">
-                    <span
-                      className="block h-full rounded-full bg-ink"
-                      style={{
-                        transition: 'width 300ms',
-                        width: `${verdictFill(score) * PERCENT}%`,
-                      }}
-                    />
-                  </span>
+                  {verdict === null ? null : (
+                    <span className="mt-1 block h-1 w-full rounded-full bg-track">
+                      <span
+                        className="block h-full rounded-full bg-ink"
+                        style={{
+                          transition: 'width 300ms',
+                          width: `${verdictFill(score) * PERCENT}%`,
+                        }}
+                      />
+                    </span>
+                  )}
                 </button>
               </li>
             );

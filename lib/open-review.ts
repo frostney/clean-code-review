@@ -37,8 +37,12 @@ export interface OpenReview {
   files: ReviewFile[];
   /** Path → the `diff --git`/`index`/`---`/`+++` run lifted off that patch. */
   headers: Record<string, string>;
-  /** How many files the paste or preset had before the cap, for the notice. */
-  totalFiles: number;
+  /**
+   * How many files of each kind the paste or preset had before the caps. The
+   * two are counted apart because they are capped apart: a review can lose
+   * code, prose or both, and a single total cannot say which.
+   */
+  total: { code: number; prose: number };
   /** Paths whose text was cut to what one judgment reads. */
   truncated: Record<string, true>;
   /** Files that are not code, and why. Never rendered, always reported. */
@@ -100,9 +104,18 @@ function opened(
     files: kept,
     headers,
     skipped,
-    totalFiles: unique.length,
+    total: countKinds(unique),
     truncated,
   };
+}
+
+/** How many of these files are code and how many are writing. */
+function countKinds(files: readonly ReviewFile[]): {
+  code: number;
+  prose: number;
+} {
+  const prose = files.filter((file) => isProsePath(file.path)).length;
+  return { code: files.length - prose, prose };
 }
 
 /**
@@ -220,4 +233,32 @@ export function skippedText(
     );
   }
   return parts.length ? `Skipped ${parts.join(' and ')}` : null;
+}
+
+/**
+ * "Showing 24 of 30 code files and 10 of 12 prose files" — what the two caps
+ * left out, counted apart. Null when nothing was cut: a review that fits says
+ * nothing about fitting.
+ */
+export function cappedText(review: OpenReview): string | null {
+  const shownProse = review.files.filter((f) => isProsePath(f.path)).length;
+  const shown = { code: review.files.length - shownProse, prose: shownProse };
+  const counts: string[] = [];
+  const reasons: string[] = [];
+  if (review.total.code > shown.code) {
+    counts.push(`${shown.code} of ${review.total.code} code files`);
+    reasons.push(
+      `a review is judged in one turn, and one turn carries ${REVIEW_LIMITS.maxFiles} code files`,
+    );
+  }
+  if (review.total.prose > shown.prose) {
+    counts.push(`${shown.prose} of ${review.total.prose} prose files`);
+    reasons.push(
+      `prose is shown for context and never judged, so ${REVIEW_LIMITS.maxProseFiles} of it is enough`,
+    );
+  }
+  if (!counts.length) {
+    return null;
+  }
+  return `Showing ${counts.join(' and ')}: ${reasons.join(', and ')}.`;
 }

@@ -175,7 +175,7 @@ const TIDY_AT = 1.5;
  * The verdict question answers on the same five-level scale as every other
  * score. These two cuts turn it into the three words a review ends with.
  */
-export function verdictOf(score: number | null): Verdict {
+function verdictOf(score: number | null): Verdict {
   if (score === null) {
     return VERDICTS.pending;
   }
@@ -206,6 +206,19 @@ export function fileVerdict(
   return verdictOf(score);
 }
 
+/**
+ * The verdict for the review as a whole: the mean of the files that have one,
+ * unless there is no code in the review at all. A change that is only
+ * documentation never starts a judging turn, so "Judging…" would pulse for as
+ * long as the tab is open; "Nothing to judge" is what is actually true.
+ */
+export function reviewVerdict(
+  scores: readonly (number | null)[],
+  judgeable: boolean,
+): Verdict {
+  return judgeable ? verdictOf(meanVerdict(scores)) : VERDICTS.empty;
+}
+
 /** The verdict score of one file, or null when Jev has not answered for it. */
 export function verdictScore(answers: Answers | undefined): number | null {
   const answer = answers?.verdict;
@@ -221,7 +234,7 @@ export function verdictConfidence(answers: Answers | undefined): number | null {
 }
 
 /** The review's verdict: the mean of the files that have one. */
-export function meanVerdict(scores: readonly (number | null)[]): number | null {
+function meanVerdict(scores: readonly (number | null)[]): number | null {
   const known = scores.filter((s): s is number => s !== null);
   return known.length ? known.reduce((a, b) => a + b, 0) / known.length : null;
 }

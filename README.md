@@ -5,8 +5,8 @@
 # Clean Code Review
 
 **Clean Code, judged by a model that does not write prose.**
-Point it at a GitHub pull request, a diff or a codebase. Every file is
-scored against 34 questions from Robert C. Martin's *Clean Code* by
+Point it at a GitHub pull request, a diff or a codebase. Every code file
+is scored against 34 questions from Robert C. Martin's *Clean Code* by
 [Jev](https://vercel.com/ai-gateway/models/jev), TypeSafe's evaluation
 model, and a short review is written from those findings. It runs on
 [eve](https://eve.dev), Vercel's agent framework, and deploys as one
@@ -21,9 +21,13 @@ Next.js project.
   instruction, not truncation.
 - **Real pull requests** — type `owner/repo` and a number; the diff is
   split per file, generated and binary files are skipped, the largest
-  24 files are judged, the PR description is rendered as markdown.
-- **Everything is editable** — whole files and diff hunks alike, with
-  syntax highlighting, and only the file you touched is re-judged.
+  24 code files are judged, the PR description is rendered as markdown.
+- **Everything is editable** — whole files and diff hunks alike, and only
+  the file you touched is re-judged. Every grammar shiki ships is
+  available, fetched the first time a review contains that language.
+- **Documentation is read, not judged** — a README or a changelog in the
+  change gets a card with its own highlighting and no verdict, because
+  none of the 34 questions is a question about prose.
 - **Cheap to run** — a 24-file PR costs about $0.03 to judge and
   review; judgments and review parts are cached for an hour.
 
@@ -129,9 +133,11 @@ brakes, outside in:
 
 ## Limits
 
-24 files per review, 16,000 characters per file, public GitHub
+24 code files per review, 16,000 characters per file, public GitHub
 repositories only. Images, binaries, lockfiles, minified and generated
-files are skipped; markdown is judged like any other file.
+files are skipped. Markdown, plain text, reStructuredText and AsciiDoc
+are prose: up to 10 of them are shown with the review, read-only, and
+none of them is sent to either model.
 
 ## License
 
