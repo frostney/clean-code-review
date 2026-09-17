@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/ducky-256.png" width="160" alt="The Clean Code Review duck: a rubber duck in a bathrobe" />
+</p>
+
 # Clean Code Review
 
 **Clean Code, judged by a model that does not write prose.**
@@ -96,7 +100,9 @@ bun run deploy          # eve deploy → vercel deploy --prod
 
 The deployment authenticates to the AI Gateway with the project's OIDC
 identity; no API key is stored. Set `GITHUB_TOKEN` in the project to
-raise the GitHub rate limit for PR fetches.
+raise the GitHub rate limit for PR fetches. `vercel.json` pins Bun 1.4
+for installs (Vercel's default Bun cannot read a 1.4 lockfile); the
+functions themselves run on Node.js 24, which eve requires.
 
 ## Abuse limits
 

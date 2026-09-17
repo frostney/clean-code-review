@@ -69,57 +69,71 @@ export function PullRequestField() {
         openPullRequest(pullRequestUrl(repo, number));
       }}
     >
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        {/* The second half of the address wraps onto its own line on a narrow
-            screen rather than squeezing `owner/repo` down to two characters. */}
-        <div className="flex min-w-[12rem] flex-1 flex-wrap items-center rounded-md border border-line bg-white focus-within:border-accent">
-          <span className="shrink-0 border-r border-line py-2 pr-2 pl-2.5 font-mono text-[13px] text-muted select-none">
-            {PREFIX}
-          </span>
-          <input
-            type="text"
-            data-pr-repo
-            value={repo}
-            onChange={(e) => {
-              // A paste lands here as a change too (keyboard, menu or drop),
-              // so the whole URL is taken apart wherever it came from.
-              if (!takeApart(e.target.value)) setRepo(e.target.value);
-            }}
-            onPaste={(e) => {
-              if (takeApart(e.clipboardData.getData("text"))) {
-                e.preventDefault();
-                numberRef.current?.focus();
-              }
-            }}
-            spellCheck={false}
-            autoComplete="off"
-            placeholder="owner/repo"
-            aria-label="GitHub owner and repository"
-            className="min-w-[7rem] flex-1 bg-transparent px-2.5 py-2 font-mono text-[13px] text-ink outline-none placeholder:text-muted/60"
-          />
-          <span className="shrink-0 border-l border-line py-2 pr-2 pl-2 font-mono text-[13px] text-muted select-none">
-            {INFIX}
-          </span>
-          <input
-            ref={numberRef}
-            type="text"
-            inputMode="numeric"
-            data-pr-number
-            value={number}
-            onChange={(e) => {
-              if (!takeApart(e.target.value)) setNumber(e.target.value.replace(/[^\d]/g, ""));
-            }}
-            spellCheck={false}
-            autoComplete="off"
-            placeholder="123"
-            aria-label="Pull request number"
-            className="w-16 shrink-0 bg-transparent px-2.5 py-2 font-mono text-[13px] text-ink outline-none placeholder:text-muted/60"
-          />
+      {/* One box, two halves. Wide enough, the address is the single line it
+          is on GitHub. On a phone the halves become two rows of the same box —
+          `github.com/ owner/repo` over `/pull/ 123` — because squeezing
+          `owner/repo` into the ninety pixels left beside a number field is the
+          one thing this field must never do, and the button drops below them
+          at full width rather than stealing that space back.
+          Two breakpoints, because they answer different questions: the shape
+          goes back to one line as soon as one line fits (`sm`), while the
+          sixteen-pixel type and the forty-four-pixel rows hold until the
+          layout is wide enough to be a pointer's (`lg`). */}
+      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-1 flex-col rounded-md border border-line bg-white focus-within:border-accent sm:flex-row sm:items-center lg:min-w-[12rem]">
+          <div className="flex min-h-11 min-w-0 flex-1 items-stretch border-b border-line sm:border-b-0 lg:min-h-0">
+            <span className="flex shrink-0 items-center border-r border-line pr-2 pl-2.5 font-mono text-[16px] text-muted select-none lg:py-2 lg:text-[13px]">
+              {PREFIX}
+            </span>
+            <input
+              type="text"
+              data-pr-repo
+              value={repo}
+              onChange={(e) => {
+                // A paste lands here as a change too (keyboard, menu or drop),
+                // so the whole URL is taken apart wherever it came from.
+                if (!takeApart(e.target.value)) setRepo(e.target.value);
+              }}
+              onPaste={(e) => {
+                if (takeApart(e.clipboardData.getData("text"))) {
+                  e.preventDefault();
+                  numberRef.current?.focus();
+                }
+              }}
+              spellCheck={false}
+              autoComplete="off"
+              placeholder="owner/repo"
+              aria-label="GitHub owner and repository"
+              // Sixteen pixels is not a taste: below it iOS zooms the page in
+              // on focus and never zooms back out.
+              className="w-full min-w-[7rem] flex-1 bg-transparent px-2.5 font-mono text-[16px] text-ink outline-none placeholder:text-muted/60 lg:py-2 lg:text-[13px]"
+            />
+          </div>
+          <div className="flex min-h-11 items-stretch lg:min-h-0">
+            <span className="flex shrink-0 items-center border-r border-line pr-2 pl-2.5 font-mono text-[16px] text-muted select-none sm:border-r-0 sm:border-l lg:py-2 lg:pl-2 lg:text-[13px]">
+              {INFIX}
+            </span>
+            <input
+              ref={numberRef}
+              type="text"
+              inputMode="numeric"
+              data-pr-number
+              value={number}
+              onChange={(e) => {
+                if (!takeApart(e.target.value)) setNumber(e.target.value.replace(/[^\d]/g, ""));
+              }}
+              spellCheck={false}
+              autoComplete="off"
+              placeholder="123"
+              aria-label="Pull request number"
+              className="w-full flex-1 bg-transparent px-2.5 font-mono text-[16px] text-ink outline-none placeholder:text-muted/60 sm:w-20 sm:flex-none lg:w-16 lg:py-2 lg:text-[13px]"
+            />
+          </div>
         </div>
         <button
           type="submit"
           disabled={!ready || fetching}
-          className="shrink-0 cursor-pointer rounded-md bg-ink px-3.5 py-2 text-[13px] font-semibold text-white disabled:cursor-default disabled:opacity-40"
+          className="min-h-11 w-full shrink-0 cursor-pointer rounded-md bg-ink px-3.5 text-[15px] font-semibold text-white disabled:cursor-default disabled:opacity-40 sm:w-auto lg:min-h-0 lg:py-2 lg:text-[13px]"
         >
           {fetching ? "Fetching…" : "Judge"}
         </button>

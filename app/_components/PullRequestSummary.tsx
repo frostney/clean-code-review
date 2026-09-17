@@ -23,7 +23,7 @@ export function PullRequestSummary() {
             target="_blank"
             rel="noreferrer"
             data-pr-title
-            className="font-semibold text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent"
+            className="inline-flex min-h-10 items-center font-semibold text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent lg:min-h-0"
           >
             {pr.title}
           </a>

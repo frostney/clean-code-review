@@ -44,18 +44,27 @@ export function cardId(path: string): string {
  * clips the leading ellipsis and reorders the punctuation of a path like
  * `__tests__/`.
  */
-export function FilePath({ path, stacked = false }: { path: string; stacked?: boolean }) {
+export function FilePath({
+  path,
+  stacked = false,
+  className = "",
+}: {
+  path: string;
+  stacked?: boolean;
+  /** How the row this sits in wants it sized. */
+  className?: string;
+}) {
   const [dir, base] = splitPath(path);
   if (stacked) {
     return (
-      <span className="block min-w-0 font-mono text-[12px]" title={path}>
+      <span className={`block min-w-0 font-mono text-[12px] ${className}`} title={path}>
         {dir && <span className="block truncate text-muted">{dir}</span>}
         <span className="block break-all font-semibold text-ink">{base}</span>
       </span>
     );
   }
   return (
-    <span className="flex min-w-0 font-mono text-[12px]" title={path}>
+    <span className={`flex min-w-0 font-mono text-[12px] ${className}`} title={path}>
       {dir && (
         <span dir="rtl" className="min-w-0 truncate text-muted">
           <bdi>{dir}</bdi>
@@ -68,7 +77,7 @@ export function FilePath({ path, stacked = false }: { path: string; stacked?: bo
 
 export function LangChip({ path }: { path: string }) {
   return (
-    <span className="shrink-0 rounded-full border border-line px-1.5 py-px text-[11px] text-muted">
+    <span className="shrink-0 rounded-full border border-line px-1.5 py-px text-tiny text-muted">
       {langLabel(langOf(path))}
     </span>
   );
@@ -77,7 +86,7 @@ export function LangChip({ path }: { path: string }) {
 /** "7 smells" beside the verdict, in the header and in the sidebar alike. */
 export function SmellCount({ count, className = "" }: { count: number; className?: string }) {
   return (
-    <span data-smells={count} className={`text-[11px] ${count ? "text-bad" : "text-muted"} ${className}`}>
+    <span data-smells={count} className={`text-tiny ${count ? "text-bad" : "text-muted"} ${className}`}>
       {smellLabel(count)}
     </span>
   );
@@ -153,11 +162,11 @@ export function FileCard({
           aria-expanded={!collapsed}
           aria-label={`${collapsed ? "Expand" : "Collapse"} ${file.path}`}
           onClick={onToggle}
-          className="-ml-1 shrink-0 cursor-pointer rounded p-0.5 text-muted hover:bg-track hover:text-ink"
+          className="-my-1.5 -ml-2 flex min-h-10 min-w-10 shrink-0 cursor-pointer items-center justify-center rounded text-muted hover:bg-track hover:text-ink lg:my-0 lg:-ml-1 lg:min-h-0 lg:min-w-0 lg:p-0.5"
         >
           {collapsed ? <ChevronRight size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
         </button>
-        <FilePath path={file.path} />
+        <FilePath path={file.path} className="min-w-0 flex-1 basis-40 lg:flex-initial lg:basis-auto" />
         <LangChip path={file.path} />
         <span className="shrink-0 text-[12px] text-muted">
           {stats ? (
@@ -169,16 +178,16 @@ export function FileCard({
           )}
         </span>
         {truncated && (
-          <span className="shrink-0 text-[11px] text-warn">
+          <span className="shrink-0 text-tiny text-warn">
             Truncated to {REVIEW_LIMITS.maxCharsPerFile.toLocaleString()} characters
           </span>
         )}
         <span className="ml-auto flex shrink-0 items-center gap-2">
-          {sure !== null && <span className="text-[11px] text-muted">{pct(sure)} sure</span>}
+          {sure !== null && <span className="text-tiny text-muted">{pct(sure)} sure</span>}
           {answers && <SmellCount count={smells} />}
           <span
             data-verdict={verdict.key}
-            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${verdict.className} ${
+            className={`rounded-full px-2 py-0.5 text-tiny font-semibold ${verdict.className} ${
               verdict.key === "pending" ? "soft-pulse" : ""
             }`}
           >
@@ -199,7 +208,7 @@ export function FileCard({
 
           <section className="@container/card border-t border-line">
             <div className={`px-2 py-2 ${pending && !answers ? "soft-pulse" : ""}`}>
-              <h3 className="mb-1.5 px-1.5 text-[11px] font-semibold tracking-wider text-muted uppercase">Review</h3>
+              <h3 className="mb-1.5 px-1.5 text-tiny font-semibold tracking-wider text-muted uppercase">Review</h3>
               <div className="mb-2 px-1.5">
                 <ReviewNote
                   status={fileSummaryStatus(summary, file.path)}
@@ -213,7 +222,7 @@ export function FileCard({
                 data-toggle="findings"
                 aria-expanded={findingsOpen}
                 onClick={() => setFindingsOpen((open) => !open)}
-                className="mb-1.5 ml-1.5 flex cursor-pointer items-center gap-1 rounded text-[11px] font-semibold tracking-wider text-muted uppercase hover:text-ink"
+                className="mb-0.5 ml-1.5 flex min-h-10 cursor-pointer items-center gap-1 rounded pr-2 text-tiny font-semibold tracking-wider text-muted uppercase hover:text-ink lg:mb-1.5 lg:min-h-0 lg:pr-0"
               >
                 {findingsOpen ? (
                   <ChevronDown size={12} aria-hidden="true" />
@@ -233,10 +242,12 @@ export function FileCard({
                       <div key={group.id} className="@container/group mb-2 last:mb-0">
                         <div className="mb-1 flex flex-wrap items-center gap-x-2 border-b border-line px-1.5 pb-1">
                           <GroupIcon group={group.id} />
-                          <h4 className="text-[11px] font-semibold tracking-wider text-muted uppercase">
+                          <h4 className="text-tiny font-semibold tracking-wider text-muted uppercase">
                             {group.title}
                           </h4>
-                          <span className="truncate text-[11px] text-muted/70">{group.blurb}</span>
+                          <span className="hidden truncate text-tiny text-muted/70 @[320px]/group:inline">
+                            {group.blurb}
+                          </span>
                         </div>
                         {rows.map((q) => (
                           <Meter

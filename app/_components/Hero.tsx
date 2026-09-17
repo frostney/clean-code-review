@@ -1,4 +1,6 @@
+import Image from "next/image";
 import { PRESETS } from "@/agent/lib/presets";
+import { SITE } from "@/lib/site";
 import { PasteButton } from "./PasteButton";
 import { PresetChip } from "./PresetChip";
 import { PullRequestField } from "./PullRequestField";
@@ -23,10 +25,15 @@ import { ReviewStats } from "./ReviewStats";
 export function Hero() {
   return (
     <header className="mb-4">
+      {/* The mascot and the name: small, because the page is the field below, not a title. */}
+      <h1 className="mb-3 flex items-center gap-2 text-[14px] font-semibold text-ink">
+        <Image src="/ducky-64.png" width={32} height={32} alt="" priority className="h-8 w-8" />
+        {SITE.name}
+      </h1>
       <PullRequestField />
-      <p className="mt-1 text-[11px] text-muted">public repositories only</p>
+      <p className="mt-1.5 text-tiny text-muted">public repositories only</p>
 
-      <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5">
+      <div className="mt-2 flex flex-wrap items-center gap-2">
         <span className="text-[12px] text-muted">Or choose one of the examples:</span>
         {PRESETS.map((preset) => (
           <PresetChip key={preset.label} label={preset.label} blurb={preset.blurb} />

@@ -12,7 +12,7 @@ export function PasteButton() {
       ref={pasteButtonRef}
       data-paste="open"
       onClick={startPasting}
-      className="cursor-pointer text-[12px] text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent"
+      className="inline-flex min-h-10 cursor-pointer items-center text-[12px] text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent lg:min-h-0"
     >
       Paste code or a diff
     </button>

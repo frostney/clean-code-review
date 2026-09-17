@@ -76,9 +76,9 @@ export function Meter({
       <span className="text-[13px] text-muted @[420px]/group:order-1">{meta.label}</span>
       <span className="flex min-w-0 items-baseline justify-end gap-1.5 @[420px]/group:order-3" data-value="true">
         {changed && delta ? (
-          <span className="truncate text-[11px] text-muted">{delta}</span>
+          <span className="truncate text-tiny text-muted">{delta}</span>
         ) : (
-          <span className="truncate text-[11px] text-muted/70">{detail(answer)}</span>
+          <span className="truncate text-tiny text-muted/70">{detail(answer)}</span>
         )}
         <span
           className={`shrink-0 text-[13px] font-semibold ${quiet ? "text-muted" : finding ? "text-bad" : "text-ink"}`}

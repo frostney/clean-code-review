@@ -87,6 +87,16 @@ function Overlay({
           aria-label={`Edit ${path}`}
           className="code-line absolute inset-0 w-full resize-none overflow-auto border-0 bg-transparent px-3 py-2 text-transparent caret-ink outline-none"
         />
+        {/* A phone is narrower than almost any line of code, so the card's
+            right edge is where the line continues rather than where it ends.
+            A hairline of shadow says so — over a plain row and over a tinted
+            diff row alike, which a white fade could not do. It is off above
+            the breakpoint, where a card is wide enough that most lines finish
+            inside it and a permanent edge would be a lie. */}
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-ink/15 to-transparent lg:hidden"
+        />
       </div>
     </div>
   );

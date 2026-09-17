@@ -28,7 +28,7 @@ export function PullRequestBodyToggle({ children }: { children: ReactNode }) {
         type="button"
         data-pr-body-toggle
         onClick={() => setOpen((shown) => !shown)}
-        className="mt-1 cursor-pointer text-[12px] text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent"
+        className="mt-1 inline-flex min-h-10 cursor-pointer items-center text-[12px] text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent lg:min-h-0"
       >
         {open ? "Show less" : "Show more"}
       </button>

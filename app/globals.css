@@ -53,6 +53,21 @@ textarea {
   font: inherit;
 }
 
+/* The page's smallest type, in one place. Eleven pixels is a desk-monitor
+   size: held at arm's length on a phone it is below what the screen renders
+   honestly, so the floor is twelve until the layout is wide enough to have
+   earned the extra pixel back. Every chip, pill, hint and column heading on
+   the page wears this rather than a literal size. */
+.text-tiny {
+  font-size: 12px;
+}
+
+@media (width >= 64rem) {
+  .text-tiny {
+    font-size: 11px;
+  }
+}
+
 /* Every line of code on the page, in one place: the code view, the diff and
    the editor overlay all have to agree to the pixel or the caret drifts. */
 .code-line {
@@ -128,11 +143,15 @@ textarea {
   }
 }
 
+/* The negative right margin is what keeps it from being a layout change: the
+   caret takes up no net width, so the word it follows never jumps to the next
+   line the moment the caret appears at the end of it. */
 .caret {
   display: inline-block;
   width: 2px;
   height: 1em;
   margin-left: 2px;
+  margin-right: -4px;
   vertical-align: -0.15em;
   background: var(--color-accent);
   animation: caretBlink 1s step-end infinite;
@@ -253,6 +272,15 @@ textarea {
   color: var(--color-ink);
   border-radius: 4px;
   padding: 0.1em 0.35em;
+}
+
+/* Relative to a 13px paragraph that ratio is 11.4px, which is under the floor
+   set above. On a phone the span is pinned to the floor instead; the ratio
+   comes back when the paragraph has room for it. */
+@media (width < 64rem) {
+  .markdown code {
+    font-size: 12px;
+  }
 }
 
 .markdown pre {

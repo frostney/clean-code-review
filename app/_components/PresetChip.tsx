@@ -19,7 +19,7 @@ export function PresetChip({ label, blurb }: { label: string; blurb: string }) {
       data-preset={label}
       aria-pressed={active}
       onClick={() => openPreset(label)}
-      className={`cursor-pointer rounded-full border px-2.5 py-1 text-[12px] transition-colors ${
+      className={`inline-flex min-h-9 cursor-pointer items-center rounded-full border px-3 text-[12px] transition-colors lg:min-h-0 lg:px-2.5 lg:py-1 ${
         active ? "border-ink bg-ink text-white" : "border-line bg-white text-muted hover:border-muted hover:text-ink"
       }`}
     >

@@ -58,7 +58,10 @@ export function Paste() {
       onClick={(e) => {
         if (e.target === dialogRef.current) dialogRef.current?.close();
       }}
-      className="m-auto w-[min(48rem,calc(100vw-2rem))] rounded-md border border-line bg-white p-0 text-ink backdrop:bg-ink/40"
+      // 16px of margin on every side, and never taller than the viewport, so
+      // the Judge button is always on screen without scrolling the page under
+      // the modal. `dvh` rather than `vh`: on a phone the URL bar counts.
+      className="m-auto max-h-[calc(100dvh-2rem)] w-[min(48rem,calc(100vw-2rem))] overflow-auto overscroll-contain rounded-md border border-line bg-white p-0 text-ink backdrop:bg-ink/40"
     >
       <div className="flex items-center gap-3 border-b border-line bg-surface px-3 py-2">
         <h2 className="text-[13px] font-semibold text-ink">Paste code or a diff</h2>
@@ -66,7 +69,7 @@ export function Paste() {
           type="button"
           data-paste="close"
           onClick={() => dialogRef.current?.close()}
-          className="ml-auto shrink-0 cursor-pointer text-[12px] text-muted hover:text-ink"
+          className="-my-2 ml-auto inline-flex min-h-10 shrink-0 cursor-pointer items-center px-1 text-[12px] text-muted hover:text-ink lg:my-0 lg:min-h-0 lg:px-0"
         >
           Close
         </button>
@@ -83,7 +86,9 @@ export function Paste() {
         wrap="off"
         aria-label="Code or diff to judge"
         placeholder="diff --git a/src/thing.ts b/src/thing.ts&#10;…"
-        className="code-line h-56 w-full resize-y border-0 bg-white px-3 py-2 text-ink outline-none placeholder:text-muted/60"
+        // Two fifths of the screen on a phone, where the dialog is the screen;
+        // the fixed height it always had once there is a page around it.
+        className="code-line h-[40dvh] min-h-40 w-full resize-y border-0 bg-white px-3 py-2 text-ink outline-none placeholder:text-muted/60 lg:h-56 lg:min-h-0"
       />
       <div className="flex items-center gap-3 border-t border-line px-3 py-2">
         <button
@@ -96,7 +101,7 @@ export function Paste() {
             dialogRef.current?.close();
             judgePasted(text);
           }}
-          className="cursor-pointer rounded-md bg-ink px-3 py-1 text-[13px] font-semibold text-white disabled:cursor-default disabled:opacity-40"
+          className="inline-flex min-h-10 cursor-pointer items-center rounded-md bg-ink px-4 text-[13px] font-semibold text-white disabled:cursor-default disabled:opacity-40 lg:min-h-0 lg:px-3 lg:py-1"
         >
           Judge
         </button>

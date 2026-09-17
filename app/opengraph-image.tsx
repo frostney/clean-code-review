@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { ImageResponse } from "next/og";
 import { SITE } from "@/lib/site";
 
@@ -16,7 +18,10 @@ const MUTED = "#656d76";
 const ACCENT = "#0969da";
 const LINE = "#d0d7de";
 
-export default function Image() {
+export default async function Image() {
+  // The mascot, inlined: file-based metadata routes cannot reference /public by URL at build time.
+  const duck = await readFile(join(process.cwd(), "public", "icons", "icon-512.png"));
+  const duckSrc = `data:image/png;base64,${duck.toString("base64")}`;
   return new ImageResponse(
     <div
       style={{
@@ -36,14 +41,18 @@ export default function Image() {
         </div>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        <div style={{ display: "flex", fontSize: "96px", fontWeight: 700, color: INK, letterSpacing: "-0.03em" }}>
-          {SITE.name}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "48px" }}>
+        <div style={{ display: "flex", flexDirection: "column", maxWidth: "760px" }}>
+          <div style={{ display: "flex", fontSize: "88px", fontWeight: 700, color: INK, letterSpacing: "-0.03em" }}>
+            {SITE.name}
+          </div>
+          <div style={{ display: "flex", width: "120px", height: "6px", background: ACCENT, margin: "28px 0" }} />
+          <div style={{ display: "flex", fontSize: "32px", color: MUTED, lineHeight: 1.35 }}>
+            {SITE.tagline}
+          </div>
         </div>
-        <div style={{ display: "flex", width: "120px", height: "6px", background: ACCENT, margin: "28px 0" }} />
-        <div style={{ display: "flex", fontSize: "34px", color: MUTED, lineHeight: 1.35, maxWidth: "900px" }}>
-          {SITE.tagline}
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element -- ImageResponse renders plain img */}
+        <img src={duckSrc} width={300} height={300} alt="" style={{ width: "300px", height: "300px" }} />
       </div>
 
       <div

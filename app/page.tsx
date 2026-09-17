@@ -46,7 +46,6 @@ export default function Page() {
           <main>
             {/* The page's own name. On screen it is the browser tab and the
                 first field's placeholder; a document still needs a heading. */}
-            <h1 className="sr-only">{SITE.name}</h1>
             <Hero />
             <ReviewBody />
             <Faq />

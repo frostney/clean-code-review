@@ -21,7 +21,7 @@ export function ReviewPills({ review }: { review: ReviewState }) {
     <>
       <span
         data-verdict={verdict.key}
-        className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold ${verdict.className}`}
+        className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 text-tiny font-semibold ${verdict.className}`}
       >
         {verdict.key === "pending" && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted" />}
         {verdict.label}
@@ -29,7 +29,7 @@ export function ReviewPills({ review }: { review: ReviewState }) {
       {judged.length > 0 && (
         <span
           data-smells-total={smells}
-          className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+          className={`rounded-full px-2 py-0.5 text-tiny font-semibold ${
             smells ? "bg-bad-bg text-bad" : "bg-track text-muted"
           }`}
         >
@@ -47,7 +47,7 @@ export function ReviewPills({ review }: { review: ReviewState }) {
  * is working: Jev judging, or Luna writing the review.
  */
 function ReviewStatus({ review }: { review: ReviewState }) {
-  const base = "flex items-center gap-1.5 text-[11px]";
+  const base = "flex items-center gap-1.5 text-tiny";
   if (review.budgetSpent) {
     return (
       <span data-status="budget-spent" className={`${base} text-muted`}>

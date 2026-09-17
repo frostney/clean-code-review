@@ -42,13 +42,15 @@ export const FAQ: readonly { q: string; a: string }[] = [
 export function Faq() {
   return (
     <section aria-labelledby="faq-heading" className="mt-8 border-t border-line pt-4">
-      <h2 id="faq-heading" className="mb-2 text-[11px] font-semibold tracking-wider text-muted uppercase">
+      <h2 id="faq-heading" className="mb-2 text-tiny font-semibold tracking-wider text-muted uppercase">
         Questions about this page
       </h2>
       <div className="flex max-w-[80ch] flex-col gap-1.5">
         {FAQ.map((item) => (
-          <details key={item.q} data-faq className="rounded-md border border-line bg-surface px-3 py-2">
-            <summary className="cursor-pointer text-[13px] font-semibold text-ink marker:text-muted">{item.q}</summary>
+          <details key={item.q} data-faq className="rounded-md border border-line bg-surface px-3 py-1.5 lg:py-2">
+            <summary className="cursor-pointer py-1.5 text-[13px] font-semibold text-ink marker:text-muted lg:py-0">
+              {item.q}
+            </summary>
             <p className="mt-1.5 text-[13px] leading-relaxed text-muted">{item.a}</p>
           </details>
         ))}

@@ -9,13 +9,13 @@ export function Footer() {
   return (
     <footer className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted">
       <TokenCount />
-      <a href={SITE.jev} target="_blank" rel="noreferrer" className="underline hover:text-ink">
+      <a href={SITE.jev} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center underline hover:text-ink lg:min-h-0">
         judged by Jev
       </a>
-      <a href={SITE.eve} target="_blank" rel="noreferrer" className="underline hover:text-ink">
+      <a href={SITE.eve} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center underline hover:text-ink lg:min-h-0">
         built with eve
       </a>
-      <a href={SITE.source} target="_blank" rel="noreferrer" className="underline hover:text-ink">
+      <a href={SITE.source} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center underline hover:text-ink lg:min-h-0">
         view source
       </a>
     </footer>
