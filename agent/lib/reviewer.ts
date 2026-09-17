@@ -117,6 +117,7 @@ function planParts(input: SummarizeInput): PlannedPart[] {
   };
   const overallMessage = reviewerMessage(input, 'overall');
   parts.push({
+    // Key order is part of the key: see the note in judge.ts.
     key: cacheKey('review-part', {
       message: overallMessage,
       model: REVIEWER_MODEL,

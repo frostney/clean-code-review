@@ -12,6 +12,7 @@ import { fetchPullRequest } from '../agent/lib/github';
 import { filesFromPatch } from '../agent/lib/patch';
 import { PRESETS } from '../agent/lib/presets';
 import { judgeMessage, summarizeMessage } from '../agent/lib/prompt';
+import { isProsePath } from '../agent/lib/review';
 import { parseReview } from '../agent/lib/schema';
 import { selectReviewFiles } from '../agent/lib/select';
 import { parseSummaryText } from '../agent/lib/summary';
@@ -30,7 +31,9 @@ let files = PRESETS[Number(which)]?.files;
 let pr: { title: string; body: string; url: string } | undefined;
 if (which.startsWith('http')) {
   const fetched = await fetchPullRequest(which);
-  files = selectReviewFiles(filesFromPatch(fetched.diff)).kept;
+  files = selectReviewFiles(filesFromPatch(fetched.diff)).kept.filter(
+    (f) => !isProsePath(f.path),
+  );
   pr = { body: fetched.body, title: fetched.title, url: fetched.url };
   console.log(`PR "${fetched.title}": judging ${files.length} files`);
 }

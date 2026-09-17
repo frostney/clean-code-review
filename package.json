@@ -48,7 +48,7 @@
     "eval": "eve eval",
     "jev": "bun --env-file=.env.local scripts/jev-once.ts",
     "judge": "bun scripts/judge-once.ts",
-    "postinstall": "lefthook install",
+    "postinstall": "test -e .git && lefthook install || true",
     "review": "bun scripts/summary-once.ts",
     "start": "next start",
     "start:eve": "eve start",

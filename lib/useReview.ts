@@ -783,20 +783,6 @@ export function useReview(
     }
   }, []);
 
-  /**
-   * One summarize turn, from the first delta to the completed message.
-   *
-   * The turn's reply *is* the review. The agent runs Luna once per batch of
-   * files plus once for the decision and the overall paragraph, all at the
-   * same time, and streams the parts back in a fixed order — the overall
-   * first — so the growing text is always a well-formed review and the badge
-   * and the summary at the top are on screen before the file notes are.
-   *
-   * Every delta is re-parsed and painted; `message.completed` carries the
-   * whole text and is what the review settles on. A section that is no longer
-   * the one being written is finished, so its card stops waiting for it even
-   * though the turn is still running.
-   */
   /** Forget that these paths were summarised, so the next run asks about them again. */
   const forgetSummarized = useCallback((paths: readonly string[]) => {
     for (const path of paths) {
@@ -902,6 +888,20 @@ export function useReview(
     drainRef.current();
   }, []);
 
+  /**
+   * One summarize turn, from the first delta to the completed message.
+   *
+   * The turn's reply *is* the review. The agent runs Luna once per batch of
+   * files plus once for the decision and the overall paragraph, all at the
+   * same time, and streams the parts back in a fixed order — the overall
+   * first — so the growing text is always a well-formed review and the badge
+   * and the summary at the top are on screen before the file notes are.
+   *
+   * Every delta is re-parsed and painted; `message.completed` carries the
+   * whole text and is what the review settles on. A section that is no longer
+   * the one being written is finished, so its card stops waiting for it even
+   * though the turn is still running.
+   */
   // Annotated so the two turn kinds can hand the session back to each other.
   const runSummary: (batch: ReviewFile[]) => Promise<void> = useCallback(
     async (batch) => {

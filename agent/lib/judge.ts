@@ -77,6 +77,8 @@ const QUESTIONS_VERSION = 3;
 
 export async function judgeFile(file: ReviewFile, signal?: AbortSignal) {
   const started = performance.now();
+  // The key hashes this object as JSON, in key order: reordering these
+  // properties (Biome sorts them) invalidates every stored judgment at once.
   const key = cacheKey('judge', {
     content: file.content,
     ids: questionsFor(file).map((q) => q.id),
