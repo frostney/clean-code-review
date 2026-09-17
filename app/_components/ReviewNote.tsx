@@ -49,7 +49,7 @@ export function ReviewNote({
   return (
     <section
       data-summary={status}
-      className={`rounded-md border border-line ${tone === "overall" ? "bg-surface" : "bg-white"} px-3 py-2`}
+      className={`rounded-md border border-line ${tone === "overall" ? "bg-surface" : "bg-page"} px-3 py-2`}
     >
       {status === "stale" && (
         <div className="mb-1 flex">

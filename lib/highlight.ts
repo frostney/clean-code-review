@@ -3,9 +3,19 @@
 import { useEffect, useState } from "react";
 import type { HighlighterCore, LanguageInput, ThemedToken } from "shiki/types";
 import type { Lang } from "./language";
+import type { Theme } from "./theme";
+import { useTheme } from "./useTheme";
 
-/** One light theme. The page is a review, not a colour scheme. */
-const THEME = "github-light";
+/**
+ * One theme per paper, and no third: the page is a review, not a colour
+ * scheme. Shiki writes its colours into inline `style` attributes, which is
+ * the one part of the page a CSS variable cannot reach — so the theme has to
+ * be chosen here and the code re-tokenised when it changes.
+ */
+const THEMES: Record<Theme, string> = {
+  light: "github-light",
+  dark: "github-dark",
+};
 
 /**
  * One highlighter for the whole page, built once, lazily, in the browser.
@@ -22,7 +32,7 @@ export function highlighter(): Promise<HighlighterCore> {
   ready ??= (async () => {
     const [core, engine] = await Promise.all([import("shiki/core"), import("shiki/engine/javascript")]);
     return core.createHighlighterCore({
-      themes: [import("shiki/themes/github-light.mjs")],
+      themes: [import("shiki/themes/github-light.mjs"), import("shiki/themes/github-dark.mjs")],
       langs: [],
       engine: engine.createJavaScriptRegexEngine(),
     });
@@ -96,10 +106,15 @@ export function plainLines(code: string): TokenLine[] {
  * `debounceMs` is for the editor: re-tokenising on every keystroke is what
  * makes an overlay editor feel heavy, and 50 ms is below the threshold where
  * the colours look like they lag the caret.
+ *
+ * The active theme is a dependency like the code is: switching the page to
+ * dark re-tokenises every card, because shiki's colours are inline styles and
+ * nothing else can repaint them.
  */
 export function useTokens(code: string, lang: Lang, debounceMs = 0): TokenLine[] {
   const [lines, setLines] = useState<TokenLine[] | null>(null);
   const [forCode, setForCode] = useState<string | null>(null);
+  const theme = useTheme();
 
   useEffect(() => {
     let live = true;
@@ -108,7 +123,7 @@ export function useTokens(code: string, lang: Lang, debounceMs = 0): TokenLine[]
         const shiki = await highlighter();
         await loadLanguage(lang);
         if (!live) return;
-        const result = shiki.codeToTokens(code, { lang: grammarOf(lang), theme: THEME });
+        const result = shiki.codeToTokens(code, { lang: grammarOf(lang), theme: THEMES[theme] });
         if (!live) return;
         setLines(result.tokens);
         setForCode(code);
@@ -131,7 +146,7 @@ export function useTokens(code: string, lang: Lang, debounceMs = 0): TokenLine[]
       live = false;
       clearTimeout(timer);
     };
-  }, [code, lang, debounceMs]);
+  }, [code, lang, debounceMs, theme]);
 
   // Between a keystroke and the next tokenisation the highlighted layer would
   // otherwise show the previous text under the caret. Plain lines for the new

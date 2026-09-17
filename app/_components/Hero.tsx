@@ -17,20 +17,33 @@ import { ReviewStats } from "./ReviewStats";
  * verdict, the smell count and the status ride on the overall review card,
  * beside the decision they belong with.
  *
+ * There is no title on screen. A product whose whole surface is one address
+ * field does not need to be introduced above it, and the duck says which page
+ * this is faster than four words do — so the duck stands at the left of the
+ * field, on its line, and the name is carried by a heading only a crawler and
+ * a screen reader ever meet.
+ *
  * Everything here that is the same on every visit is rendered on the server:
- * the line the chips sit on, the labels in them, the hint under the field. The
- * browser gets the three small pieces that answer a click and the two that
- * change when an answer arrives.
+ * the duck, the line the chips sit on, the labels in them, the hint under the
+ * field. The browser gets the three small pieces that answer a click and the
+ * two that change when an answer arrives.
  */
 export function Hero() {
   return (
     <header className="mb-4">
-      {/* The mascot and the name: small, because the page is the field below, not a title. */}
-      <h1 className="mb-3 flex items-center gap-2 text-[14px] font-semibold text-ink">
-        <Image src="/ducky-64.png" width={32} height={32} alt="" priority className="h-8 w-8" />
-        {SITE.name}
-      </h1>
-      <PullRequestField />
+      <h1 className="sr-only">{SITE.name}</h1>
+      <PullRequestField
+        duck={
+          <Image
+            src="/ducky-64.png"
+            width={32}
+            height={32}
+            alt=""
+            priority
+            className="h-7 w-7 shrink-0 sm:h-8 sm:w-8"
+          />
+        }
+      />
       <p className="mt-1.5 text-tiny text-muted">public repositories only</p>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">

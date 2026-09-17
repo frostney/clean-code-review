@@ -87,7 +87,7 @@ export function FileList({
         </ul>
         <span
           aria-hidden="true"
-          className="pointer-events-none absolute top-0 right-0 bottom-2 w-10 bg-gradient-to-l from-white to-transparent lg:hidden"
+          className="pointer-events-none absolute top-0 right-0 bottom-2 w-10 bg-gradient-to-l from-page to-transparent lg:hidden"
         />
       </div>
     </nav>

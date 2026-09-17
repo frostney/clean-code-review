@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 import { useReviewControls } from "./ReviewProvider";
 
 /** The fixed parts of the address; only what is between them is typed. */
@@ -43,8 +43,13 @@ export function pullRequestUrl(repo: string, number: string): string {
  * they are inside the field's own focus ring and its own flex row, and moving
  * two spans across the boundary would buy nothing — this component ships
  * either way, and the markup would only move from its bundle to every request.
+ *
+ * `duck` is the mascot, rendered on the server and handed in: it stands at the
+ * left of this row rather than above it, because the page has no title and the
+ * duck is what says which page this is. It is a node rather than an import so
+ * that `next/image` stays out of this component's bundle.
  */
-export function PullRequestField() {
+export function PullRequestField({ duck }: { duck?: ReactNode }) {
   const { openPullRequest, fetching } = useReviewControls();
   const [repo, setRepo] = useState("");
   const [number, setNumber] = useState("");
@@ -69,71 +74,71 @@ export function PullRequestField() {
         openPullRequest(pullRequestUrl(repo, number));
       }}
     >
-      {/* One box, two halves. Wide enough, the address is the single line it
-          is on GitHub. On a phone the halves become two rows of the same box —
-          `github.com/ owner/repo` over `/pull/ 123` — because squeezing
-          `owner/repo` into the ninety pixels left beside a number field is the
-          one thing this field must never do, and the button drops below them
-          at full width rather than stealing that space back.
-          Two breakpoints, because they answer different questions: the shape
-          goes back to one line as soon as one line fits (`sm`), while the
-          sixteen-pixel type and the forty-four-pixel rows hold until the
-          layout is wide enough to be a pointer's (`lg`). */}
-      <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
-        <div className="flex min-w-0 flex-1 flex-col rounded-md border border-line bg-white focus-within:border-accent sm:flex-row sm:items-center lg:min-w-[12rem]">
-          <div className="flex min-h-11 min-w-0 flex-1 items-stretch border-b border-line sm:border-b-0 lg:min-h-0">
-            <span className="flex shrink-0 items-center border-r border-line pr-2 pl-2.5 font-mono text-[16px] text-muted select-none lg:py-2 lg:text-[13px]">
-              {PREFIX}
-            </span>
-            <input
-              type="text"
-              data-pr-repo
-              value={repo}
-              onChange={(e) => {
-                // A paste lands here as a change too (keyboard, menu or drop),
-                // so the whole URL is taken apart wherever it came from.
-                if (!takeApart(e.target.value)) setRepo(e.target.value);
-              }}
-              onPaste={(e) => {
-                if (takeApart(e.clipboardData.getData("text"))) {
-                  e.preventDefault();
-                  numberRef.current?.focus();
-                }
-              }}
-              spellCheck={false}
-              autoComplete="off"
-              placeholder="owner/repo"
-              aria-label="GitHub owner and repository"
-              // Sixteen pixels is not a taste: below it iOS zooms the page in
-              // on focus and never zooms back out.
-              className="w-full min-w-[7rem] flex-1 bg-transparent px-2.5 font-mono text-[16px] text-ink outline-none placeholder:text-muted/60 lg:py-2 lg:text-[13px]"
-            />
-          </div>
-          <div className="flex min-h-11 items-stretch lg:min-h-0">
-            <span className="flex shrink-0 items-center border-r border-line pr-2 pl-2.5 font-mono text-[16px] text-muted select-none sm:border-r-0 sm:border-l lg:py-2 lg:pl-2 lg:text-[13px]">
-              {INFIX}
-            </span>
-            <input
-              ref={numberRef}
-              type="text"
-              inputMode="numeric"
-              data-pr-number
-              value={number}
-              onChange={(e) => {
-                if (!takeApart(e.target.value)) setNumber(e.target.value.replace(/[^\d]/g, ""));
-              }}
-              spellCheck={false}
-              autoComplete="off"
-              placeholder="123"
-              aria-label="Pull request number"
-              className="w-full flex-1 bg-transparent px-2.5 font-mono text-[16px] text-ink outline-none placeholder:text-muted/60 sm:w-20 sm:flex-none lg:w-16 lg:py-2 lg:text-[13px]"
-            />
-          </div>
+      {/* The duck, the address, the button: one line, at every width. The
+          address is what it is on GitHub — a single line — and it stays one
+          here even on a phone, because an address broken over two rows stops
+          being an address and becomes a form. What gives instead is the type
+          in the fixed parts (twelve pixels, which is a label, not an input)
+          and the padding around them; what never gives is the sixteen pixels
+          in the two boxes that are typed into, below which iOS zooms the page
+          in on focus and never zooms back out.
+          Only the button leaves the row, and only under 480px, where a compact
+          one beside the field would take the last of the space `owner/repo`
+          has. `flex-wrap` and a full width are the whole mechanism: at that
+          size the button cannot share the line, so it takes its own. */}
+      <div className="flex flex-wrap items-center gap-2">
+        {duck}
+        <div className="flex min-h-11 min-w-0 flex-1 items-stretch rounded-md border border-line bg-page focus-within:border-accent lg:min-h-0 lg:min-w-[12rem]">
+          <span className="flex shrink-0 items-center border-r border-line pr-2 pl-2.5 font-mono text-[12px] text-muted select-none lg:py-2 lg:text-[13px]">
+            {PREFIX}
+          </span>
+          <input
+            type="text"
+            data-pr-repo
+            value={repo}
+            onChange={(e) => {
+              // A paste lands here as a change too (keyboard, menu or drop),
+              // so the whole URL is taken apart wherever it came from.
+              if (!takeApart(e.target.value)) setRepo(e.target.value);
+            }}
+            onPaste={(e) => {
+              if (takeApart(e.clipboardData.getData("text"))) {
+                e.preventDefault();
+                numberRef.current?.focus();
+              }
+            }}
+            spellCheck={false}
+            autoComplete="off"
+            placeholder="owner/repo"
+            aria-label="GitHub owner and repository"
+            // `min-w-0` is what keeps the row a row: without it an input's
+            // default intrinsic width is the floor the line cannot go under,
+            // and the field would push the page sideways on a phone.
+            className="w-full min-w-0 flex-1 bg-transparent px-2 font-mono text-[16px] text-ink outline-none placeholder:text-muted/60 lg:px-2.5 lg:py-2 lg:text-[13px]"
+          />
+          <span className="flex shrink-0 items-center border-l border-line pr-0.5 pl-2 font-mono text-[12px] text-muted select-none lg:text-[13px]">
+            {INFIX}
+          </span>
+          <input
+            ref={numberRef}
+            type="text"
+            inputMode="numeric"
+            data-pr-number
+            value={number}
+            onChange={(e) => {
+              if (!takeApart(e.target.value)) setNumber(e.target.value.replace(/[^\d]/g, ""));
+            }}
+            spellCheck={false}
+            autoComplete="off"
+            placeholder="123"
+            aria-label="Pull request number"
+            className="w-14 min-w-0 shrink-0 bg-transparent px-2 font-mono text-[16px] text-ink outline-none placeholder:text-muted/60 lg:w-16 lg:px-2.5 lg:py-2 lg:text-[13px]"
+          />
         </div>
         <button
           type="submit"
           disabled={!ready || fetching}
-          className="min-h-11 w-full shrink-0 cursor-pointer rounded-md bg-ink px-3.5 text-[15px] font-semibold text-white disabled:cursor-default disabled:opacity-40 sm:w-auto lg:min-h-0 lg:py-2 lg:text-[13px]"
+          className="min-h-11 w-full shrink-0 cursor-pointer rounded-md bg-ink px-3 text-[14px] font-semibold whitespace-nowrap text-page disabled:cursor-default disabled:opacity-40 min-[480px]:w-auto lg:min-h-0 lg:px-3.5 lg:py-2 lg:text-[13px]"
         >
           {fetching ? "Fetching…" : "Judge"}
         </button>

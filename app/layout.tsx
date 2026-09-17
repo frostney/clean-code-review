@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 import { SITE } from "@/lib/site";
+import { THEME_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
 const sans = Geist({
@@ -69,8 +70,19 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { readonly children: ReactNode }) {
   return (
-    <html className={`${sans.variable} ${mono.variable}`} lang="en">
-      <body className="font-sans antialiased">{children}</body>
+    <html className={`${sans.variable} ${mono.variable}`} lang="en" suppressHydrationWarning>
+      <body className="font-sans antialiased">
+        {/* The theme, before the first pixel. It is the first thing in the
+            document body so that the attribute the palette keys off is already
+            on `<html>` when the browser paints, rather than one render later —
+            a page that flashes white on the way to black has told the reader it
+            forgot which one they asked for. */}
+        <script
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: an inline script is the only thing that runs before paint, and every byte of it is written in lib/theme.ts
+          dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

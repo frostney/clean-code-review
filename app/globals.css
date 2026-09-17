@@ -1,37 +1,158 @@
 @import "tailwindcss";
 
-/* The whole palette. A code review is read, not admired: one ink, one muted
-   grey, one accent, three verdict colours, and the diff backgrounds. Light
-   only — there is no dark variant, because a review has one paper colour. */
+/* The whole palette. A code review is read, not admired: one paper, one ink,
+   one muted grey, one accent, three verdict colours, and the diff backgrounds.
+   Two sets of them, because a review is read at night as well as by day.
+   Every utility on the page points at a name here and never at a literal, so
+   the second set is the only place the dark page is described. */
 @theme inline {
   --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
 
-  --color-ink: #1f2328;
-  --color-muted: #656d76;
-  --color-line: #d0d7de;
-  --color-surface: #f6f8fa;
-  --color-accent: #0969da;
-  --color-track: #eaeef2;
+  --color-page: var(--page);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-surface: var(--surface);
+  --color-accent: var(--accent);
+  --color-track: var(--track);
+  /* What a modal dims the page with. Ink would invert with the theme; the
+     scrim is a shadow in both, so it is a colour of its own. */
+  --color-scrim: var(--scrim);
 
-  --color-ok: #1a7f37;
-  --color-ok-bg: #dafbe1;
-  --color-warn: #9a6700;
-  --color-warn-bg: #fff8c5;
-  --color-bad: #cf222e;
-  --color-bad-bg: #ffebe9;
+  --color-ok: var(--ok);
+  --color-ok-bg: var(--ok-bg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-bad: var(--bad);
+  --color-bad-bg: var(--bad-bg);
 
-  --color-add-bg: #e6ffec;
-  --color-add-gutter: #ccffd8;
-  --color-del-bg: #ffebe9;
-  --color-del-gutter: #ffcecb;
-  --color-hunk-bg: #ddf4ff;
+  --color-add-bg: var(--add-bg);
+  --color-add-gutter: var(--add-gutter);
+  --color-del-bg: var(--del-bg);
+  --color-del-gutter: var(--del-gutter);
+  --color-hunk-bg: var(--hunk-bg);
+}
+
+/* Day. GitHub's own paper, because the page is read beside the pull request
+   it is judging. */
+:root {
+  color-scheme: light;
+
+  --page: #ffffff;
+  --ink: #1f2328;
+  --muted: #656d76;
+  --line: #d0d7de;
+  --surface: #f6f8fa;
+  --accent: #0969da;
+  --track: #eaeef2;
+  --scrim: rgb(31 35 40 / 0.4);
+
+  --ok: #1a7f37;
+  --ok-bg: #dafbe1;
+  --warn: #9a6700;
+  --warn-bg: #fff8c5;
+  --bad: #cf222e;
+  --bad-bg: #ffebe9;
+
+  --add-bg: #e6ffec;
+  --add-gutter: #ccffd8;
+  --del-bg: #ffebe9;
+  --del-gutter: #ffcecb;
+  --hunk-bg: #ddf4ff;
+}
+
+/* Night, written once. Two selectors turn it on — an explicit choice and an
+   unopposed system preference — and a rule cannot belong to both a media query
+   and a plain selector, so the values live under their own names here and each
+   selector below is nothing but the switch.
+   The badge backgrounds are opaque rather than the translucent ones GitHub
+   uses: a pill sits on the page in one place and on a card's grey in another,
+   and the text on it has to clear 4.5:1 in both. Every pair here does. */
+:root {
+  --dark-page: #0d1117;
+  --dark-ink: #e6edf3;
+  --dark-muted: #8b949e;
+  --dark-line: #30363d;
+  --dark-surface: #161b22;
+  --dark-accent: #58a6ff;
+  --dark-track: #21262d;
+  --dark-scrim: rgb(1 4 9 / 0.7);
+
+  --dark-ok: #3fb950;
+  --dark-ok-bg: #12261d;
+  --dark-warn: #d29922;
+  --dark-warn-bg: #272215;
+  --dark-bad: #f85149;
+  --dark-bad-bg: #24171c;
+
+  --dark-add-bg: rgb(46 160 67 / 0.15);
+  --dark-add-gutter: rgb(46 160 67 / 0.3);
+  --dark-del-bg: rgb(248 81 73 / 0.1);
+  --dark-del-gutter: rgb(248 81 73 / 0.3);
+  --dark-hunk-bg: rgb(56 139 253 / 0.1);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --page: var(--dark-page);
+  --ink: var(--dark-ink);
+  --muted: var(--dark-muted);
+  --line: var(--dark-line);
+  --surface: var(--dark-surface);
+  --accent: var(--dark-accent);
+  --track: var(--dark-track);
+  --scrim: var(--dark-scrim);
+
+  --ok: var(--dark-ok);
+  --ok-bg: var(--dark-ok-bg);
+  --warn: var(--dark-warn);
+  --warn-bg: var(--dark-warn-bg);
+  --bad: var(--dark-bad);
+  --bad-bg: var(--dark-bad-bg);
+
+  --add-bg: var(--dark-add-bg);
+  --add-gutter: var(--dark-add-gutter);
+  --del-bg: var(--dark-del-bg);
+  --del-gutter: var(--dark-del-gutter);
+  --hunk-bg: var(--dark-hunk-bg);
+}
+
+/* The system's preference, for anyone who has not picked. The `:not()` is what
+   lets an explicit light choice win over a dark desktop. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --page: var(--dark-page);
+    --ink: var(--dark-ink);
+    --muted: var(--dark-muted);
+    --line: var(--dark-line);
+    --surface: var(--dark-surface);
+    --accent: var(--dark-accent);
+    --track: var(--dark-track);
+    --scrim: var(--dark-scrim);
+
+    --ok: var(--dark-ok);
+    --ok-bg: var(--dark-ok-bg);
+    --warn: var(--dark-warn);
+    --warn-bg: var(--dark-warn-bg);
+    --bad: var(--dark-bad);
+    --bad-bg: var(--dark-bad-bg);
+
+    --add-bg: var(--dark-add-bg);
+    --add-gutter: var(--dark-add-gutter);
+    --del-bg: var(--dark-del-bg);
+    --del-gutter: var(--dark-del-gutter);
+    --hunk-bg: var(--dark-hunk-bg);
+  }
 }
 
 html,
 body {
-  background: #fff;
-  color: #1f2328;
+  background: var(--page);
+  color: var(--ink);
 }
 
 html {
@@ -83,7 +204,7 @@ textarea {
    to catch the eye mid-scan, short enough to be gone before the next turn. */
 @keyframes rowFlash {
   from {
-    background: #fff8c5;
+    background: var(--warn-bg);
   }
   to {
     background: transparent;
