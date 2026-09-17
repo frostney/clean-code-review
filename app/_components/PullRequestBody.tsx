@@ -1,5 +1,5 @@
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 /**
  * A pull request's description, as GitHub renders it: headings, lists, task
@@ -16,12 +16,14 @@ import remarkGfm from "remark-gfm";
 export function PullRequestBody({ body }: { body: string }) {
   return (
     <Markdown
-      remarkPlugins={[remarkGfm]}
       components={{
         // Someone else's repository wrote these: a new tab, and no window
         // handle back to this one.
-        a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noreferrer" />,
+        a: ({ node: _node, ...props }) => (
+          <a {...props} rel="noreferrer" target="_blank" />
+        ),
       }}
+      remarkPlugins={[remarkGfm]}
     >
       {body}
     </Markdown>

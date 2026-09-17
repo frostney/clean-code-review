@@ -1,22 +1,23 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import type { ReactNode } from "react";
-import { SITE } from "@/lib/site";
-import { THEME_SCRIPT } from "@/lib/theme";
-import "./globals.css";
+import type { Metadata } from 'next';
+import { Geist, Geist_Mono } from 'next/font/google';
+import type { ReactNode } from 'react';
+
+import { SITE } from '@/lib/site';
+import { THEME_SCRIPT } from '@/lib/theme';
+import './globals.css';
 
 const sans = Geist({
-  variable: "--font-sans",
-  subsets: ["latin"],
-  weight: "variable",
-  display: "swap",
+  display: 'swap',
+  subsets: ['latin'],
+  variable: '--font-sans',
+  weight: 'variable',
 });
 
 const mono = Geist_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
-  weight: "variable",
-  display: "swap",
+  display: 'swap',
+  subsets: ['latin'],
+  variable: '--font-mono',
+  weight: 'variable',
 });
 
 /**
@@ -28,49 +29,57 @@ const mono = Geist_Mono({
  * of the same product without repeating its name.
  */
 export const metadata: Metadata = {
+  alternates: { canonical: '/' },
+  applicationName: SITE.name,
+  authors: [{ name: 'frostney', url: 'https://github.com/frostney' }],
+  category: 'developer tools',
+  creator: 'frostney',
+  description: SITE.description,
+  keywords: [
+    'clean code',
+    'code review',
+    'pull request review',
+    'AI code review',
+    'code smells',
+    'Clean Code checklist',
+    'GitHub pull request',
+    'diff review',
+    'Jev',
+    'TypeSafe',
+    'eve agent',
+  ],
   metadataBase: new URL(SITE.url),
+  openGraph: {
+    description: SITE.description,
+    locale: 'en_US',
+    siteName: SITE.name,
+    title: SITE.name,
+    type: 'website',
+    url: SITE.url,
+  },
+  robots: { follow: true, index: true },
   title: {
     default: SITE.name,
     template: `%s · ${SITE.name}`,
   },
-  description: SITE.description,
-  applicationName: SITE.name,
-  category: "developer tools",
-  keywords: [
-    "clean code",
-    "code review",
-    "pull request review",
-    "AI code review",
-    "code smells",
-    "Clean Code checklist",
-    "GitHub pull request",
-    "diff review",
-    "Jev",
-    "TypeSafe",
-    "eve agent",
-  ],
-  authors: [{ name: "frostney", url: "https://github.com/frostney" }],
-  creator: "frostney",
-  alternates: { canonical: "/" },
-  robots: { index: true, follow: true },
-  openGraph: {
-    type: "website",
-    siteName: SITE.name,
-    url: SITE.url,
-    locale: "en_US",
-    title: SITE.name,
-    description: SITE.description,
-  },
   twitter: {
-    card: "summary_large_image",
-    title: SITE.name,
+    card: 'summary_large_image',
     description: SITE.description,
+    title: SITE.name,
   },
 };
 
-export default function RootLayout({ children }: { readonly children: ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  readonly children: ReactNode;
+}) {
   return (
-    <html className={`${sans.variable} ${mono.variable}`} lang="en" suppressHydrationWarning>
+    <html
+      className={`${sans.variable} ${mono.variable}`}
+      lang="en"
+      suppressHydrationWarning={true}
+    >
       <body className="font-sans antialiased">
         {/* The theme, before the first pixel. It is the first thing in the
             document body so that the attribute the palette keys off is already

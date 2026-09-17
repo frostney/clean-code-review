@@ -1,28 +1,6 @@
 {
-  "name": "clean-code-review",
-  "version": "0.0.0",
-  "type": "module",
-  "imports": {
-    "#*": "./agent/*",
-    "#evals/*": "./evals/*"
-  },
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "judge": "bun scripts/judge-once.ts",
-    "review": "bun scripts/summary-once.ts",
-    "jev": "bun --env-file=.env.local scripts/jev-once.ts",
-    "deploy": "eve deploy",
-    "eval": "eve eval",
-    "build:eve": "eve build",
-    "dev:eve": "eve dev",
-    "start:eve": "eve start"
-  },
   "dependencies": {
     "@tailwindcss/postcss": "4.3.0",
-    "@vercel/connect": "1.0.0",
     "@vercel/functions": "^3.9.8",
     "ai": "^7.0.93",
     "eve": "^0.57.0",
@@ -38,14 +16,44 @@
   },
   "devDependencies": {
     "@ai-sdk/provider": "^4.0.17",
+    "@biomejs/biome": "2.3.11",
     "@types/node": "24.x",
     "@types/react": "19.2.15",
     "@types/react-dom": "19.2.3",
+    "knip": "^6.36.0",
+    "lefthook": "^2.1.14",
     "typescript": "6.0.3",
     "vercel": "^59.20.0"
   },
   "engines": {
     "node": "24.x"
   },
-  "packageManager": "bun@1.4.0"
+  "imports": {
+    "#*": "./agent/*",
+    "#evals/*": "./evals/*"
+  },
+  "name": "clean-code-review",
+  "packageManager": "bun@1.4.0",
+  "scripts": {
+    "build": "next build",
+    "build:eve": "eve build",
+    "check": "bun run --parallel check:biome check:typescript check:knip",
+    "check:biome": "biome check",
+    "check:fix": "biome check --write",
+    "check:knip": "knip",
+    "check:typescript": "tsc --noEmit -p tsconfig.json",
+    "deploy": "eve deploy",
+    "dev": "next dev",
+    "dev:eve": "eve dev",
+    "eval": "eve eval",
+    "jev": "bun --env-file=.env.local scripts/jev-once.ts",
+    "judge": "bun scripts/judge-once.ts",
+    "postinstall": "lefthook install",
+    "review": "bun scripts/summary-once.ts",
+    "start": "next start",
+    "start:eve": "eve start",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "type": "module",
+  "version": "0.0.0"
 }

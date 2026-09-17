@@ -5,13 +5,14 @@
  *
  *   bun run jev [preset-index | path/to/file]
  */
-import { readFileSync } from "node:fs";
-import { judgeFile } from "../agent/lib/judge";
-import { filesFromPatch, looksLikePatch } from "../agent/lib/patch";
-import { PRESETS } from "../agent/lib/presets";
-import type { ReviewFile } from "../agent/lib/review";
+import { readFileSync } from 'node:fs';
 
-const arg = process.argv[2] ?? "0";
+import { judgeFile } from '../agent/lib/judge';
+import { filesFromPatch, looksLikePatch } from '../agent/lib/patch';
+import { PRESETS } from '../agent/lib/presets';
+import type { ReviewFile } from '../agent/lib/review';
+
+const arg = process.argv[2] ?? '0';
 let files: ReviewFile[];
 if (/^\d+$/.test(arg)) {
   const preset = PRESETS[Number(arg)];
@@ -21,12 +22,24 @@ if (/^\d+$/.test(arg)) {
   }
   files = preset.files;
 } else {
-  const text = readFileSync(arg, "utf8");
-  files = looksLikePatch(text) ? filesFromPatch(text) : [{ path: arg, content: text }];
+  const text = readFileSync(arg, 'utf8');
+  files = looksLikePatch(text)
+    ? filesFromPatch(text)
+    : [{ content: text, path: arg }];
 }
+
+/** Dollars per file are printed fine enough to see a fraction of a cent. */
+const COST_DIGITS = 6;
+
+/** How wide the question-id column is. */
+const ID_WIDTH = 26;
 
 for (const file of files) {
   const { judgment, cost, warnings, model } = await judgeFile(file);
-  console.log(`${file.path}: ${judgment.ms} ms, ${judgment.usage.input_tokens}→${judgment.usage.output_tokens} tokens, $${cost.toFixed(6)}, model ${model}, warnings ${JSON.stringify(warnings)}`);
-  for (const [id, a] of Object.entries(judgment.answers)) console.log("   ", id.padEnd(26), JSON.stringify(a));
+  console.log(
+    `${file.path}: ${judgment.ms} ms, ${judgment.usage.input_tokens}→${judgment.usage.output_tokens} tokens, $${cost.toFixed(COST_DIGITS)}, model ${model}, warnings ${JSON.stringify(warnings)}`,
+  );
+  for (const [id, a] of Object.entries(judgment.answers)) {
+    console.log('   ', id.padEnd(ID_WIDTH), JSON.stringify(a));
+  }
 }

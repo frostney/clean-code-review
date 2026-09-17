@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useReviewControls } from "./ReviewProvider";
+import { useReviewControls } from './ReviewProvider';
 
 /** Opens the paste dialog, and is where focus lands again when it closes. */
 export function PasteButton() {
@@ -8,11 +8,11 @@ export function PasteButton() {
 
   return (
     <button
-      type="button"
-      ref={pasteButtonRef}
+      className="inline-flex min-h-10 cursor-pointer items-center text-[12px] text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent lg:min-h-0"
       data-paste="open"
       onClick={startPasting}
-      className="inline-flex min-h-10 cursor-pointer items-center text-[12px] text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent lg:min-h-0"
+      ref={pasteButtonRef}
+      type="button"
     >
       Paste code or a diff
     </button>

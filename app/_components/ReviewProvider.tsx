@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import {
   createContext,
@@ -10,12 +10,22 @@ import {
   useRef,
   useState,
   useTransition,
-} from "react";
-import { PRESETS } from "@/agent/lib/presets";
-import { openPullRequest as fetchPullRequest } from "@/app/actions";
-import { withPatchHeader } from "@/lib/diff";
-import { fromPaste, fromPreset, fromPullRequest, type OpenReview } from "@/lib/open-review";
-import { type PullRequestContext, type ReviewState, useReview } from "@/lib/useReview";
+} from 'react';
+
+import { PRESETS } from '@/agent/lib/presets';
+import { openPullRequest as fetchPullRequest } from '@/app/actions';
+import { withPatchHeader } from '@/lib/diff';
+import {
+  fromPaste,
+  fromPreset,
+  fromPullRequest,
+  type OpenReview,
+} from '@/lib/open-review';
+import {
+  type PullRequestContext,
+  type ReviewState,
+  useReview,
+} from '@/lib/useReview';
 
 /**
  * The review the page is showing, and the four ways to open another one.
@@ -61,22 +71,26 @@ const ControlsContext = createContext<ReviewControls | null>(null);
 const ViewContext = createContext<ReviewView | null>(null);
 
 function required<T>(value: T | null, hook: string): T {
-  if (!value) throw new Error(`${hook} must be used inside <ReviewProvider>`);
+  if (!value) {
+    throw new Error(`${hook} must be used inside <ReviewProvider>`);
+  }
   return value;
 }
 
 export function useReviewControls(): ReviewControls {
-  return required(useContext(ControlsContext), "useReviewControls");
+  return required(useContext(ControlsContext), 'useReviewControls');
 }
 
 export function useReviewView(): ReviewView {
-  return required(useContext(ViewContext), "useReviewView");
+  return required(useContext(ViewContext), 'useReviewView');
 }
 
 export function ReviewProvider({ children }: { children: ReactNode }) {
   // Opens on the first example, so the page is already a review before anyone
   // touches it.
-  const [review, setReview] = useState<OpenReview>(() => fromPreset(PRESETS[0], `${PRESETS[0].label}#0`));
+  const [review, setReview] = useState<OpenReview>(() =>
+    fromPreset(PRESETS[0], `${PRESETS[0].label}#0`),
+  );
   const [pasting, setPasting] = useState(false);
   const [prError, setPrError] = useState<string | null>(null);
   const [fetching, startFetching] = useTransition();
@@ -86,7 +100,10 @@ export function ReviewProvider({ children }: { children: ReactNode }) {
   // read the same value and share an id, and an id is what tells the hook a
   // different review is on screen.
   const nonceRef = useRef(0);
-  const nextId = useCallback((kind: string) => `${kind}#${(nonceRef.current += 1)}`, []);
+  const nextId = useCallback((kind: string) => {
+    nonceRef.current += 1;
+    return `${kind}#${nonceRef.current}`;
+  }, []);
 
   // What goes on the wire: the files as shown, with every patch back under the
   // headers it was split from, so the agent's parser and its after-image read a
@@ -96,7 +113,9 @@ export function ReviewProvider({ children }: { children: ReactNode }) {
     () =>
       review.files.map((file) => {
         const header = review.headers[file.path];
-        if (!file.patch || !header || !file.content.trim()) return file;
+        if (!file.patch || !header || !file.content.trim()) {
+          return file;
+        }
         return { ...file, content: withPatchHeader(header, file.content) };
       }),
     [review.files, review.headers],
@@ -106,21 +125,34 @@ export function ReviewProvider({ children }: { children: ReactNode }) {
   // into, and a fresh object every render would be a new pull request to the
   // turn that reads it.
   const prompt = useMemo<PullRequestContext | undefined>(
-    () => (review.pr ? { title: review.pr.title, body: review.pr.bodyText, url: review.pr.url } : undefined),
+    () =>
+      review.pr
+        ? {
+            body: review.pr.bodyText,
+            title: review.pr.title,
+            url: review.pr.url,
+          }
+        : undefined,
     [review.pr],
   );
 
   const judge = useReview(review.id, sent, prompt);
 
   const lineCount = useMemo(
-    () => review.files.reduce((total, file) => total + file.content.split("\n").length, 0),
+    () =>
+      review.files.reduce(
+        (total, file) => total + file.content.split('\n').length,
+        0,
+      ),
     [review.files],
   );
 
   const openPreset = useCallback(
     (label: string) => {
       const preset = PRESETS.find((p) => p.label === label);
-      if (!preset) return;
+      if (!preset) {
+        return;
+      }
       setReview(fromPreset(preset, nextId(label)));
       setPasting(false);
       setPrError(null);
@@ -130,8 +162,10 @@ export function ReviewProvider({ children }: { children: ReactNode }) {
 
   const judgePasted = useCallback(
     (text: string) => {
-      const next = fromPaste(text, nextId("paste"));
-      if (!next) return;
+      const next = fromPaste(text, nextId('paste'));
+      if (!next) {
+        return;
+      }
       setReview(next);
       setPasting(false);
       setPrError(null);
@@ -156,15 +190,19 @@ export function ReviewProvider({ children }: { children: ReactNode }) {
             setPrError(answer.error);
             return;
           }
-          const next = fromPullRequest(answer.pr, nextId("pr"));
+          const next = fromPullRequest(answer.pr, nextId('pr'));
           if (!next) {
-            setPrError("That pull request has no code files to judge.");
+            setPrError('That pull request has no code files to judge.');
             return;
           }
           setReview(next);
           setPasting(false);
         } catch (err) {
-          setPrError(err instanceof Error ? err.message : "Could not fetch that pull request.");
+          setPrError(
+            err instanceof Error
+              ? err.message
+              : 'Could not fetch that pull request.',
+          );
         }
       });
     },
@@ -177,7 +215,9 @@ export function ReviewProvider({ children }: { children: ReactNode }) {
   const edit = useCallback((path: string, content: string) => {
     setReview((current) => ({
       ...current,
-      files: current.files.map((file) => (file.path === path ? { ...file, content } : file)),
+      files: current.files.map((file) =>
+        file.path === path ? { ...file, content } : file,
+      ),
     }));
   }, []);
 
@@ -185,17 +225,24 @@ export function ReviewProvider({ children }: { children: ReactNode }) {
     () => ({
       activePreset: review.preset,
       fetching,
+      judgePasted,
+      openPreset,
+      openPullRequest,
+      pasteButtonRef,
+      startPasting,
+    }),
+    [
+      review.preset,
+      fetching,
       openPreset,
       judgePasted,
       openPullRequest,
       startPasting,
-      pasteButtonRef,
-    }),
-    [review.preset, fetching, openPreset, judgePasted, openPullRequest, startPasting],
+    ],
   );
 
   const view = useMemo<ReviewView>(
-    () => ({ review, judge, lineCount, prError, pasting, stopPasting, edit }),
+    () => ({ edit, judge, lineCount, pasting, prError, review, stopPasting }),
     [review, judge, lineCount, prError, pasting, stopPasting, edit],
   );
 

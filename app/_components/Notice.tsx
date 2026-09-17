@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode } from 'react';
 
 /**
  * A one-off system message across the top of the page. Amber, not part of the
@@ -17,7 +17,7 @@ export function Notice({
   return (
     <div
       {...rest}
-      className={`mb-4 rounded-md border border-warn/40 bg-warn-bg px-3 py-2 text-[13px] leading-relaxed text-warn ${className ?? ""}`}
+      className={`mb-4 rounded-md border border-warn/40 bg-warn-bg px-3 py-2 text-[13px] leading-relaxed text-warn ${className ?? ''}`}
     >
       {children}
     </div>

@@ -1,4 +1,4 @@
-import type { Answers } from "./schema";
+import type { Answers } from './schema';
 
 /**
  * What the page sends and what comes back. A review is a set of files —
@@ -18,7 +18,7 @@ export interface ReviewInput {
   files: ReviewFile[];
 }
 
-export interface Usage {
+interface Usage {
   input_tokens: number;
   output_tokens: number;
 }
@@ -41,16 +41,16 @@ export interface ReviewResult {
 
 /** Caps enforced on both ends. Jev is fast and cheap; these keep one review to one screen of results. */
 export const REVIEW_LIMITS = {
-  maxFiles: 24,
   maxCharsPerFile: 16_000,
+  maxFiles: 24,
 } as const;
 
 /** Trim an input to the caps rather than refusing it. */
 export function clampReview(input: ReviewInput): ReviewInput {
   return {
     files: input.files.slice(0, REVIEW_LIMITS.maxFiles).map((f) => ({
-      path: f.path,
       content: f.content.slice(0, REVIEW_LIMITS.maxCharsPerFile),
+      path: f.path,
       ...(f.patch ? { patch: true } : {}),
     })),
   };
@@ -64,32 +64,57 @@ const BINARY_EXT =
 const GENERATED_PATH =
   /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|Cargo\.lock|poetry\.lock|Gemfile\.lock|composer\.lock|go\.sum)$|\.min\.(js|css)$|\.(snap|map|lock|csv)$|(^|\/)(dist|build|vendor|node_modules|__generated__|generated|\.changeset)\/|(^|\/)\.env(\.|$)/i;
 
-/** Paths that are never judged, for callers that only have a path. */
-export const SKIP_PATH = new RegExp(`${BINARY_EXT.source}|${GENERATED_PATH.source}`, "i");
+/** How much of a file is read when deciding whether it is text at all. */
+const BINARY_SAMPLE_CHARS = 8_000;
+
+/** Below this code point a character is a control character. */
+const FIRST_PRINTABLE = 32;
+
+/** The three control characters text is written with. */
+const TAB = 9;
+const NEWLINE = 10;
+const CARRIAGE_RETURN = 13;
+const LAYOUT_CONTROLS = new Set([TAB, NEWLINE, CARRIAGE_RETURN]);
+
+/** Above this share of control characters the content is not text. */
+const MAX_CONTROL_SHARE = 0.02;
 
 /**
  * True when the content is not text: a NUL byte, a diff's "Binary files …
  * differ" marker with no hunks, or too many control characters in the first
  * few kilobytes.
  */
-export function looksBinary(content: string): boolean {
-  const sample = content.slice(0, 8_000);
-  if (sample.includes("\0")) return true;
-  if (/^Binary files .* differ$/m.test(sample) && !/^@@ /m.test(sample)) return true;
+function looksBinary(content: string): boolean {
+  const sample = content.slice(0, BINARY_SAMPLE_CHARS);
+  if (sample.includes('\0')) {
+    return true;
+  }
+  if (/^Binary files .* differ$/m.test(sample) && !/^@@ /m.test(sample)) {
+    return true;
+  }
   let control = 0;
   for (let i = 0; i < sample.length; i++) {
     const c = sample.charCodeAt(i);
-    if (c < 32 && c !== 9 && c !== 10 && c !== 13) control++;
+    if (c < FIRST_PRINTABLE && !LAYOUT_CONTROLS.has(c)) {
+      control++;
+    }
   }
-  return sample.length > 0 && control / sample.length > 0.02;
+  return sample.length > 0 && control / sample.length > MAX_CONTROL_SHARE;
 }
 
-export type SkipReason = "binary" | "generated";
+export type SkipReason = 'binary' | 'generated';
 
 /** Why a file is left out, or null when it should be judged. */
-export function skipReason(file: { path: string; content: string }): SkipReason | null {
-  if (BINARY_EXT.test(file.path) || looksBinary(file.content)) return "binary";
-  if (GENERATED_PATH.test(file.path)) return "generated";
+export function skipReason(file: {
+  path: string;
+  content: string;
+}): SkipReason | null {
+  if (BINARY_EXT.test(file.path) || looksBinary(file.content)) {
+    return 'binary';
+  }
+  if (GENERATED_PATH.test(file.path)) {
+    return 'generated';
+  }
   return null;
 }
 
@@ -101,8 +126,11 @@ export function partitionJudgeable<T extends { path: string; content: string }>(
   const skipped: { path: string; reason: SkipReason }[] = [];
   for (const f of files) {
     const reason = skipReason(f);
-    if (reason) skipped.push({ path: f.path, reason });
-    else judgeable.push(f);
+    if (reason) {
+      skipped.push({ path: f.path, reason });
+    } else {
+      judgeable.push(f);
+    }
   }
   return { judgeable, skipped };
 }

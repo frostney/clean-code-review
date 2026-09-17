@@ -1,5 +1,5 @@
-import type { NextConfig } from "next";
-import { withEve } from "eve/next";
+import { withEve } from 'eve/next';
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {};
 

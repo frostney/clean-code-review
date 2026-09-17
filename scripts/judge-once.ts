@@ -7,31 +7,56 @@
  *
  * Defaults to the local eve dev server (`npx eve dev --no-ui`).
  */
-import { Client } from "eve/client";
-import { PRESETS } from "../agent/lib/presets";
-import { judgeMessage } from "../agent/lib/prompt";
-import { questionsFor } from "../agent/lib/questions";
-import { type Answers, parseReview } from "../agent/lib/schema";
+import { Client, type MessageResponse } from 'eve/client';
 
-const host = process.argv[2] ?? "http://127.0.0.1:2000";
+import { PRESETS } from '../agent/lib/presets';
+import { judgeMessage } from '../agent/lib/prompt';
+import { questionsFor } from '../agent/lib/questions';
+import { type Answers, parseReview } from '../agent/lib/schema';
+
+/** Probabilities are stored 0–1 and printed as whole percents. */
+const PERCENT = 100;
+
+/** How wide each column of the one-line-per-file report is. */
+const LABEL_WIDTH = 15;
+const STATUS_WIDTH = 8;
+const MS_WIDTH = 5;
+const PATH_WIDTH = 24;
+const FILE_MS_WIDTH = 4;
+
+/** Dollars are printed to the cent Jev actually charges in. */
+const COST_DIGITS = 5;
+
+/** One judge turn is one evaluation: more steps means the agent looped. */
+const STEPS_PER_TURN = 1;
+
+const host = process.argv[2] ?? 'http://127.0.0.1:2000';
 const client = new Client({ host });
 
-console.log("health", (await client.health()).status);
-console.log("model", (await client.info()).agent.model.id);
+console.log('health', (await client.health()).status);
+console.log('model', (await client.info()).agent.model.id);
 
 function headline(a: Answers, id: string): string {
   const x = a[id];
-  if (!x) return "—";
-  if (x.type === "noul") return `${Math.round(x.noul * 100)}%`;
-  if (x.type === "score") return x.score.toFixed(1);
+  if (!x) {
+    return '—';
+  }
+  if (x.type === 'noul') {
+    return `${Math.round(x.noul * PERCENT)}%`;
+  }
+  if (x.type === 'score') {
+    return x.score.toFixed(1);
+  }
   return x.choice;
 }
 
-let session: Awaited<ReturnType<typeof client.sessions.create>>["session"] | undefined;
+let session:
+  | Awaited<ReturnType<typeof client.sessions.create>>['session']
+  | undefined;
 let failures = 0;
 for (const preset of PRESETS) {
   const started = performance.now();
-  let response;
+  let response: MessageResponse;
   const message = judgeMessage({ files: preset.files });
   if (!session) {
     ({ session, response } = await client.sessions.create({ message }));
@@ -41,24 +66,37 @@ for (const preset of PRESETS) {
   }
   const result = await response.result();
   const ms = Math.round(performance.now() - started);
-  const steps = result.events.filter((e) => e.type === "step.completed");
-  const cost = steps.reduce((acc, e: any) => acc + (e.data?.usage?.costUsd ?? 0), 0);
+  const steps = result.events.filter((e) => e.type === 'step.completed');
+  const cost = steps.reduce((acc, e) => acc + (e.data.usage?.costUsd ?? 0), 0);
   const review = parseReview(result.message);
-  const budgetPrompt = result.events.some((e) => e.type === "input.requested");
+  const budgetPrompt = result.events.some((e) => e.type === 'input.requested');
   const judged = Object.keys(review?.files ?? {}).length;
-  const complete = preset.files.every((file) => Object.keys(review?.files[file.path]?.answers ?? {}).length === questionsFor(file).length);
-  if (result.status === "failed" || budgetPrompt || !review || judged !== preset.files.length || !complete || steps.length !== 1) failures++;
+  const complete = preset.files.every(
+    (file) =>
+      Object.keys(review?.files[file.path]?.answers ?? {}).length ===
+      questionsFor(file).length,
+  );
+  if (
+    result.status === 'failed' ||
+    budgetPrompt ||
+    !review ||
+    judged !== preset.files.length ||
+    !complete ||
+    steps.length !== STEPS_PER_TURN
+  ) {
+    failures++;
+  }
   console.log(
-    `${preset.label.padEnd(15)} ${result.status.padEnd(8)} steps=${steps.length} turn=${String(ms).padStart(5)}ms ` +
-      `files=${judged}/${preset.files.length} tokens=${review?.usage.input_tokens ?? 0}→${review?.usage.output_tokens ?? 0} $${cost.toFixed(5)} model=${review?.model ?? "?"}`,
+    `${preset.label.padEnd(LABEL_WIDTH)} ${result.status.padEnd(STATUS_WIDTH)} steps=${steps.length} turn=${String(ms).padStart(MS_WIDTH)}ms ` +
+      `files=${judged}/${preset.files.length} tokens=${review?.usage.input_tokens ?? 0}→${review?.usage.output_tokens ?? 0} $${cost.toFixed(COST_DIGITS)} model=${review?.model ?? '?'}`,
   );
   for (const [path, f] of Object.entries(review?.files ?? {})) {
     console.log(
-      `    ${path.padEnd(24)} ${String(f.ms).padStart(4)}ms answers=${Object.keys(f.answers).length} ` +
-        `many_things=${headline(f.answers, "does_more_than_one_thing")} names_hide=${headline(f.answers, "names_hide_intent")} ` +
-        `null=${headline(f.answers, "returns_null")} size=${headline(f.answers, "function_size")} verdict=${headline(f.answers, "verdict")}`,
+      `    ${path.padEnd(PATH_WIDTH)} ${String(f.ms).padStart(FILE_MS_WIDTH)}ms answers=${Object.keys(f.answers).length} ` +
+        `many_things=${headline(f.answers, 'does_more_than_one_thing')} names_hide=${headline(f.answers, 'names_hide_intent')} ` +
+        `null=${headline(f.answers, 'returns_null')} size=${headline(f.answers, 'function_size')} verdict=${headline(f.answers, 'verdict')}`,
     );
   }
 }
-console.log(failures === 0 ? "OK" : `FAILURES: ${failures}`);
+console.log(failures === 0 ? 'OK' : `FAILURES: ${failures}`);
 process.exit(failures === 0 ? 0 : 1);

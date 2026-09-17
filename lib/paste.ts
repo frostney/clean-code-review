@@ -1,6 +1,7 @@
-import { filesFromPatch, looksLikePatch } from "@/agent/lib/patch";
-import type { ReviewFile } from "@/agent/lib/review";
-import { extensionFromContent, extensionFromHint } from "./language";
+import { filesFromPatch, looksLikePatch } from '@/agent/lib/patch';
+import type { ReviewFile } from '@/agent/lib/review';
+
+import { extensionFromContent, extensionFromHint } from './language';
 
 /** `// file: src/a.ts` or `# file: src/a.ts` on a line of its own. */
 const FILE_MARKER = /^(?:\/\/|#)\s*file:\s*(.+?)\s*$/;
@@ -14,15 +15,23 @@ const FILE_MARKER = /^(?:\/\/|#)\s*file:\s*(.+?)\s*$/;
  * gives away about its language.
  */
 export function filesFromPaste(text: string): ReviewFile[] {
-  if (looksLikePatch(text)) return uniquePaths(filesFromPatch(text));
+  if (looksLikePatch(text)) {
+    return uniquePaths(filesFromPatch(text));
+  }
   const marked = filesFromMarkers(text);
-  if (marked.length) return uniquePaths(marked);
+  if (marked.length) {
+    return uniquePaths(marked);
+  }
   const body = stripFence(text);
-  const extension = extensionFromHint(text.split("\n", 1)[0] ?? "") ?? extensionFromContent(body);
+  const extension =
+    extensionFromHint(text.split('\n', 1)[0] ?? '') ??
+    extensionFromContent(body);
   // No extension rather than `.txt` when nothing places it: `.txt` is on the
   // generated-and-not-code list, so a snippet named that way would be skipped
   // on both sides and the paste would render no cards at all.
-  return [{ path: extension ? `snippet.${extension}` : "snippet", content: body }];
+  return [
+    { content: body, path: extension ? `snippet.${extension}` : 'snippet' },
+  ];
 }
 
 /**
@@ -35,7 +44,9 @@ export function uniquePaths(files: readonly ReviewFile[]): ReviewFile[] {
   return files.map((file) => {
     let path = file.path;
     // A suffixed name can collide in turn, so keep counting until one is free.
-    for (let n = 2; taken.has(path); n++) path = suffixed(file.path, n);
+    for (let n = 2; taken.has(path); n++) {
+      path = suffixed(file.path, n);
+    }
     taken.add(path);
     return path === file.path ? { ...file } : { ...file, path };
   });
@@ -43,31 +54,45 @@ export function uniquePaths(files: readonly ReviewFile[]): ReviewFile[] {
 
 /** `src/a.ts` + 2 → `src/a (2).ts`. The extension stays put: it picks the grammar. */
 function suffixed(path: string, n: number): string {
-  const base = path.lastIndexOf("/") + 1;
-  const dot = path.lastIndexOf(".");
-  return dot <= base ? `${path} (${n})` : `${path.slice(0, dot)} (${n})${path.slice(dot)}`;
+  const base = path.lastIndexOf('/') + 1;
+  const dot = path.lastIndexOf('.');
+  return dot <= base
+    ? `${path} (${n})`
+    : `${path.slice(0, dot)} (${n})${path.slice(dot)}`;
 }
 
 function filesFromMarkers(text: string): ReviewFile[] {
   const files: ReviewFile[] = [];
   let current: { path: string; lines: string[] } | null = null;
-  for (const line of text.split("\n")) {
+  for (const line of text.split('\n')) {
     const marker = FILE_MARKER.exec(line);
     if (marker) {
-      if (current) files.push({ path: current.path, content: current.lines.join("\n").trim() });
-      current = { path: marker[1], lines: [] };
+      if (current) {
+        files.push({
+          content: current.lines.join('\n').trim(),
+          path: current.path,
+        });
+      }
+      current = { lines: [], path: marker[1] };
       continue;
     }
     current?.lines.push(line);
   }
-  if (current) files.push({ path: current.path, content: current.lines.join("\n").trim() });
+  if (current) {
+    files.push({
+      content: current.lines.join('\n').trim(),
+      path: current.path,
+    });
+  }
   return files.filter((f) => f.content.trim());
 }
 
 /** A pasted markdown fence is punctuation, not code. */
 function stripFence(text: string): string {
-  const lines = text.split("\n");
-  if (!/^```/.test(lines[0] ?? "")) return text;
+  const lines = text.split('\n');
+  if (!/^```/.test(lines[0] ?? '')) {
+    return text;
+  }
   const end = lines.findIndex((line, i) => i > 0 && /^```\s*$/.test(line));
-  return lines.slice(1, end === -1 ? undefined : end).join("\n");
+  return lines.slice(1, end === -1 ? undefined : end).join('\n');
 }

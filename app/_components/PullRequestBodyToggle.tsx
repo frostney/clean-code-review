@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useState } from 'react';
 
 /**
  * The fold around a pull request's description.
@@ -19,18 +19,18 @@ export function PullRequestBodyToggle({ children }: { children: ReactNode }) {
   return (
     <div className="mt-1 max-w-[80ch] min-w-0">
       <div
-        data-pr-body={open ? "open" : "clamped"}
-        className={`markdown text-[13px] leading-relaxed text-muted ${open ? "" : "max-h-[16rem] overflow-hidden"}`}
+        className={`markdown text-[13px] leading-relaxed text-muted ${open ? '' : 'max-h-[16rem] overflow-hidden'}`}
+        data-pr-body={open ? 'open' : 'clamped'}
       >
         {children}
       </div>
       <button
-        type="button"
-        data-pr-body-toggle
-        onClick={() => setOpen((shown) => !shown)}
         className="mt-1 inline-flex min-h-10 cursor-pointer items-center text-[12px] text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent lg:min-h-0"
+        data-pr-body-toggle={true}
+        onClick={() => setOpen((shown) => !shown)}
+        type="button"
       >
-        {open ? "Show less" : "Show more"}
+        {open ? 'Show less' : 'Show more'}
       </button>
     </div>
   );

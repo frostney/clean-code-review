@@ -1,5 +1,5 @@
-import { filesFromPatch } from "./patch";
-import type { ReviewFile } from "./review";
+import { filesFromPatch } from './patch';
+import type { ReviewFile } from './review';
 
 /**
  * The sample reviews behind the example chips. Each one is a real review: a
@@ -173,16 +173,14 @@ index 1a2b3c4..7d8e9f0 100644
 
 export const PRESETS: readonly Preset[] = [
   {
-    label: "PR: refund flow",
-    blurb: "A four-file pull request, judged file by file.",
+    blurb: 'A four-file pull request, judged file by file.',
     files: filesFromPatch(REFUND_PR),
+    label: 'PR: refund flow',
   },
   {
-    label: "Codebase: invoice service",
-    blurb: "Five TypeScript files across the whole quality range.",
+    blurb: 'Five TypeScript files across the whole quality range.',
     files: [
       {
-        path: "src/invoicing/invoice.ts",
         content: `import { addMoney, multiplyMoney, subtractMoney, zeroMoney, type Money } from "./money";
 
 const PAYMENT_TERMS_DAYS = 30;
@@ -244,9 +242,9 @@ function daysBetween(earlier: Date, later: Date): number {
   return Math.floor((later.getTime() - earlier.getTime()) / millisecondsPerDay);
 }
 `,
+        path: 'src/invoicing/invoice.ts',
       },
       {
-        path: "src/invoicing/invoice-service.ts",
         content: `import { db } from "../db";
 import { mailer } from "../mailer";
 import { fmt, calc, check } from "./utils";
@@ -327,9 +325,9 @@ export class InvoiceService {
   }
 }
 `,
+        path: 'src/invoicing/invoice-service.ts',
       },
       {
-        path: "src/invoicing/utils.ts",
         content: `// Grab bag. Everything that did not fit anywhere else.
 
 export function fmt(n: number) {
@@ -382,9 +380,9 @@ export function veryLate(issued: any) {
   return days(issued, new Date()) > 90;
 }
 `,
+        path: 'src/invoicing/utils.ts',
       },
       {
-        path: "src/invoicing/invoice-controller.ts",
         content: `import { InvoiceService } from "./invoice-service";
 import { db } from "../db";
 
@@ -432,9 +430,9 @@ export async function deleteInvoice(req: any, res: any) {
   res.status(204).end();
 }
 `,
+        path: 'src/invoicing/invoice-controller.ts',
       },
       {
-        path: "src/invoicing/invoice.test.ts",
         content: `import { describe, expect, it } from "vitest";
 import { amountOutstanding, daysLate, isOverdue, isSettled } from "./invoice";
 import { euros, invoiceIssuedOn } from "./test-support";
@@ -464,15 +462,15 @@ describe("an invoice", () => {
   });
 });
 `,
+        path: 'src/invoicing/invoice.test.ts',
       },
     ],
+    label: 'Codebase: invoice service',
   },
   {
-    label: "Codebase: Python CLI",
-    blurb: "Three Python files: one tidy, one sprawling, one haunted.",
+    blurb: 'Three Python files: one tidy, one sprawling, one haunted.',
     files: [
       {
-        path: "reporting/cli.py",
         content: `"""Command line entry point for the weekly reporting job."""
 
 import argparse
@@ -509,9 +507,9 @@ def main(argv=None):
 if __name__ == "__main__":
     raise SystemExit(main())
 `,
+        path: 'reporting/cli.py',
       },
       {
-        path: "reporting/report.py",
         content: `import datetime
 import json
 import os
@@ -572,9 +570,9 @@ def build_weekly_report(conn, week, team, fmt="text", verbose=False, retry=True)
     print("report built at", datetime.datetime.now())
     return text
 `,
+        path: 'reporting/report.py',
       },
       {
-        path: "reporting/db.py",
         content: `import os
 import sqlite3
 from contextlib import contextmanager
@@ -617,15 +615,15 @@ def record_run(connection, week, rows_written):
     )
     connection.commit()
 `,
+        path: 'reporting/db.py',
       },
     ],
+    label: 'Codebase: Python CLI',
   },
   {
-    label: "God function",
-    blurb: "One file that does everything.",
+    blurb: 'One file that does everything.',
     files: [
       {
-        path: "src/process.js",
         content: `function process(data, flag, cb) {
   var r = [];
   for (var i = 0; i < data.length; i++) {
@@ -649,15 +647,15 @@ def record_run(connection, week, rows_written):
   return r.length > 0 ? r : null;
 }
 `,
+        path: 'src/process.js',
       },
     ],
+    label: 'God function',
   },
   {
-    label: "Textbook",
-    blurb: "The clean version, for contrast.",
+    blurb: 'The clean version, for contrast.',
     files: [
       {
-        path: "src/discount.ts",
         content: `const LOYALTY_THRESHOLD_YEARS = 3;
 
 export function isEligibleForDiscount(customer: Customer): boolean {
@@ -672,7 +670,9 @@ function hasNoOverdueInvoices(customer: Customer): boolean {
   return customer.invoices.every((invoice) => !invoice.isOverdue());
 }
 `,
+        path: 'src/discount.ts',
       },
     ],
+    label: 'Textbook',
   },
 ];

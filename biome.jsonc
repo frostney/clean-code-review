@@ -1,0 +1,378 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.3.11/schema.json",
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": {
+          "level": "on",
+          "options": {
+            "groups": [
+              [":NODE:", ":BUN:"],
+              ":BLANK_LINE:",
+              [":PACKAGE:", ":PACKAGE_WITH_PROTOCOL:", ":URL:"],
+              ":BLANK_LINE:",
+              ":ALIAS:",
+              ":BLANK_LINE:",
+              ":PATH:"
+            ]
+          }
+        },
+        "useSortedAttributes": "on",
+        "useSortedKeys": "on"
+      }
+    },
+    "enabled": true
+  },
+  // Tailwind 4 writes `@theme` and `@apply` in app/globals.css; without this
+  // the stylesheet does not parse at all.
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!.next",
+      "!.eve",
+      "!.vercel",
+      "!.claude",
+      "!.agents",
+      "!public",
+      // Rewritten by `next dev` and `next build` on every run.
+      "!next-env.d.ts",
+      "!bun.lock",
+      "!skills-lock.json"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "complexity": {
+        "noArguments": "error",
+        "noBannedTypes": "error",
+        "noCommaOperator": "error",
+        "noExcessiveCognitiveComplexity": "error",
+        "noFlatMapIdentity": "error",
+        "noImplicitCoercions": "error",
+        "noStaticOnlyClass": "error",
+        "noThisInStatic": "error",
+        "noUselessCatch": "error",
+        "noUselessConstructor": "error",
+        "noUselessContinue": "error",
+        "noUselessEmptyExport": "error",
+        "noUselessFragments": "error",
+        "noUselessLabel": "error",
+        "noUselessRename": "error",
+        "noUselessStringConcat": "error",
+        "noUselessStringRaw": "error",
+        "noUselessSwitchCase": "error",
+        "noUselessTernary": "error",
+        "noUselessThisAlias": "error",
+        "noUselessTypeConstraint": "error",
+        "noUselessUndefinedInitialization": "error",
+        "noVoid": "error",
+        "useArrowFunction": "error",
+        "useDateNow": "error",
+        "useFlatMap": "error",
+        "useIndexOf": "error",
+        "useLiteralKeys": "error",
+        "useNumericLiterals": "error",
+        "useOptionalChain": "error",
+        "useSimpleNumberKeys": "error"
+      },
+      "correctness": {
+        "noChildrenProp": "error",
+        "noConstAssign": "error",
+        "noConstantCondition": "error",
+        "noConstantMathMinMaxClamp": "error",
+        "noConstructorReturn": "error",
+        "noEmptyPattern": "error",
+        "noGlobalObjectCalls": "error",
+        "noInvalidBuiltinInstantiation": "error",
+        "noInvalidConstructorSuper": "error",
+        "noInvalidUseBeforeDeclaration": "error",
+        "noNestedComponentDefinitions": "error",
+        "noPrecisionLoss": "error",
+        "noPrivateImports": "error",
+        "noReactPropAssignments": "error",
+        "noRenderReturnValue": "error",
+        "noSelfAssign": "error",
+        "noSetterReturn": "error",
+        "noStringCaseMismatch": "error",
+        "noUndeclaredDependencies": "error",
+        "noUndeclaredVariables": "error",
+        "noUnreachable": "error",
+        "noUnreachableSuper": "error",
+        "noUnsafeFinally": "error",
+        "noUnsafeOptionalChaining": "error",
+        "noUnusedFunctionParameters": "error",
+        "noUnusedImports": "error",
+        "noUnusedLabels": "error",
+        "noUnusedPrivateClassMembers": "error",
+        "noUnusedVariables": "error",
+        "noVoidElementsWithChildren": "error",
+        "noVoidTypeReturn": "error",
+        "useExhaustiveDependencies": "error",
+        "useHookAtTopLevel": "error",
+        "useIsNan": "error",
+        "useJsonImportAttributes": "error",
+        "useJsxKeyInIterable": "error",
+        "useParseIntRadix": "error"
+      },
+      "nursery": {
+        "noDeprecatedImports": "error",
+        "noDuplicatedSpreadProps": "error",
+        "noEmptySource": "error",
+        "noEqualsToNull": "error",
+        "noFloatingPromises": "error",
+        "noForIn": "error",
+        "noImportCycles": "error",
+        "noLeakedRender": "error",
+        "noMisusedPromises": "error",
+        "noMultiAssign": "error",
+        "noProto": "error",
+        "noUnnecessaryConditions": "error",
+        "noUnusedExpressions": "error",
+        "noUselessUndefined": "error",
+        "useArraySortCompare": "error",
+        "useFind": "error",
+        "useSpread": "error"
+      },
+      "performance": {
+        "noAccumulatingSpread": "error",
+        "noBarrelFile": "error",
+        "noNamespaceImport": "error",
+        "noReExportAll": "error"
+      },
+      "security": {
+        "noDangerouslySetInnerHtml": "error",
+        "noDangerouslySetInnerHtmlWithChildren": "error",
+        "noGlobalEval": "error",
+        "noSecrets": "error"
+      },
+      "style": {
+        "noCommonJs": "error",
+        "noDefaultExport": "error",
+        "noExportedImports": "error",
+        "noImplicitBoolean": "error",
+        "noMagicNumbers": "error",
+        "noNamespace": "error",
+        "noNestedTernary": "error",
+        "noParameterAssign": "error",
+        "noParameterProperties": "error",
+        "noSubstr": "error",
+        "noUnusedTemplateLiteral": "error",
+        "useArrayLiterals": "error",
+        "useAtIndex": "error",
+        "useBlockStatements": "error",
+        "useConsistentArrayType": "error",
+        "useConsistentCurlyBraces": "error",
+        "useConsistentMemberAccessibility": "error",
+        "useConsistentObjectDefinitions": "error",
+        "useConsistentTypeDefinitions": "error",
+        "useConst": "error",
+        "useDefaultParameterLast": "error",
+        "useEnumInitializers": "error",
+        "useExponentiationOperator": "error",
+        "useExportType": "error",
+        "useFilenamingConvention": "error",
+        "useFragmentSyntax": "error",
+        "useGroupedAccessorPairs": "error",
+        "useImportType": "error",
+        "useNamingConvention": {
+          "level": "error",
+          "options": {
+            "conventions": [
+              {
+                "formats": [
+                  "camelCase",
+                  "snake_case",
+                  "PascalCase",
+                  "CONSTANT_CASE"
+                ],
+                // Data keys stay as the payload writes them (`input_tokens`,
+                // `does_more_than_one_thing`), and the leading `__` is React's
+                // own, as in `dangerouslySetInnerHTML={{ __html }}`.
+                "match": "_{0,2}(.+)",
+                "selector": { "kind": "objectLiteralProperty" }
+              },
+              {
+                "formats": [
+                  "camelCase",
+                  "snake_case",
+                  "PascalCase",
+                  "CONSTANT_CASE"
+                ],
+                "selector": { "kind": "typeProperty" }
+              }
+            ],
+            "strictCase": false
+          }
+        },
+        "useObjectSpread": "error",
+        "useReactFunctionComponents": "error",
+        "useReadonlyClassProperties": "error",
+        "useSelfClosingElements": "error",
+        "useSingleVarDeclarator": "error",
+        "useTemplate": "error",
+        "useTrimStartEnd": "error",
+        "useUnifiedTypeSignatures": "error"
+      },
+      "suspicious": {
+        "noAlert": "error",
+        "noApproximativeNumericConstant": "error",
+        "noArrayIndexKey": "error",
+        "noAssignInExpressions": "error",
+        "noClassAssign": "error",
+        "noDoubleEquals": "error",
+        "noDuplicateClassMembers": "error",
+        "noDuplicateJsxProps": "error",
+        "noDuplicateObjectKeys": "error",
+        "noDuplicateParameters": "error",
+        "noEmptyBlockStatements": "error",
+        "noEmptyInterface": "error",
+        "noEvolvingTypes": "error",
+        "noExplicitAny": "error",
+        "noFunctionAssign": "error",
+        "noGlobalAssign": "error",
+        "noGlobalIsFinite": "error",
+        "noGlobalIsNan": "error",
+        "noImplicitAnyLet": "error",
+        "noImportAssign": "error",
+        "noIrregularWhitespace": "error",
+        "noMisleadingInstantiator": "error",
+        "noPrototypeBuiltins": "error",
+        "noReactSpecificProps": "off",
+        "noRedeclare": "error",
+        "noRedundantUseStrict": "error",
+        "noSelfCompare": "error",
+        "noShadowRestrictedNames": "error",
+        "noSparseArray": "error",
+        "noSuspiciousSemicolonInJsx": "error",
+        "noVar": "error",
+        "noWith": "error",
+        "useGetterReturn": "error",
+        "useIsArray": "error"
+      }
+    }
+  },
+  "overrides": [
+    {
+      // Next and eve both discover modules by their default export.
+      "includes": [
+        "app/**",
+        "agent/**",
+        "scripts/**",
+        "next.config.ts",
+        "*.config.*"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDefaultExport": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["components/**", "app/**/_components/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "useFilenamingConvention": {
+              "level": "error",
+              "options": {
+                "filenameCases": ["camelCase", "PascalCase", "export"]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      // The two JSON-LD <script> tags: injecting a serialised object is the
+      // only way to emit structured data, and every byte of both objects is
+      // written a few lines above in this same file.
+      "includes": ["app/page.tsx"],
+      "linter": {
+        "rules": {
+          "security": {
+            "noDangerouslySetInnerHtml": "off",
+            // False positive: schema.org type names such as "DeveloperApplication".
+            "noSecrets": "off"
+          }
+        }
+      }
+    },
+    {
+      // Code rows are a positional list: a row's identity *is* its index, and
+      // a token span or a gutter cell has nothing else to be keyed by.
+      "includes": [
+        "app/_components/CodeView.tsx",
+        "app/_components/Editor.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noArrayIndexKey": "off"
+          }
+        }
+      }
+    },
+    {
+      // False positive: the reviewer's system prompt is one long prose string.
+      "includes": ["agent/lib/reviewer-prompt.ts"],
+      "linter": {
+        "rules": {
+          "security": {
+            "noSecrets": "off"
+          }
+        }
+      }
+    },
+    {
+      // False positive: the hook names passed to `required(useContext(…), …)`.
+      "includes": ["app/_components/ReviewProvider.tsx"],
+      "linter": {
+        "rules": {
+          "security": {
+            "noSecrets": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["**/*.test.ts", "**/*.test.tsx", "**/test.setup.ts"],
+      "linter": {
+        "rules": {
+          "security": {
+            "noSecrets": "off"
+          },
+          "style": {
+            "noMagicNumbers": "off",
+            "useNamingConvention": "off"
+          },
+          "suspicious": {
+            "noEmptyBlockStatements": "off"
+          }
+        }
+      }
+    }
+  ],
+  "vcs": {
+    "clientKind": "git",
+    "enabled": true,
+    "useIgnoreFile": true
+  }
+}

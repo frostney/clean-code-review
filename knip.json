@@ -1,0 +1,14 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "app/**/*.{ts,tsx}",
+    "app/globals.css",
+    "agent/agent.ts",
+    "agent/instructions.ts",
+    "agent/channels/*.ts",
+    "agent/subagents/**/*.ts",
+    "scripts/*.ts"
+  ],
+  "ignoreDependencies": ["vercel"],
+  "project": ["**/*.{ts,tsx,mjs,css}"]
+}

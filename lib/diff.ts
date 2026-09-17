@@ -3,7 +3,7 @@
  * tool does: two gutters of line numbers, a background per line kind, and the
  * code itself still highlighted as its own language.
  */
-export type DiffKind = "add" | "del" | "context" | "hunk" | "meta";
+type DiffKind = 'add' | 'del' | 'context' | 'hunk' | 'meta';
 
 export interface DiffLine {
   kind: DiffKind;
@@ -29,50 +29,81 @@ const HUNK = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
 const FILE_HEADER =
   /^(?:diff --git |index |--- |\+\+\+ |old mode |new mode |new file mode |deleted file mode |similarity index |dissimilarity index |rename from |rename to |copy from |copy to )/;
 
+/** The two gutters a patch is being read against, as they advance. */
+interface Cursor {
+  newNo: number;
+  oldNo: number;
+}
+
+/** A row that carries no line of code: a hunk header, a file header, `\ No newline`. */
+function unnumberedLine(raw: string, kind: DiffKind): DiffLine {
+  return { code: raw, kind, newNo: null, oldNo: null, sign: '' };
+}
+
+/**
+ * A line of code, numbered on the side or sides it appears on. A line that
+ * starts with none of `+`, `-` or a space reads as context, which is what a
+ * half-typed line in the editor is.
+ */
+function codeLine(raw: string, cursor: Cursor, inHunk: boolean): DiffLine {
+  if (raw.startsWith('+')) {
+    return {
+      code: raw.slice(1),
+      kind: 'add',
+      newNo: inHunk ? cursor.newNo++ : null,
+      oldNo: null,
+      sign: '+',
+    };
+  }
+  if (raw.startsWith('-')) {
+    return {
+      code: raw.slice(1),
+      kind: 'del',
+      newNo: null,
+      oldNo: inHunk ? cursor.oldNo++ : null,
+      sign: '-',
+    };
+  }
+  const spaced = raw.startsWith(' ');
+  return {
+    code: spaced ? raw.slice(1) : raw,
+    kind: 'context',
+    newNo: inHunk ? cursor.newNo++ : null,
+    oldNo: inHunk ? cursor.oldNo++ : null,
+    sign: spaced ? ' ' : '',
+  };
+}
+
 /**
  * Read a patch body line by line.
  *
  * Anything that is not a hunk header, a file header or `\ No newline` is a line
- * of the diff, classified by its first character — and a line that starts with
- * none of `+`, `-` or a space reads as context, which is what a half-typed line
- * in the editor is. Every input line produces exactly one `DiffLine`, trailing
- * newline included: the editor lays its textarea over these rows, and a row it
- * did not produce is a row the caret could not reach.
+ * of the diff, classified by its first character. Every input line produces
+ * exactly one `DiffLine`, trailing newline included: the editor lays its
+ * textarea over these rows, and a row it did not produce is a row the caret
+ * could not reach.
  */
 export function parsePatch(patch: string): DiffLine[] {
   const lines: DiffLine[] = [];
-  let oldNo = 0;
-  let newNo = 0;
+  const cursor: Cursor = { newNo: 0, oldNo: 0 };
   let inHunk = false;
-  for (const raw of patch.split("\n")) {
+  for (const raw of patch.split('\n')) {
     const hunk = HUNK.exec(raw);
     if (hunk) {
-      oldNo = Number(hunk[1]);
-      newNo = Number(hunk[2]);
+      // A hunk header resets both gutters to the line numbers it names.
+      cursor.oldNo = Number(hunk[1]);
+      cursor.newNo = Number(hunk[2]);
       inHunk = true;
-      lines.push({ kind: "hunk", sign: "", code: raw, oldNo: null, newNo: null });
+      lines.push(unnumberedLine(raw, 'hunk'));
       continue;
     }
     // `\ No newline at end of file` is about the code, the headers are about
     // the file; neither belongs to either image, so neither gets a number.
-    if (raw.startsWith("\\") || (!inHunk && FILE_HEADER.test(raw))) {
-      lines.push({ kind: "meta", sign: "", code: raw, oldNo: null, newNo: null });
+    if (raw.startsWith('\\') || (!inHunk && FILE_HEADER.test(raw))) {
+      lines.push(unnumberedLine(raw, 'meta'));
       continue;
     }
-    if (raw.startsWith("+")) {
-      lines.push({ kind: "add", sign: "+", code: raw.slice(1), oldNo: null, newNo: inHunk ? newNo++ : null });
-    } else if (raw.startsWith("-")) {
-      lines.push({ kind: "del", sign: "-", code: raw.slice(1), oldNo: inHunk ? oldNo++ : null, newNo: null });
-    } else {
-      const spaced = raw.startsWith(" ");
-      lines.push({
-        kind: "context",
-        sign: spaced ? " " : "",
-        code: spaced ? raw.slice(1) : raw,
-        oldNo: inHunk ? oldNo++ : null,
-        newNo: inHunk ? newNo++ : null,
-      });
-    }
+    lines.push(codeLine(raw, cursor, inHunk));
   }
   return lines;
 }
@@ -94,10 +125,15 @@ export interface SplitPatch {
  * the agent, which parses and reads the section as git wrote it.
  */
 export function splitPatchHeader(content: string): SplitPatch {
-  const lines = content.split("\n");
+  const lines = content.split('\n');
   let i = 0;
-  while (i < lines.length && FILE_HEADER.test(lines[i])) i++;
-  return { header: lines.slice(0, i).join("\n"), body: lines.slice(i).join("\n") };
+  while (i < lines.length && FILE_HEADER.test(lines[i])) {
+    i++;
+  }
+  return {
+    body: lines.slice(i).join('\n'),
+    header: lines.slice(0, i).join('\n'),
+  };
 }
 
 /** The other direction: an edited body, back under the headers it came with. */
@@ -112,7 +148,7 @@ export interface DiffStats {
 
 export function diffStats(lines: readonly DiffLine[]): DiffStats {
   return {
-    added: lines.filter((l) => l.kind === "add").length,
-    removed: lines.filter((l) => l.kind === "del").length,
+    added: lines.filter((l) => l.kind === 'add').length,
+    removed: lines.filter((l) => l.kind === 'del').length,
   };
 }

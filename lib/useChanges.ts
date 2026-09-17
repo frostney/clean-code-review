@@ -1,9 +1,11 @@
-"use client";
+'use client';
 
-import { useEffect, useRef, useState } from "react";
-import type { Question } from "@/agent/lib/questions";
-import type { Answer, Answers } from "@/agent/lib/schema";
-import { deltaText, isMeaningful } from "./display";
+import { useEffect, useRef, useState } from 'react';
+
+import type { Question } from '@/agent/lib/questions';
+import type { Answer, Answers } from '@/agent/lib/schema';
+
+import { deltaText, isMeaningful } from './display';
 
 /** How long a row stays lit after a meaningful change. */
 const HOLD_MS = 1800;
@@ -21,27 +23,41 @@ const NONE: Changes = { changed: {}, delta: {} };
  * to follow. Rows stay lit for HOLD_MS, so a change is visible even while the
  * next turn is already on the wire.
  */
-export function useChanges(answers: Answers | null | undefined, meta: readonly Question[]): Changes {
+export function useChanges(
+  answers: Answers | null | undefined,
+  meta: readonly Question[],
+): Changes {
   const prev = useRef<Record<string, Answer>>({});
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [state, setState] = useState<Changes>(NONE);
 
   useEffect(() => {
-    if (!answers) return;
+    if (!answers) {
+      return;
+    }
     const changed: string[] = [];
     const delta: Record<string, string> = {};
     for (const m of meta) {
       const before = prev.current[m.id];
       const after = answers[m.id];
-      if (!isMeaningful(before, after)) continue;
+      if (!isMeaningful(before, after)) {
+        continue;
+      }
       changed.push(m.id);
       const text = deltaText(m, before, after);
-      if (text) delta[m.id] = text;
+      if (text) {
+        delta[m.id] = text;
+      }
     }
     prev.current = { ...answers };
-    if (!changed.length) return;
+    if (!changed.length) {
+      return;
+    }
     setState((s) => ({
-      changed: { ...s.changed, ...Object.fromEntries(changed.map((id) => [id, true as const])) },
+      changed: {
+        ...s.changed,
+        ...Object.fromEntries(changed.map((id) => [id, true as const])),
+      },
       delta: { ...s.delta, ...delta },
     }));
     // Deliberately not cleaned up on re-run: a row lit at t=0 must still be lit

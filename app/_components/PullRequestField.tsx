@@ -1,14 +1,16 @@
-"use client";
+'use client';
 
-import { type ReactNode, useRef, useState } from "react";
-import { useReviewControls } from "./ReviewProvider";
+import { type ReactNode, useRef, useState } from 'react';
+
+import { useReviewControls } from './ReviewProvider';
 
 /** The fixed parts of the address; only what is between them is typed. */
-const PREFIX = "github.com/";
-const INFIX = "/pull/";
+const PREFIX = 'github.com/';
+const INFIX = '/pull/';
 
 /** `github.com/vercel/ai/pull/20851`, in any of the shapes a paste takes. */
-const PR_URL = /(?:^|\/\/)(?:www\.)?github\.com\/([^/\s]+\/[^/\s]+)\/pull\/(\d+)/i;
+const PR_URL =
+  /(?:^|\/\/)(?:www\.)?github\.com\/([^/\s]+\/[^/\s]+)\/pull\/(\d+)/i;
 
 /** A bare `owner/repo/pull/123`, which is what the old single field took. */
 const PR_PATH = /^([^/\s]+\/[^/\s]+)\/pull\/(\d+)\/?$/i;
@@ -18,15 +20,17 @@ const PR_PATH = /^([^/\s]+\/[^/\s]+)\/pull\/(\d+)\/?$/i;
  * A paste that carries the whole URL fills both; anything else is left alone
  * for the repo box, because a half-typed `owner/` is not a mistake.
  */
-export function splitPullRequest(pasted: string): { repo: string; number: string } | null {
+export function splitPullRequest(
+  pasted: string,
+): { repo: string; number: string } | null {
   const text = pasted.trim();
   const url = PR_URL.exec(text) ?? PR_PATH.exec(text);
-  return url ? { repo: url[1].replace(/\.git$/i, ""), number: url[2] } : null;
+  return url ? { number: url[2], repo: url[1].replace(/\.git$/i, '') } : null;
 }
 
 /** The address the action is asked for, from the two parts of the field. */
 export function pullRequestUrl(repo: string, number: string): string {
-  const owner = repo.trim().replace(/^\/+|\/+$/g, "");
+  const owner = repo.trim().replace(/^\/+|\/+$/g, '');
   return `https://${PREFIX}${owner}${INFIX}${number.trim()}`;
 }
 
@@ -51,16 +55,18 @@ export function pullRequestUrl(repo: string, number: string): string {
  */
 export function PullRequestField({ duck }: { duck?: ReactNode }) {
   const { openPullRequest, fetching } = useReviewControls();
-  const [repo, setRepo] = useState("");
-  const [number, setNumber] = useState("");
+  const [repo, setRepo] = useState('');
+  const [number, setNumber] = useState('');
   const numberRef = useRef<HTMLInputElement>(null);
 
-  const ready = !!repo.trim() && !!number.trim();
+  const ready = repo.trim() !== '' && number.trim() !== '';
 
   /** A pasted address fills both boxes and moves on to the button. */
   function takeApart(text: string): boolean {
     const parts = splitPullRequest(text);
-    if (!parts) return false;
+    if (!parts) {
+      return false;
+    }
     setRepo(parts.repo);
     setNumber(parts.number);
     return true;
@@ -70,7 +76,9 @@ export function PullRequestField({ duck }: { duck?: ReactNode }) {
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (!ready || fetching) return;
+        if (!ready || fetching) {
+          return;
+        }
         openPullRequest(pullRequestUrl(repo, number));
       }}
     >
@@ -93,54 +101,58 @@ export function PullRequestField({ duck }: { duck?: ReactNode }) {
             {PREFIX}
           </span>
           <input
-            type="text"
-            data-pr-repo
-            value={repo}
+            aria-label="GitHub owner and repository"
+            autoComplete="off"
+            className="w-full min-w-0 flex-1 bg-transparent px-2 font-mono text-[16px] text-ink outline-none placeholder:text-muted/60 lg:px-2.5 lg:py-2 lg:text-[13px]"
+            data-pr-repo={true}
             onChange={(e) => {
               // A paste lands here as a change too (keyboard, menu or drop),
               // so the whole URL is taken apart wherever it came from.
-              if (!takeApart(e.target.value)) setRepo(e.target.value);
+              if (!takeApart(e.target.value)) {
+                setRepo(e.target.value);
+              }
             }}
             onPaste={(e) => {
-              if (takeApart(e.clipboardData.getData("text"))) {
+              if (takeApart(e.clipboardData.getData('text'))) {
                 e.preventDefault();
                 numberRef.current?.focus();
               }
             }}
-            spellCheck={false}
-            autoComplete="off"
             placeholder="owner/repo"
-            aria-label="GitHub owner and repository"
+            spellCheck={false}
+            type="text"
             // `min-w-0` is what keeps the row a row: without it an input's
             // default intrinsic width is the floor the line cannot go under,
             // and the field would push the page sideways on a phone.
-            className="w-full min-w-0 flex-1 bg-transparent px-2 font-mono text-[16px] text-ink outline-none placeholder:text-muted/60 lg:px-2.5 lg:py-2 lg:text-[13px]"
+            value={repo}
           />
           <span className="flex shrink-0 items-center border-l border-line pr-0.5 pl-2 font-mono text-[12px] text-muted select-none lg:text-[13px]">
             {INFIX}
           </span>
           <input
-            ref={numberRef}
-            type="text"
-            inputMode="numeric"
-            data-pr-number
-            value={number}
-            onChange={(e) => {
-              if (!takeApart(e.target.value)) setNumber(e.target.value.replace(/[^\d]/g, ""));
-            }}
-            spellCheck={false}
-            autoComplete="off"
-            placeholder="123"
             aria-label="Pull request number"
+            autoComplete="off"
             className="w-14 min-w-0 shrink-0 bg-transparent px-2 font-mono text-[16px] text-ink outline-none placeholder:text-muted/60 lg:w-16 lg:px-2.5 lg:py-2 lg:text-[13px]"
+            data-pr-number={true}
+            inputMode="numeric"
+            onChange={(e) => {
+              if (!takeApart(e.target.value)) {
+                setNumber(e.target.value.replace(/[^\d]/g, ''));
+              }
+            }}
+            placeholder="123"
+            ref={numberRef}
+            spellCheck={false}
+            type="text"
+            value={number}
           />
         </div>
         <button
-          type="submit"
-          disabled={!ready || fetching}
           className="min-h-11 w-full shrink-0 cursor-pointer rounded-md bg-ink px-3 text-[14px] font-semibold whitespace-nowrap text-page disabled:cursor-default disabled:opacity-40 min-[480px]:w-auto lg:min-h-0 lg:px-3.5 lg:py-2 lg:text-[13px]"
+          disabled={!ready || fetching}
+          type="submit"
         >
-          {fetching ? "Fetching…" : "Judge"}
+          {fetching ? 'Fetching…' : 'Judge'}
         </button>
       </div>
     </form>

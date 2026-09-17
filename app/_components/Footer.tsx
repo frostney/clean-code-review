@@ -1,5 +1,6 @@
-import { SITE } from "@/lib/site";
-import { TokenCount } from "./TokenCount";
+import { SITE } from '@/lib/site';
+
+import { TokenCount } from './TokenCount';
 
 /**
  * Who did the work and where it came from, and — at the far right — which
@@ -14,17 +15,31 @@ export function Footer() {
   return (
     <footer className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted">
       <TokenCount />
-      <a href={SITE.jev} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center underline hover:text-ink lg:min-h-0">
+      <a
+        className="inline-flex min-h-10 items-center underline hover:text-ink lg:min-h-0"
+        href={SITE.jev}
+        rel="noreferrer"
+        target="_blank"
+      >
         judged by Jev
       </a>
-      <a href={SITE.eve} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center underline hover:text-ink lg:min-h-0">
+      <a
+        className="inline-flex min-h-10 items-center underline hover:text-ink lg:min-h-0"
+        href={SITE.eve}
+        rel="noreferrer"
+        target="_blank"
+      >
         built with eve
       </a>
-      <a href={SITE.source} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center underline hover:text-ink lg:min-h-0">
+      <a
+        className="inline-flex min-h-10 items-center underline hover:text-ink lg:min-h-0"
+        href={SITE.source}
+        rel="noreferrer"
+        target="_blank"
+      >
         view source
       </a>
-      <span className="ml-auto">
-      </span>
+      <span className="ml-auto" />
     </footer>
   );
 }

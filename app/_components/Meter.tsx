@@ -1,6 +1,12 @@
-import type { Question } from "@/agent/lib/questions";
-import type { Answer } from "@/agent/lib/schema";
-import { detail, headline, levelsOf } from "@/lib/display";
+import type { Question } from '@/agent/lib/questions';
+import type { Answer } from '@/agent/lib/schema';
+import { detail, headline, levelsOf } from '@/lib/display';
+
+/** A fill is a fraction, and CSS wants it as a percentage. */
+const PERCENT = 100;
+
+/** Jev's yes/no answers are odds; at even odds or better the answer is "yes". */
+const EVEN_ODDS = 0.5;
 
 /**
  * One bar, used by every question. Ink fill on a light track, nothing else —
@@ -8,12 +14,26 @@ import { detail, headline, levelsOf } from "@/lib/display";
  * says it in words.
  */
 function Bar({ value }: { value: number }) {
-  const width = Math.max(0, Math.min(1, value)) * 100;
+  const width = Math.max(0, Math.min(1, value)) * PERCENT;
   return (
     <div className="h-2 w-full rounded-full bg-track">
-      <div className="h-full rounded-full bg-ink" style={{ width: `${width}%`, transition: "width 300ms" }} />
+      <div
+        className="h-full rounded-full bg-ink"
+        style={{ transition: 'width 300ms', width: `${width}%` }}
+      />
     </div>
   );
+}
+
+/** A scale with no levels to place the answer on is drawn half full. */
+const HALF_FULL = 0.5;
+
+/** A flagged smell is loud, a cleared one is quiet, everything else is plain. */
+function headlineClass(finding: boolean, quiet: boolean): string {
+  if (quiet) {
+    return 'text-muted';
+  }
+  return finding ? 'text-bad' : 'text-ink';
 }
 
 /**
@@ -22,11 +42,17 @@ function Bar({ value }: { value: number }) {
  * for a choice it's how much the winner won by.
  */
 function fill(meta: Question, answer: Answer | undefined): number {
-  if (!answer) return 0;
-  if (answer.type === "noul") return answer.noul;
-  if (answer.type === "choice") return answer.probabilities[answer.choice] ?? 0;
+  if (!answer) {
+    return 0;
+  }
+  if (answer.type === 'noul') {
+    return answer.noul;
+  }
+  if (answer.type === 'choice') {
+    return answer.probabilities[answer.choice] ?? 0;
+  }
   const levels = levelsOf(meta);
-  return levels.length > 1 ? answer.score / (levels.length - 1) : 0.5;
+  return levels.length > 1 ? answer.score / (levels.length - 1) : HALF_FULL;
 }
 
 /**
@@ -61,34 +87,43 @@ export function Meter({
   changed?: boolean;
   delta?: string;
 }) {
-  const finding = meta.type === "noul" && answer?.type === "noul" && answer.noul >= 0.5;
-  const quiet = meta.type === "noul" && answer?.type === "noul" && answer.noul < 0.5;
+  const finding =
+    meta.type === 'noul' && answer?.type === 'noul' && answer.noul >= EVEN_ODDS;
+  const quiet =
+    meta.type === 'noul' && answer?.type === 'noul' && answer.noul < EVEN_ODDS;
   return (
     <div
+      className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded px-1.5 py-1 @[420px]/group:grid-cols-[11rem_minmax(0,1fr)_10rem] ${
+        changed ? 'row-flash' : ''
+      }`}
+      data-changed={changed ? '1' : undefined}
+      data-finding={finding ? '1' : undefined}
       data-q={meta.id}
       data-type={meta.type}
-      data-finding={finding ? "1" : undefined}
-      data-changed={changed ? "1" : undefined}
-      className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded px-1.5 py-1 @[420px]/group:grid-cols-[11rem_minmax(0,1fr)_10rem] ${
-        changed ? "row-flash" : ""
-      }`}
     >
-      <span className="text-[13px] text-muted @[420px]/group:order-1">{meta.label}</span>
-      <span className="flex min-w-0 items-baseline justify-end gap-1.5 @[420px]/group:order-3" data-value="true">
+      <span className="text-[13px] text-muted @[420px]/group:order-1">
+        {meta.label}
+      </span>
+      <span
+        className="flex min-w-0 items-baseline justify-end gap-1.5 @[420px]/group:order-3"
+        data-value="true"
+      >
         {changed && delta ? (
           <span className="truncate text-tiny text-muted">{delta}</span>
         ) : (
-          <span className="truncate text-tiny text-muted/70">{detail(answer)}</span>
+          <span className="truncate text-tiny text-muted/70">
+            {detail(answer)}
+          </span>
         )}
         <span
-          className={`shrink-0 text-[13px] font-semibold ${quiet ? "text-muted" : finding ? "text-bad" : "text-ink"}`}
+          className={`shrink-0 text-[13px] font-semibold ${headlineClass(finding, quiet)}`}
         >
           {headline(meta, answer)}
         </span>
       </span>
       <div
-        data-track="true"
         className="col-span-2 @[420px]/group:order-2 @[420px]/group:col-span-1"
+        data-track="true"
         style={quiet ? { opacity: 0.35 } : undefined}
       >
         <Bar value={fill(meta, answer)} />

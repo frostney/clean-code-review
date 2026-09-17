@@ -1,7 +1,13 @@
-"use client";
+'use client';
 
-import { meanVerdict, smellCount, smellLabel, verdictOf, verdictScore } from "@/lib/display";
-import type { ReviewState } from "@/lib/useReview";
+import {
+  meanVerdict,
+  smellCount,
+  smellLabel,
+  verdictOf,
+  verdictScore,
+} from '@/lib/display';
+import type { ReviewState } from '@/lib/useReview';
 
 /**
  * What the whole review amounts to right now, as three pills: Jev's verdict
@@ -14,24 +20,28 @@ import type { ReviewState } from "@/lib/useReview";
  */
 export function ReviewPills({ review }: { review: ReviewState }) {
   const judged = Object.values(review.judgments);
-  const verdict = verdictOf(meanVerdict(judged.map((j) => verdictScore(j.answers))));
+  const verdict = verdictOf(
+    meanVerdict(judged.map((j) => verdictScore(j.answers))),
+  );
   const smells = judged.reduce((total, j) => total + smellCount(j.answers), 0);
 
   return (
     <>
       <span
-        data-verdict={verdict.key}
         className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 text-tiny font-semibold ${verdict.className}`}
+        data-verdict={verdict.key}
       >
-        {verdict.key === "pending" && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted" />}
+        {verdict.key === 'pending' && (
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted" />
+        )}
         {verdict.label}
       </span>
       {judged.length > 0 && (
         <span
-          data-smells-total={smells}
           className={`rounded-full px-2 py-0.5 text-tiny font-semibold ${
-            smells ? "bg-bad-bg text-bad" : "bg-track text-muted"
+            smells ? 'bg-bad-bg text-bad' : 'bg-track text-muted'
           }`}
+          data-smells-total={smells}
         >
           {smellLabel(smells)}
         </span>
@@ -47,24 +57,24 @@ export function ReviewPills({ review }: { review: ReviewState }) {
  * is working: Jev judging, or Luna writing the review.
  */
 function ReviewStatus({ review }: { review: ReviewState }) {
-  const base = "flex items-center gap-1.5 text-tiny";
+  const base = 'flex items-center gap-1.5 text-tiny';
   if (review.budgetSpent) {
     return (
-      <span data-status="budget-spent" className={`${base} text-muted`}>
+      <span className={`${base} text-muted`} data-status="budget-spent">
         budget spent
       </span>
     );
   }
   if (review.error) {
     return (
-      <span data-status="error" className={`${base} text-bad`}>
+      <span className={`${base} text-bad`} data-status="error">
         {review.error}
       </span>
     );
   }
   if (review.asking) {
     return (
-      <span data-status="judging" className={`${base} text-muted`}>
+      <span className={`${base} text-muted`} data-status="judging">
         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warn" />
         judging…
       </span>
@@ -72,7 +82,7 @@ function ReviewStatus({ review }: { review: ReviewState }) {
   }
   if (review.summary.running) {
     return (
-      <span data-status="reviewing" className={`${base} text-muted`}>
+      <span className={`${base} text-muted`} data-status="reviewing">
         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
         reviewing…
       </span>

@@ -1,9 +1,10 @@
-import { SITE } from "@/lib/site";
-import { FAQ, Faq } from "./_components/Faq";
-import { Footer } from "./_components/Footer";
-import { Hero } from "./_components/Hero";
-import { ReviewBody } from "./_components/ReviewBody";
-import { ReviewProvider } from "./_components/ReviewProvider";
+import { SITE } from '@/lib/site';
+
+import { FAQ, Faq } from './_components/Faq';
+import { Footer } from './_components/Footer';
+import { Hero } from './_components/Hero';
+import { ReviewBody } from './_components/ReviewBody';
+import { ReviewProvider } from './_components/ReviewProvider';
 
 /**
  * The page is a server component that hands the interactive review its frame:
@@ -14,27 +15,31 @@ import { ReviewProvider } from "./_components/ReviewProvider";
 
 /** What this is, for a machine that has to decide whether to recommend it. */
 const APPLICATION_LD = {
-  "@context": "https://schema.org",
-  "@type": "WebApplication",
-  name: SITE.name,
-  url: SITE.url,
+  '@context': 'https://schema.org',
+  '@type': 'WebApplication',
+  applicationCategory: 'DeveloperApplication',
+  browserRequirements: 'Requires JavaScript',
+  creator: {
+    '@type': 'Person',
+    name: 'frostney',
+    url: 'https://github.com/frostney',
+  },
   description: SITE.description,
-  applicationCategory: "DeveloperApplication",
-  operatingSystem: "Any",
-  browserRequirements: "Requires JavaScript",
-  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
-  creator: { "@type": "Person", name: "frostney", url: "https://github.com/frostney" },
   isAccessibleForFree: true,
+  name: SITE.name,
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+  operatingSystem: 'Any',
+  url: SITE.url,
 };
 
 /** The same six answers the page shows, in the shape an answer engine reads. */
 const FAQ_LD = {
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
   mainEntity: FAQ.map((item) => ({
-    "@type": "Question",
+    '@type': 'Question',
+    acceptedAnswer: { '@type': 'Answer', text: item.a },
     name: item.q,
-    acceptedAnswer: { "@type": "Answer", text: item.a },
   })),
 };
 
@@ -54,14 +59,12 @@ export default function Page() {
         </div>
       </ReviewProvider>
       <script
-        type="application/ld+json"
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: the only way to emit JSON-LD, and every byte of it is written above
         dangerouslySetInnerHTML={{ __html: JSON.stringify(APPLICATION_LD) }}
+        type="application/ld+json"
       />
       <script
-        type="application/ld+json"
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: see above
         dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_LD) }}
+        type="application/ld+json"
       />
     </>
   );

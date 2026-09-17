@@ -1,7 +1,8 @@
-"use client";
+'use client';
 
-import { useEffect, useRef, useState } from "react";
-import { useReviewControls, useReviewView } from "./ReviewProvider";
+import { useEffect, useRef, useState } from 'react';
+
+import { useReviewControls, useReviewView } from './ReviewProvider';
 
 /**
  * The other way in: paste a diff, a file, or several files marked up with
@@ -21,13 +22,15 @@ import { useReviewControls, useReviewView } from "./ReviewProvider";
 export function Paste() {
   const { pasting: open, stopPasting } = useReviewView();
   const { judgePasted, pasteButtonRef } = useReviewControls();
-  const [text, setText] = useState("");
+  const [text, setText] = useState('');
   const dialogRef = useRef<HTMLDialogElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     const dialog = dialogRef.current;
-    if (!dialog) return;
+    if (!dialog) {
+      return;
+    }
     if (open && !dialog.open) {
       dialog.showModal();
       // `autofocus` inside a dialog picks the first focusable thing, which is
@@ -47,52 +50,57 @@ export function Paste() {
   }
 
   return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the keyboard way out of a <dialog> is Escape, and it arrives on onCancel below
     <dialog
-      ref={dialogRef}
-      data-paste
       aria-label="Paste code or a diff"
+      className="m-auto max-h-[calc(100dvh-2rem)] w-[min(48rem,calc(100vw-2rem))] overflow-auto overscroll-contain rounded-md border border-line bg-page p-0 text-ink backdrop:bg-scrim"
+      data-paste={true}
       // Escape, the close button and a click on the backdrop all end here, so
       // the dialog's own state and the page's stay in step whichever was used.
-      onClose={onClose}
       onCancel={onClose}
       onClick={(e) => {
-        if (e.target === dialogRef.current) dialogRef.current?.close();
+        if (e.target === dialogRef.current) {
+          dialogRef.current?.close();
+        }
       }}
+      onClose={onClose}
       // 16px of margin on every side, and never taller than the viewport, so
       // the Judge button is always on screen without scrolling the page under
       // the modal. `dvh` rather than `vh`: on a phone the URL bar counts.
-      className="m-auto max-h-[calc(100dvh-2rem)] w-[min(48rem,calc(100vw-2rem))] overflow-auto overscroll-contain rounded-md border border-line bg-page p-0 text-ink backdrop:bg-scrim"
+      ref={dialogRef}
     >
       <div className="flex items-center gap-3 border-b border-line bg-surface px-3 py-2">
-        <h2 className="text-[13px] font-semibold text-ink">Paste code or a diff</h2>
+        <h2 className="text-[13px] font-semibold text-ink">
+          Paste code or a diff
+        </h2>
         <button
-          type="button"
+          className="-my-2 ml-auto inline-flex min-h-10 shrink-0 cursor-pointer items-center px-1 text-[12px] text-muted hover:text-ink lg:my-0 lg:min-h-0 lg:px-0"
           data-paste="close"
           onClick={() => dialogRef.current?.close()}
-          className="-my-2 ml-auto inline-flex min-h-10 shrink-0 cursor-pointer items-center px-1 text-[12px] text-muted hover:text-ink lg:my-0 lg:min-h-0 lg:px-0"
+          type="button"
         >
           Close
         </button>
       </div>
       <p className="border-b border-line px-3 py-2 text-[12px] text-muted">
-        A unified diff is split per file; several files can be marked up with{" "}
-        <code className="font-mono">// file: path</code> lines.
+        A unified diff is split per file; several files can be marked up with{' '}
+        <code className="font-mono">&#47;&#47; file: path</code> lines.
       </p>
       <textarea
-        ref={textareaRef}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        spellCheck={false}
-        wrap="off"
         aria-label="Code or diff to judge"
+        className="code-line h-[40dvh] min-h-40 w-full resize-y border-0 bg-page px-3 py-2 text-ink outline-none placeholder:text-muted/60 lg:h-56 lg:min-h-0"
+        onChange={(e) => setText(e.target.value)}
         placeholder="diff --git a/src/thing.ts b/src/thing.ts&#10;…"
+        ref={textareaRef}
+        spellCheck={false}
+        value={text}
         // Two fifths of the screen on a phone, where the dialog is the screen;
         // the fixed height it always had once there is a page around it.
-        className="code-line h-[40dvh] min-h-40 w-full resize-y border-0 bg-page px-3 py-2 text-ink outline-none placeholder:text-muted/60 lg:h-56 lg:min-h-0"
+        wrap="off"
       />
       <div className="flex items-center gap-3 border-t border-line px-3 py-2">
         <button
-          type="button"
+          className="inline-flex min-h-10 cursor-pointer items-center rounded-md bg-ink px-4 text-[13px] font-semibold text-page disabled:cursor-default disabled:opacity-40 lg:min-h-0 lg:px-3 lg:py-1"
           data-paste="judge"
           disabled={!text.trim()}
           onClick={() => {
@@ -101,11 +109,13 @@ export function Paste() {
             dialogRef.current?.close();
             judgePasted(text);
           }}
-          className="inline-flex min-h-10 cursor-pointer items-center rounded-md bg-ink px-4 text-[13px] font-semibold text-page disabled:cursor-default disabled:opacity-40 lg:min-h-0 lg:px-3 lg:py-1"
+          type="button"
         >
           Judge
         </button>
-        <span className="text-[12px] text-muted">{text.length.toLocaleString()} characters</span>
+        <span className="text-[12px] text-muted">
+          {text.length.toLocaleString()} characters
+        </span>
       </div>
     </dialog>
   );

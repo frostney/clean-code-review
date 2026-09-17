@@ -1,13 +1,16 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { DARK_QUERY, type Theme } from "./theme";
+import { useEffect, useState } from 'react';
+
+import { DARK_QUERY, type Theme } from './theme';
 
 /** What `<html data-theme>` and the system between them currently mean. */
 function currentTheme(): Theme {
   const chosen = document.documentElement.dataset.theme;
-  if (chosen === "dark" || chosen === "light") return chosen;
-  return window.matchMedia(DARK_QUERY).matches ? "dark" : "light";
+  if (chosen === 'dark' || chosen === 'light') {
+    return chosen;
+  }
+  return window.matchMedia(DARK_QUERY).matches ? 'dark' : 'light';
 }
 
 /**
@@ -23,7 +26,7 @@ function currentTheme(): Theme {
  * this page is following it).
  */
 export function useTheme(): Theme {
-  const [theme, setTheme] = useState<Theme>("light");
+  const [theme, setTheme] = useState<Theme>('light');
 
   useEffect(() => {
     function sync() {
@@ -31,12 +34,15 @@ export function useTheme(): Theme {
     }
     sync();
     const observer = new MutationObserver(sync);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    observer.observe(document.documentElement, {
+      attributeFilter: ['data-theme'],
+      attributes: true,
+    });
     const media = window.matchMedia(DARK_QUERY);
-    media.addEventListener("change", sync);
+    media.addEventListener('change', sync);
     return () => {
       observer.disconnect();
-      media.removeEventListener("change", sync);
+      media.removeEventListener('change', sync);
     };
   }, []);
 

@@ -1,16 +1,30 @@
-"use client";
+'use client';
 
-import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef } from "react";
-import { REVIEW_LIMITS } from "@/agent/lib/review";
-import { parsePatch } from "@/lib/diff";
-import { useTokens } from "@/lib/highlight";
-import { langOf } from "@/lib/language";
-import { CodeRows, DiffRows, Gutter, gutterBackgrounds, useDiffTokens } from "./CodeView";
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+} from 'react';
+
+import { REVIEW_LIMITS } from '@/agent/lib/review';
+import { parsePatch } from '@/lib/diff';
+import { useTokens } from '@/lib/highlight';
+import { langOf } from '@/lib/language';
+
+import {
+  CodeRows,
+  DiffRows,
+  Gutter,
+  gutterBackgrounds,
+  useDiffTokens,
+} from './CodeView';
 
 /** Below the threshold where the colours look like they lag the caret. */
 const HIGHLIGHT_DEBOUNCE_MS = 50;
 
-const INDENT = "  ";
+const INDENT = '  ';
 
 /**
  * The classic overlay: a transparent textarea sits exactly on top of the
@@ -43,29 +57,39 @@ function Overlay({
   // and React's delegated handler does not reach this textarea.
   useEffect(() => {
     const textarea = textareaRef.current;
-    if (!textarea) return;
-    function sync() {
-      if (preRef.current && textarea) preRef.current.scrollLeft = textarea.scrollLeft;
+    if (!textarea) {
+      return;
     }
-    textarea.addEventListener("scroll", sync, { passive: true });
-    return () => textarea.removeEventListener("scroll", sync);
+    function sync() {
+      if (preRef.current && textarea) {
+        preRef.current.scrollLeft = textarea.scrollLeft;
+      }
+    }
+    textarea.addEventListener('scroll', sync, { passive: true });
+    return () => textarea.removeEventListener('scroll', sync);
   }, []);
 
   /** Tab indents the file instead of leaving the editor. */
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     // While an IME composition is open, Tab belongs to the candidate list.
-    if (e.key !== "Tab" || e.shiftKey || e.nativeEvent.isComposing) return;
+    if (e.key !== 'Tab' || e.shiftKey || e.nativeEvent.isComposing) {
+      return;
+    }
     e.preventDefault();
     const el = e.currentTarget;
     const { selectionStart: start, selectionEnd: end, value } = el;
     const next = `${value.slice(0, start)}${INDENT}${value.slice(end)}`;
     // At the limit an indent would push characters off the far end of the
     // file. Better to do nothing than to edit code out of sight.
-    if (next.length > REVIEW_LIMITS.maxCharsPerFile) return;
+    if (next.length > REVIEW_LIMITS.maxCharsPerFile) {
+      return;
+    }
     onChange(next);
     // React re-renders from state, so the caret has to be restored afterwards.
     requestAnimationFrame(() => {
-      el.selectionStart = el.selectionEnd = start + INDENT.length;
+      const caret = start + INDENT.length;
+      el.selectionStart = caret;
+      el.selectionEnd = caret;
     });
   }
 
@@ -73,19 +97,23 @@ function Overlay({
     <div className="flex min-w-0">
       {gutters}
       <div className="relative min-w-0 flex-1">
-        <pre ref={preRef} aria-hidden="true" className="code-line overflow-hidden">
+        <pre
+          aria-hidden="true"
+          className="code-line overflow-hidden"
+          ref={preRef}
+        >
           {children}
         </pre>
         <textarea
-          ref={textareaRef}
-          value={content}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={onKeyDown}
-          spellCheck={false}
-          wrap="off"
-          maxLength={REVIEW_LIMITS.maxCharsPerFile}
           aria-label={`Edit ${path}`}
           className="code-line absolute inset-0 w-full resize-none overflow-auto border-0 bg-transparent px-3 py-2 text-transparent caret-ink outline-none"
+          maxLength={REVIEW_LIMITS.maxCharsPerFile}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={onKeyDown}
+          ref={textareaRef}
+          spellCheck={false}
+          value={content}
+          wrap="off"
         />
         {/* A phone is narrower than almost any line of code, so the card's
             right edge is where the line continues rather than where it ends.
@@ -103,12 +131,25 @@ function Overlay({
 }
 
 /** A whole file, editable in place. */
-export function Editor({ path, content, onChange }: { path: string; content: string; onChange: (next: string) => void }) {
+export function Editor({
+  path,
+  content,
+  onChange,
+}: {
+  path: string;
+  content: string;
+  onChange: (next: string) => void;
+}) {
   const lines = useTokens(content, langOf(path), HIGHLIGHT_DEBOUNCE_MS);
   const numbers = useMemo(() => lines.map((_, i) => i + 1), [lines]);
 
   return (
-    <Overlay path={path} content={content} onChange={onChange} gutters={<Gutter numbers={numbers} />}>
+    <Overlay
+      content={content}
+      gutters={<Gutter numbers={numbers} />}
+      onChange={onChange}
+      path={path}
+    >
       <CodeRows lines={lines} />
     </Overlay>
   );
@@ -141,15 +182,15 @@ export function PatchEditor({
 
   return (
     <Overlay
-      path={path}
       content={content}
-      onChange={onChange}
       gutters={
         <>
-          <Gutter numbers={oldNumbers} backgrounds={backgrounds} />
-          <Gutter numbers={newNumbers} backgrounds={backgrounds} />
+          <Gutter backgrounds={backgrounds} numbers={oldNumbers} />
+          <Gutter backgrounds={backgrounds} numbers={newNumbers} />
         </>
       }
+      onChange={onChange}
+      path={path}
     >
       <DiffRows lines={lines} tokens={tokens} />
     </Overlay>

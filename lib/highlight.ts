@@ -1,10 +1,11 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import type { HighlighterCore, LanguageInput, ThemedToken } from "shiki/types";
-import type { Lang } from "./language";
-import type { Theme } from "./theme";
-import { useTheme } from "./useTheme";
+import { useEffect, useState } from 'react';
+import type { HighlighterCore, LanguageInput, ThemedToken } from 'shiki/types';
+
+import type { Lang } from './language';
+import type { Theme } from './theme';
+import { useTheme } from './useTheme';
 
 /**
  * One theme per paper, and no third: the page is a review, not a colour
@@ -13,8 +14,8 @@ import { useTheme } from "./useTheme";
  * be chosen here and the code re-tokenised when it changes.
  */
 const THEMES: Record<Theme, string> = {
-  light: "github-light",
-  dark: "github-dark",
+  dark: 'github-dark',
+  light: 'github-light',
 };
 
 /**
@@ -28,13 +29,19 @@ const THEMES: Record<Theme, string> = {
  */
 let ready: Promise<HighlighterCore> | null = null;
 
-export function highlighter(): Promise<HighlighterCore> {
+function highlighter(): Promise<HighlighterCore> {
   ready ??= (async () => {
-    const [core, engine] = await Promise.all([import("shiki/core"), import("shiki/engine/javascript")]);
+    const [core, engine] = await Promise.all([
+      import('shiki/core'),
+      import('shiki/engine/javascript'),
+    ]);
     return core.createHighlighterCore({
-      themes: [import("shiki/themes/github-light.mjs"), import("shiki/themes/github-dark.mjs")],
-      langs: [],
       engine: engine.createJavaScriptRegexEngine(),
+      langs: [],
+      themes: [
+        import('shiki/themes/github-light.mjs'),
+        import('shiki/themes/github-dark.mjs'),
+      ],
     });
   })();
   return ready;
@@ -46,36 +53,38 @@ export function highlighter(): Promise<HighlighterCore> {
  * entry and is tokenised as plain text instead.
  */
 const GRAMMARS: Partial<Record<Lang, () => LanguageInput>> = {
-  typescript: () => import("shiki/langs/typescript.mjs"),
-  javascript: () => import("shiki/langs/javascript.mjs"),
-  tsx: () => import("shiki/langs/tsx.mjs"),
-  python: () => import("shiki/langs/python.mjs"),
-  java: () => import("shiki/langs/java.mjs"),
-  go: () => import("shiki/langs/go.mjs"),
-  rust: () => import("shiki/langs/rust.mjs"),
-  json: () => import("shiki/langs/json.mjs"),
-  yaml: () => import("shiki/langs/yaml.mjs"),
-  css: () => import("shiki/langs/css.mjs"),
-  html: () => import("shiki/langs/html.mjs"),
-  diff: () => import("shiki/langs/diff.mjs"),
-  bash: () => import("shiki/langs/bash.mjs"),
+  bash: () => import('shiki/langs/bash.mjs'),
+  css: () => import('shiki/langs/css.mjs'),
+  diff: () => import('shiki/langs/diff.mjs'),
+  go: () => import('shiki/langs/go.mjs'),
+  html: () => import('shiki/langs/html.mjs'),
+  java: () => import('shiki/langs/java.mjs'),
+  javascript: () => import('shiki/langs/javascript.mjs'),
+  json: () => import('shiki/langs/json.mjs'),
+  python: () => import('shiki/langs/python.mjs'),
+  rust: () => import('shiki/langs/rust.mjs'),
+  tsx: () => import('shiki/langs/tsx.mjs'),
+  typescript: () => import('shiki/langs/typescript.mjs'),
+  yaml: () => import('shiki/langs/yaml.mjs'),
 };
 
 /** Grammars already fetched or in flight, so ten cards of one language fetch once. */
 const grammars = new Map<Lang, Promise<void>>();
 
 /** The grammar a language is tokenised with: "text" when it has none. */
-export function grammarOf(lang: Lang): Lang {
-  return GRAMMARS[lang] ? lang : "text";
+function grammarOf(lang: Lang): Lang {
+  return GRAMMARS[lang] ? lang : 'text';
 }
 
 /**
  * Make `lang` safe to tokenise with. "text" is shiki's own no-op grammar and
  * is always there; everything else is fetched on first use and kept.
  */
-export function loadLanguage(lang: Lang): Promise<void> {
+function loadLanguage(lang: Lang): Promise<void> {
   const grammar = GRAMMARS[lang];
-  if (!grammar) return Promise.resolve();
+  if (!grammar) {
+    return Promise.resolve();
+  }
   let pending = grammars.get(lang);
   if (!pending) {
     pending = (async () => {
@@ -94,8 +103,10 @@ export function loadLanguage(lang: Lang): Promise<void> {
 export type TokenLine = readonly ThemedToken[];
 
 /** Every line as one plain token — what a card shows before the grammars land. */
-export function plainLines(code: string): TokenLine[] {
-  return code.split("\n").map((line) => (line ? [{ content: line, offset: 0 }] : []));
+function plainLines(code: string): TokenLine[] {
+  return code
+    .split('\n')
+    .map((line) => (line ? [{ content: line, offset: 0 }] : []));
 }
 
 /**
@@ -111,7 +122,11 @@ export function plainLines(code: string): TokenLine[] {
  * dark re-tokenises every card, because shiki's colours are inline styles and
  * nothing else can repaint them.
  */
-export function useTokens(code: string, lang: Lang, debounceMs = 0): TokenLine[] {
+export function useTokens(
+  code: string,
+  lang: Lang,
+  debounceMs = 0,
+): TokenLine[] {
   const [lines, setLines] = useState<TokenLine[] | null>(null);
   const [forCode, setForCode] = useState<string | null>(null);
   const theme = useTheme();
@@ -122,9 +137,16 @@ export function useTokens(code: string, lang: Lang, debounceMs = 0): TokenLine[]
       try {
         const shiki = await highlighter();
         await loadLanguage(lang);
-        if (!live) return;
-        const result = shiki.codeToTokens(code, { lang: grammarOf(lang), theme: THEMES[theme] });
-        if (!live) return;
+        if (!live) {
+          return;
+        }
+        const result = shiki.codeToTokens(code, {
+          lang: grammarOf(lang),
+          theme: THEMES[theme],
+        });
+        if (!live) {
+          return;
+        }
         setLines(result.tokens);
         setForCode(code);
       } catch {
@@ -135,13 +157,19 @@ export function useTokens(code: string, lang: Lang, debounceMs = 0): TokenLine[]
         }
       }
     }
+    /** `run` puts its own failures on the card, so nothing here can reject. */
+    const start = () => {
+      run().catch(() => {
+        /* Already handled inside `run`. */
+      });
+    };
     if (debounceMs <= 0) {
-      void run();
+      start();
       return () => {
         live = false;
       };
     }
-    const timer = setTimeout(() => void run(), debounceMs);
+    const timer = setTimeout(start, debounceMs);
     return () => {
       live = false;
       clearTimeout(timer);

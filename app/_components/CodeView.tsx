@@ -1,9 +1,10 @@
-"use client";
+'use client';
 
-import { useMemo } from "react";
-import type { DiffLine } from "@/lib/diff";
-import { type TokenLine, useTokens } from "@/lib/highlight";
-import type { Lang } from "@/lib/language";
+import { useMemo } from 'react';
+
+import type { DiffLine } from '@/lib/diff';
+import { type TokenLine, useTokens } from '@/lib/highlight';
+import type { Lang } from '@/lib/language';
 
 /**
  * How code is drawn on this page: line numbers, tokens, and the rows of a
@@ -13,15 +14,16 @@ import type { Lang } from "@/lib/language";
  */
 
 /** Padding shared by every gutter and every code column, so lines line up. */
-export const PAD_Y = "py-2";
+export const PAD_Y = 'py-2';
 
 /** One highlighted line. Always renders something, so empty lines keep height. */
 export function Tokens({ line }: { line: TokenLine | undefined }) {
-  if (!line || !line.length) return <> </>;
+  if (!line || !line.length) {
+    return <> </>;
+  }
   return (
     <>
       {line.map((token, i) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: tokens have no identity beyond position
         <span key={i} style={token.color ? { color: token.color } : undefined}>
           {token.content}
         </span>
@@ -39,11 +41,12 @@ export function Gutter({
   backgrounds?: readonly string[];
 }) {
   return (
-    <div className={`code-line shrink-0 select-none border-r border-line bg-surface text-right text-muted/70 ${PAD_Y}`}>
+    <div
+      className={`code-line shrink-0 select-none border-r border-line bg-surface text-right text-muted/70 ${PAD_Y}`}
+    >
       {numbers.map((n, i) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: a gutter cell is its line
-        <div key={i} className={`px-2 ${backgrounds?.[i] ?? ""}`}>
-          {n ?? " "}
+        <div className={`px-2 ${backgrounds?.[i] ?? ''}`} key={i}>
+          {n ?? ' '}
         </div>
       ))}
     </div>
@@ -55,7 +58,6 @@ export function CodeRows({ lines }: { lines: readonly TokenLine[] }) {
   return (
     <div className={`min-w-max px-3 ${PAD_Y}`}>
       {lines.map((line, i) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: a row is its line
         <div key={i}>
           <Tokens line={line} />
         </div>
@@ -64,20 +66,20 @@ export function CodeRows({ lines }: { lines: readonly TokenLine[] }) {
   );
 }
 
-const ROW_BACKGROUND: Record<DiffLine["kind"], string> = {
-  add: "bg-add-bg",
-  del: "bg-del-bg",
-  hunk: "bg-hunk-bg text-accent",
-  meta: "text-muted/70",
-  context: "",
+const ROW_BACKGROUND: Record<DiffLine['kind'], string> = {
+  add: 'bg-add-bg',
+  context: '',
+  del: 'bg-del-bg',
+  hunk: 'bg-hunk-bg text-accent',
+  meta: 'text-muted/70',
 };
 
-const GUTTER_BACKGROUND: Record<DiffLine["kind"], string> = {
-  add: "bg-add-gutter",
-  del: "bg-del-gutter",
-  hunk: "bg-hunk-bg",
-  meta: "",
-  context: "",
+const GUTTER_BACKGROUND: Record<DiffLine['kind'], string> = {
+  add: 'bg-add-gutter',
+  context: '',
+  del: 'bg-del-gutter',
+  hunk: 'bg-hunk-bg',
+  meta: '',
 };
 
 export function gutterBackgrounds(lines: readonly DiffLine[]): string[] {
@@ -93,9 +95,16 @@ export function gutterBackgrounds(lines: readonly DiffLine[]): string[] {
  * rows. Each row renders `sign + code`, which is the line exactly as it was
  * typed — the textarea above it has to agree character for character.
  */
-export function useDiffTokens(lines: readonly DiffLine[], lang: Lang, debounceMs = 0): TokenLine[] {
+export function useDiffTokens(
+  lines: readonly DiffLine[],
+  lang: Lang,
+  debounceMs = 0,
+): TokenLine[] {
   const stripped = useMemo(
-    () => lines.map((l) => (l.kind === "hunk" || l.kind === "meta" ? "" : l.code)).join("\n"),
+    () =>
+      lines
+        .map((l) => (l.kind === 'hunk' || l.kind === 'meta' ? '' : l.code))
+        .join('\n'),
     [lines],
   );
   return useTokens(stripped, lang, debounceMs);
@@ -105,17 +114,24 @@ export function useDiffTokens(lines: readonly DiffLine[], lang: Lang, debounceMs
  * A unified diff with its diff semantics intact: a background per line kind and
  * the code itself still highlighted as whatever language the file is.
  */
-export function DiffRows({ lines, tokens }: { lines: readonly DiffLine[]; tokens: readonly TokenLine[] }) {
+export function DiffRows({
+  lines,
+  tokens,
+}: {
+  lines: readonly DiffLine[];
+  tokens: readonly TokenLine[];
+}) {
   return (
     <div className={`min-w-max ${PAD_Y}`}>
       {lines.map((line, i) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: a row is its line
-        <div key={i} className={`px-3 ${ROW_BACKGROUND[line.kind]}`}>
-          {line.kind === "hunk" || line.kind === "meta" ? (
-            line.code || " "
+        <div className={`px-3 ${ROW_BACKGROUND[line.kind]}`} key={i}>
+          {line.kind === 'hunk' || line.kind === 'meta' ? (
+            line.code || ' '
           ) : (
             <>
-              {line.sign && <span className="select-none text-muted/60">{line.sign}</span>}
+              {line.sign ? (
+                <span className="select-none text-muted/60">{line.sign}</span>
+              ) : null}
               <Tokens line={tokens[i]} />
             </>
           )}

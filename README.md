@@ -52,6 +52,17 @@ bun run review http://localhost:3000 https://github.com/vercel/ai/pull/20851
 bun run jev 1                                  # one preset straight to Jev, no eve
 ```
 
+## Development
+
+```sh
+bun run check       # Biome, TypeScript and knip, in parallel
+bun run check:fix   # format, sort and autofix what Biome can
+```
+
+A lefthook pre-commit hook runs `check:fix` over the staged files and restages
+what it changed; GitHub Actions runs `bun run check` on every push to `main`
+and every pull request.
+
 ## How it works
 
 ```

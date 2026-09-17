@@ -1,6 +1,6 @@
-"use client";
+'use client';
 
-import { useReviewView } from "./ReviewProvider";
+import { useReviewView } from './ReviewProvider';
 
 /**
  * How much code is on screen and how long the last turn took. The size of the
@@ -14,16 +14,17 @@ export function ReviewStats() {
 
   return (
     <p className="mt-2 text-[12px] text-muted">
-      {fileCount} {fileCount === 1 ? "file" : "files"} · {lineCount} lines · last turn{" "}
-      {judge.ms === null ? "—" : `${judge.ms} ms`}
-      {cached && (
+      {fileCount} {fileCount === 1 ? 'file' : 'files'} · {lineCount} lines ·
+      last turn {judge.ms === null ? '—' : `${judge.ms} ms`}
+      {cached ? (
         <>
-          {" · "}
-          <span data-cached="1" className="text-muted/70">
+          {' '}
+          &middot;{' '}
+          <span className="text-muted/70" data-cached="1">
             from cache
           </span>
         </>
-      )}
+      ) : null}
     </p>
   );
 }

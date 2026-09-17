@@ -15,22 +15,22 @@
  * paint by `THEME_SCRIPT` below. "system" removes the attribute rather than
  * writing one, which is what hands the page back to `prefers-color-scheme`.
  */
-export type ThemeChoice = "system" | "light" | "dark";
+export type ThemeChoice = 'system' | 'light' | 'dark';
 
 /** What the page is actually rendered in, once the choice has been resolved. */
-export type Theme = "light" | "dark";
+export type Theme = 'light' | 'dark';
 
-export const THEME_KEY = "clean-code-review:theme";
+const THEME_KEY = 'clean-code-review:theme';
 
 /** system → light → dark → system. */
-export const THEME_ORDER: readonly ThemeChoice[] = ["system", "light", "dark"];
+const THEME_ORDER: readonly ThemeChoice[] = ['system', 'light', 'dark'];
 
 export function nextChoice(choice: ThemeChoice): ThemeChoice {
   return THEME_ORDER[(THEME_ORDER.indexOf(choice) + 1) % THEME_ORDER.length];
 }
 
 /** The media query the page follows when nobody has chosen. */
-export const DARK_QUERY = "(prefers-color-scheme: dark)";
+export const DARK_QUERY = '(prefers-color-scheme: dark)';
 
 /**
  * The one line that runs before the page is painted.
@@ -48,20 +48,28 @@ export const THEME_SCRIPT = `try{var t=localStorage.getItem(${JSON.stringify(THE
 export function readChoice(): ThemeChoice {
   try {
     const stored = localStorage.getItem(THEME_KEY);
-    if (stored === "dark" || stored === "light" || stored === "system") return stored;
+    if (stored === 'dark' || stored === 'light' || stored === 'system') {
+      return stored;
+    }
   } catch {
     // A page that cannot remember still has to render.
   }
-  return "system";
+  return 'system';
 }
 
 /** Write the choice down and put it on `<html>`, where the palette reads it. */
 export function applyChoice(choice: ThemeChoice): void {
-  if (choice === "system") delete document.documentElement.dataset.theme;
-  else document.documentElement.dataset.theme = choice;
+  if (choice === 'system') {
+    delete document.documentElement.dataset.theme;
+  } else {
+    document.documentElement.dataset.theme = choice;
+  }
   try {
-    if (choice === "system") localStorage.removeItem(THEME_KEY);
-    else localStorage.setItem(THEME_KEY, choice);
+    if (choice === 'system') {
+      localStorage.removeItem(THEME_KEY);
+    } else {
+      localStorage.setItem(THEME_KEY, choice);
+    }
   } catch {
     // Remembering is a convenience; the page is already in the right colour.
   }

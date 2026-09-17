@@ -1,14 +1,20 @@
-"use client";
+'use client';
 
-import { Monitor, Moon, Sun } from "lucide-react";
-import { useEffect, useState } from "react";
-import { applyChoice, nextChoice, readChoice, type ThemeChoice } from "@/lib/theme";
+import { Monitor, Moon, Sun } from 'lucide-react';
+import { useEffect, useState } from 'react';
+
+import {
+  applyChoice,
+  nextChoice,
+  readChoice,
+  type ThemeChoice,
+} from '@/lib/theme';
 
 /** One icon and one word per choice, so the button says what it is, not what it will do. */
 const FACES: Record<ThemeChoice, { Icon: typeof Sun; label: string }> = {
-  system: { Icon: Monitor, label: "System theme" },
-  light: { Icon: Sun, label: "Light theme" },
-  dark: { Icon: Moon, label: "Dark theme" },
+  dark: { Icon: Moon, label: 'Dark theme' },
+  light: { Icon: Sun, label: 'Light theme' },
+  system: { Icon: Monitor, label: 'System theme' },
 };
 
 /**
@@ -21,7 +27,7 @@ const FACES: Record<ThemeChoice, { Icon: typeof Sun; label: string }> = {
  * effect. That is why the button reads the choice rather than owning it.
  */
 export function ThemeToggle() {
-  const [choice, setChoice] = useState<ThemeChoice>("system");
+  const [choice, setChoice] = useState<ThemeChoice>('system');
 
   useEffect(() => {
     setChoice(readChoice());
@@ -31,10 +37,9 @@ export function ThemeToggle() {
 
   return (
     <button
-      type="button"
-      data-theme-toggle={choice}
-      title={`${label} — click to change`}
       aria-label={`${label}. Change the theme.`}
+      className="-my-1 inline-flex min-h-10 min-w-10 cursor-pointer items-center justify-center gap-1.5 rounded-md text-muted hover:text-ink lg:my-0 lg:min-h-8 lg:min-w-8"
+      data-theme-toggle={choice}
       onClick={() => {
         // The step is taken from what is written down, not from what this
         // component last rendered: two clicks inside one task — a stuck key, a
@@ -44,9 +49,10 @@ export function ThemeToggle() {
         applyChoice(next);
         setChoice(next);
       }}
-      className="-my-1 inline-flex min-h-10 min-w-10 cursor-pointer items-center justify-center gap-1.5 rounded-md text-muted hover:text-ink lg:my-0 lg:min-h-8 lg:min-w-8"
+      title={`${label} — click to change`}
+      type="button"
     >
-      <Icon size={14} aria-hidden="true" />
+      <Icon aria-hidden="true" size={14} />
     </button>
   );
 }

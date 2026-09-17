@@ -1,14 +1,21 @@
-import type { ReactNode } from "react";
-import { filesFromPatch } from "@/agent/lib/patch";
-import type { Preset } from "@/agent/lib/presets";
-import { partitionJudgeable, REVIEW_LIMITS, type ReviewFile, type SkipReason } from "@/agent/lib/review";
-import { selectReviewFiles } from "@/agent/lib/select";
-import type { PullRequestPayload } from "@/app/actions";
-import { splitPatchHeader } from "./diff";
-import { filesFromPaste, uniquePaths } from "./paste";
+import type { ReactNode } from 'react';
+
+import { filesFromPatch } from '@/agent/lib/patch';
+import type { Preset } from '@/agent/lib/presets';
+import {
+  partitionJudgeable,
+  REVIEW_LIMITS,
+  type ReviewFile,
+  type SkipReason,
+} from '@/agent/lib/review';
+import { selectReviewFiles } from '@/agent/lib/select';
+import type { PullRequestPayload } from '@/app/actions';
+
+import { splitPatchHeader } from './diff';
+import { filesFromPaste, uniquePaths } from './paste';
 
 /** The pull request a review came from, as the page holds it. */
-export interface OpenPullRequest {
+interface OpenPullRequest {
   title: string;
   url: string;
   /** The description, rendered on the server. Null when there is none. */
@@ -59,7 +66,9 @@ export interface OpenReview {
  * every way in goes through the same partition, and what it left out is said
  * out loud rather than silently missing.
  */
-function opened(files: readonly ReviewFile[]): Omit<OpenReview, "id" | "preset" | "pr" | "dropped" | "skippedCount"> {
+function opened(
+  files: readonly ReviewFile[],
+): Omit<OpenReview, 'id' | 'preset' | 'pr' | 'dropped' | 'skippedCount'> {
   const { judgeable, skipped } = partitionJudgeable(files);
   const unique = uniquePaths(judgeable);
   const truncated: Record<string, true> = {};
@@ -68,25 +77,54 @@ function opened(files: readonly ReviewFile[]): Omit<OpenReview, "id" | "preset" 
     let shown = file;
     if (shown.content.length > REVIEW_LIMITS.maxCharsPerFile) {
       truncated[shown.path] = true;
-      shown = { ...shown, content: shown.content.slice(0, REVIEW_LIMITS.maxCharsPerFile) };
+      shown = {
+        ...shown,
+        content: shown.content.slice(0, REVIEW_LIMITS.maxCharsPerFile),
+      };
     }
-    if (!shown.patch) return shown;
+    if (!shown.patch) {
+      return shown;
+    }
     const { header, body } = splitPatchHeader(shown.content);
-    if (header) headers[shown.path] = header;
+    if (header) {
+      headers[shown.path] = header;
+    }
     return { ...shown, content: body };
   });
-  return { files: kept, headers, totalFiles: unique.length, truncated, skipped };
+  return {
+    files: kept,
+    headers,
+    skipped,
+    totalFiles: unique.length,
+    truncated,
+  };
 }
 
 export function fromPreset(preset: Preset, id: string): OpenReview {
-  return { id, preset: preset.label, pr: null, dropped: 0, skippedCount: 0, ...opened(preset.files) };
+  return {
+    dropped: 0,
+    id,
+    pr: null,
+    preset: preset.label,
+    skippedCount: 0,
+    ...opened(preset.files),
+  };
 }
 
 /** A paste: a diff, a file, or several files marked up with `// file:` lines. */
 export function fromPaste(text: string, id: string): OpenReview | null {
   const files = filesFromPaste(text);
-  if (!files.length) return null;
-  return { id, preset: null, pr: null, dropped: 0, skippedCount: 0, ...opened(files) };
+  if (!files.length) {
+    return null;
+  }
+  return {
+    dropped: 0,
+    id,
+    pr: null,
+    preset: null,
+    skippedCount: 0,
+    ...opened(files),
+  };
 }
 
 /**
@@ -95,16 +133,26 @@ export function fromPaste(text: string, id: string): OpenReview | null {
  * judgment — lockfiles, bundles, images — before the review opens. Null when
  * nothing is left to judge.
  */
-export function fromPullRequest(payload: PullRequestPayload, id: string): OpenReview | null {
+export function fromPullRequest(
+  payload: PullRequestPayload,
+  id: string,
+): OpenReview | null {
   const judgeable = filesFromPatch(payload.diff);
   const { kept, skipped, dropped } = selectReviewFiles(judgeable);
-  if (!kept.length) return null;
+  if (!kept.length) {
+    return null;
+  }
   const review = opened(kept);
   return {
-    id,
-    preset: null,
-    pr: { title: payload.title, url: payload.url, body: payload.body, bodyText: payload.bodyText },
     dropped: dropped.length,
+    id,
+    pr: {
+      body: payload.body,
+      bodyText: payload.bodyText,
+      title: payload.title,
+      url: payload.url,
+    },
+    preset: null,
     // What GitHub counted as touched, minus what survived the splitter.
     skippedCount: Math.max(0, payload.changedFiles - judgeable.length),
     ...review,
@@ -115,7 +163,7 @@ export function fromPullRequest(payload: PullRequestPayload, id: string): OpenRe
       ...review.skipped,
       ...skipped
         .filter((path) => !review.skipped.some((s) => s.path === path))
-        .map((path) => ({ path, reason: "generated" as const })),
+        .map((path) => ({ path, reason: 'generated' as const })),
     ],
   };
 }
@@ -126,13 +174,26 @@ export function fromPullRequest(payload: PullRequestPayload, id: string): OpenRe
  * splitter, so those files arrive as a bare count with no reason attached;
  * they are still worth saying, just less precisely.
  */
-export function skippedText(skipped: readonly { reason: SkipReason }[], count: number): string | null {
-  const binary = skipped.filter((s) => s.reason === "binary").length;
-  const generated = skipped.filter((s) => s.reason === "generated").length;
+export function skippedText(
+  skipped: readonly { reason: SkipReason }[],
+  count: number,
+): string | null {
+  const binary = skipped.filter((s) => s.reason === 'binary').length;
+  const generated = skipped.filter((s) => s.reason === 'generated').length;
   const parts: string[] = [];
-  if (binary) parts.push(`${binary} ${binary === 1 ? "image or binary" : "images or binaries"}`);
-  if (generated) parts.push(`${generated} generated ${generated === 1 ? "file" : "files"}`);
+  if (binary) {
+    parts.push(
+      `${binary} ${binary === 1 ? 'image or binary' : 'images or binaries'}`,
+    );
+  }
+  if (generated) {
+    parts.push(`${generated} generated ${generated === 1 ? 'file' : 'files'}`);
+  }
   const unattributed = Math.max(0, count - skipped.length);
-  if (unattributed) parts.push(`${unattributed} generated or non-code ${unattributed === 1 ? "file" : "files"}`);
-  return parts.length ? `Skipped ${parts.join(" and ")}` : null;
+  if (unattributed) {
+    parts.push(
+      `${unattributed} generated or non-code ${unattributed === 1 ? 'file' : 'files'}`,
+    );
+  }
+  return parts.length ? `Skipped ${parts.join(' and ')}` : null;
 }

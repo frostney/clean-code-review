@@ -1,12 +1,14 @@
-import Image from "next/image";
-import { PRESETS } from "@/agent/lib/presets";
-import { SITE } from "@/lib/site";
-import { PasteButton } from "./PasteButton";
-import { PresetChip } from "./PresetChip";
-import { PullRequestField } from "./PullRequestField";
-import { PullRequestSummary } from "./PullRequestSummary";
-import { ReviewStats } from "./ReviewStats";
-import { ThemeToggle } from "./ThemeToggle";
+import Image from 'next/image';
+
+import { PRESETS } from '@/agent/lib/presets';
+import { SITE } from '@/lib/site';
+
+import { PasteButton } from './PasteButton';
+import { PresetChip } from './PresetChip';
+import { PullRequestField } from './PullRequestField';
+import { PullRequestSummary } from './PullRequestSummary';
+import { ReviewStats } from './ReviewStats';
+import { ThemeToggle } from './ThemeToggle';
 
 /**
  * The top of a review: what is being reviewed, and how it got here.
@@ -41,12 +43,12 @@ export function Hero() {
           <PullRequestField
             duck={
               <Image
+                alt=""
+                className="h-7 w-7 shrink-0 sm:h-8 sm:w-8"
+                height={32}
+                priority={true}
                 src="/ducky-64.png"
                 width={32}
-                height={32}
-                alt=""
-                priority
-                className="h-7 w-7 shrink-0 sm:h-8 sm:w-8"
               />
             }
           />
@@ -63,9 +65,15 @@ export function Hero() {
       </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
-        <span className="text-[12px] text-muted">Or choose one of the examples:</span>
+        <span className="text-[12px] text-muted">
+          Or choose one of the examples:
+        </span>
         {PRESETS.map((preset) => (
-          <PresetChip key={preset.label} label={preset.label} blurb={preset.blurb} />
+          <PresetChip
+            blurb={preset.blurb}
+            key={preset.label}
+            label={preset.label}
+          />
         ))}
         <PasteButton />
       </div>

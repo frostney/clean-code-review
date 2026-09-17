@@ -1,18 +1,19 @@
-import type { MetadataRoute } from "next";
-import { SITE } from "@/lib/site";
+import type { MetadataRoute } from 'next';
+
+import { SITE } from '@/lib/site';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: SITE.name,
-    short_name: "Clean Code",
+    background_color: '#ffffff',
     description: SITE.description,
-    start_url: "/",
-    display: "standalone",
-    background_color: "#ffffff",
-    theme_color: "#ffffff",
+    display: 'standalone',
     icons: [
-      { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-      { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+      { sizes: '192x192', src: '/icons/icon-192.png', type: 'image/png' },
+      { sizes: '512x512', src: '/icons/icon-512.png', type: 'image/png' },
     ],
+    name: SITE.name,
+    short_name: 'Clean Code',
+    start_url: '/',
+    theme_color: '#ffffff',
   };
 }

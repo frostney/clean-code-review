@@ -1,5 +1,5 @@
-import { QUESTION_COUNT } from "@/agent/lib/questions";
-import { SITE } from "@/lib/site";
+import { QUESTION_COUNT } from '@/agent/lib/questions';
+import { SITE } from '@/lib/site';
 
 /**
  * What this page is, for a model that has been asked about it and cannot click
@@ -20,13 +20,13 @@ ${SITE.name} judges code against the chapters of Robert C. Martin's *Clean Code*
 - [eve](${SITE.eve}): the agent framework the judging turn runs on.
 `;
 
-export const dynamic = "force-static";
+export const dynamic = 'force-static';
 
 export function GET(): Response {
   return new Response(LLMS_TXT, {
     headers: {
-      "content-type": "text/plain; charset=utf-8",
-      "cache-control": "public, max-age=3600",
+      'cache-control': 'public, max-age=3600',
+      'content-type': 'text/plain; charset=utf-8',
     },
   });
 }

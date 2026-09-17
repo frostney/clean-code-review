@@ -1,5 +1,11 @@
-import { eveChannel } from "eve/channels/eve";
-import { type AuthFn, ForbiddenError, localDev, none, vercelOidc } from "eve/channels/auth";
+import {
+  type AuthFn,
+  ForbiddenError,
+  localDev,
+  none,
+  vercelOidc,
+} from 'eve/channels/auth';
+import { eveChannel } from 'eve/channels/eve';
 
 /**
  * Best-effort brake for a public demo: at most SESSIONS_PER_WINDOW new
@@ -9,28 +15,49 @@ import { type AuthFn, ForbiddenError, localDev, none, vercelOidc } from "eve/cha
  * spend cap or a Vercel Firewall rate-limit rule, which are the real bounds.
  */
 const SESSIONS_PER_WINDOW = 30;
-const WINDOW_MS = 10 * 60 * 1_000;
+/** Ten minutes: the window new sessions are counted over. */
+const WINDOW_MS = 600_000;
+/** How many addresses the map holds before it is thrown away wholesale. */
+const MAX_TRACKED_ADDRESSES = 10_000;
 const created = new Map<string, number[]>();
 
 function sessionCreationBrake(): AuthFn<Request> {
   return (request) => {
     const url = new URL(request.url);
-    const isCreate = request.method === "POST" && /\/eve\/v1\/session\/?$/.test(url.pathname);
-    if (!isCreate) return null;
+    const isCreate =
+      request.method === 'POST' && /\/eve\/v1\/session\/?$/.test(url.pathname);
+    if (!isCreate) {
+      return null;
+    }
     // Vercel sets x-vercel-forwarded-for from the connection itself; a plain
     // x-forwarded-for can be prefixed by the client, so take its last hop.
-    const forwarded = request.headers.get("x-forwarded-for")?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
-    const ip = request.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || forwarded[forwarded.length - 1];
+    const forwarded =
+      request.headers
+        .get('x-forwarded-for')
+        ?.split(',')
+        .map((s) => s.trim())
+        .filter(Boolean) ?? [];
+    const ip =
+      request.headers.get('x-vercel-forwarded-for')?.split(',')[0]?.trim() ||
+      request.headers.get('x-real-ip') ||
+      forwarded.at(-1);
     // Without an address there is nothing fair to count against.
-    if (!ip) return null;
+    if (!ip) {
+      return null;
+    }
     const now = Date.now();
     const recent = (created.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
     if (recent.length >= SESSIONS_PER_WINDOW) {
-      throw new ForbiddenError({ message: "Too many new sessions from this address. Try again in a few minutes." });
+      throw new ForbiddenError({
+        message:
+          'Too many new sessions from this address. Try again in a few minutes.',
+      });
     }
     recent.push(now);
     created.set(ip, recent);
-    if (created.size > 10_000) created.clear();
+    if (created.size > MAX_TRACKED_ADDRESSES) {
+      created.clear();
+    }
     return null; // Not an identity: fall through to the real auth entries.
   };
 }

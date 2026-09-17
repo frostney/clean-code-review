@@ -1,7 +1,10 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import { ImageResponse } from "next/og";
-import { SITE } from "@/lib/site";
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
+import { ImageResponse } from 'next/og';
+
+import { OG_CARD } from '@/lib/og';
+import { SITE } from '@/lib/site';
 
 /**
  * The link preview, drawn from the page's own palette: white paper, one ink,
@@ -9,63 +12,132 @@ import { SITE } from "@/lib/site";
  * No screenshot — a card of meters at 1200×630 is unreadable, and the claim is
  * what the product is, not what it looks like.
  */
-export const alt = `${SITE.name} — ${SITE.tagline}`;
-export const size = { width: 1200, height: 630 };
-export const contentType = "image/png";
+export const alt = OG_CARD.alt;
+export const size = OG_CARD.size;
+export const contentType = OG_CARD.contentType;
 
-const INK = "#1f2328";
-const MUTED = "#656d76";
-const ACCENT = "#0969da";
-const LINE = "#d0d7de";
+const INK = '#1f2328';
+const MUTED = '#656d76';
+const ACCENT = '#0969da';
+const LINE = '#d0d7de';
 
 export default async function Image() {
   // The mascot, inlined: file-based metadata routes cannot reference /public by URL at build time.
-  const duck = await readFile(join(process.cwd(), "public", "icons", "icon-512.png"));
-  const duckSrc = `data:image/png;base64,${duck.toString("base64")}`;
+  const duck = await readFile(
+    join(process.cwd(), 'public', 'icons', 'icon-512.png'),
+  );
+  const duckSrc = `data:image/png;base64,${duck.toString('base64')}`;
   return new ImageResponse(
     <div
       style={{
-        height: "100%",
-        width: "100%",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        background: "#ffffff",
-        padding: "72px",
+        background: '#ffffff',
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        justifyContent: 'space-between',
+        padding: '72px',
+        width: '100%',
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-        <div style={{ width: "14px", height: "14px", borderRadius: "9999px", background: ACCENT }} />
-        <div style={{ display: "flex", fontSize: "24px", color: MUTED, letterSpacing: "0.14em" }}>
+      <div style={{ alignItems: 'center', display: 'flex', gap: '14px' }}>
+        <div
+          style={{
+            background: ACCENT,
+            borderRadius: '9999px',
+            height: '14px',
+            width: '14px',
+          }}
+        />
+        <div
+          style={{
+            color: MUTED,
+            display: 'flex',
+            fontSize: '24px',
+            letterSpacing: '0.14em',
+          }}
+        >
           CODE REVIEW, BY THE BOOK
         </div>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "48px" }}>
-        <div style={{ display: "flex", flexDirection: "column", maxWidth: "760px" }}>
-          <div style={{ display: "flex", fontSize: "88px", fontWeight: 700, color: INK, letterSpacing: "-0.03em" }}>
+      <div
+        style={{
+          alignItems: 'center',
+          display: 'flex',
+          gap: '48px',
+          justifyContent: 'space-between',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            maxWidth: '760px',
+          }}
+        >
+          <div
+            style={{
+              color: INK,
+              display: 'flex',
+              fontSize: '88px',
+              fontWeight: 700,
+              letterSpacing: '-0.03em',
+            }}
+          >
             {SITE.name}
           </div>
-          <div style={{ display: "flex", width: "120px", height: "6px", background: ACCENT, margin: "28px 0" }} />
-          <div style={{ display: "flex", fontSize: "32px", color: MUTED, lineHeight: 1.35 }}>
+          <div
+            style={{
+              background: ACCENT,
+              display: 'flex',
+              height: '6px',
+              margin: '28px 0',
+              width: '120px',
+            }}
+          />
+          <div
+            style={{
+              color: MUTED,
+              display: 'flex',
+              fontSize: '32px',
+              lineHeight: 1.35,
+            }}
+          >
             {SITE.tagline}
           </div>
         </div>
-        {/* eslint-disable-next-line @next/next/no-img-element -- ImageResponse renders plain img */}
-        <img src={duckSrc} width={300} height={300} alt="" style={{ width: "300px", height: "300px" }} />
+        {/* biome-ignore lint/performance/noImgElement: an ImageResponse is drawn by Satori, which renders a plain <img> and knows nothing of next/image */}
+        <img
+          alt=""
+          height={300}
+          src={duckSrc}
+          style={{ height: '300px', width: '300px' }}
+          width={300}
+        />
       </div>
 
       <div
         style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
+          alignItems: 'center',
           borderTop: `1px solid ${LINE}`,
-          paddingTop: "22px",
+          display: 'flex',
+          justifyContent: 'space-between',
+          paddingTop: '22px',
         }}
       >
-        <div style={{ display: "flex", fontSize: "24px", color: MUTED, letterSpacing: "0.06em" }}>Jev · Luna · eve</div>
-        <div style={{ display: "flex", fontSize: "24px", color: MUTED }}>clean-code-review.vercel.app</div>
+        <div
+          style={{
+            color: MUTED,
+            display: 'flex',
+            fontSize: '24px',
+            letterSpacing: '0.06em',
+          }}
+        >
+          Jev · Luna · eve
+        </div>
+        <div style={{ color: MUTED, display: 'flex', fontSize: '24px' }}>
+          clean-code-review.vercel.app
+        </div>
       </div>
     </div>,
     { ...size },
