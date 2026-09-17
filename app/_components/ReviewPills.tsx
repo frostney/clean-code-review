@@ -1,10 +1,9 @@
 'use client';
 
 import {
-  meanVerdict,
+  reviewVerdict,
   smellCount,
   smellLabel,
-  verdictOf,
   verdictScore,
 } from '@/lib/display';
 import type { ReviewState } from '@/lib/useReview';
@@ -18,10 +17,21 @@ import type { ReviewState } from '@/lib/useReview';
  * title, so the one line that carries a conclusion carries all of it: Luna's
  * decision, then Jev's verdict and count, then who wrote the prose.
  */
-export function ReviewPills({ review }: { review: ReviewState }) {
+export function ReviewPills({
+  judgeable = true,
+  review,
+}: {
+  /**
+   * There is code in this review. False for a change that is only
+   * documentation: nothing will ever be judged, so the pill must not pulse.
+   */
+  judgeable?: boolean;
+  review: ReviewState;
+}) {
   const judged = Object.values(review.judgments);
-  const verdict = verdictOf(
-    meanVerdict(judged.map((j) => verdictScore(j.answers))),
+  const verdict = reviewVerdict(
+    judged.map((j) => verdictScore(j.answers)),
+    judgeable,
   );
   const smells = judged.reduce((total, j) => total + smellCount(j.answers), 0);
 

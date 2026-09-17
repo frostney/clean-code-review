@@ -1,100 +1,145 @@
-/**
- * The languages the page can highlight, keyed the way shiki names them.
- * "text" is shiki's own no-op grammar: anything we cannot place renders as
- * plain monospace rather than as the wrong language.
- */
-const LANGS = [
-  'typescript',
-  'javascript',
-  'tsx',
-  'python',
-  'java',
-  'go',
-  'rust',
-  'json',
-  'yaml',
-  'css',
-  'html',
-  'diff',
-  'bash',
-] as const;
+import { type BundledLanguage, bundledLanguagesInfo } from 'shiki/langs';
 
 /**
- * Languages the page recognises and names, but does not colour: shiki's
- * JavaScript regex engine has no grammar loaded for them, so they render as
- * plain monospace. Naming one is still worth it — the chip says PHP rather
- * than Text, and a paste of one is recognised as code rather than prose.
+ * What language a file is written in, named the way shiki names it.
+ *
+ * The grammars are shiki's whole bundled registry — every language it ships,
+ * fetched on first use in `lib/highlight.ts` — so nothing here is a list of
+ * languages we support. What is written down is the one thing shiki does not
+ * know: which file extension means which of its languages. "text" is shiki's
+ * own no-op grammar and the answer whenever nothing places a file, so an
+ * unknown extension renders as plain monospace rather than as the wrong
+ * language.
  */
-const PLAIN_LANGS = ['php', 'swift'] as const;
+export type Lang = BundledLanguage | 'text';
 
-export type Lang =
-  | (typeof LANGS)[number]
-  | (typeof PLAIN_LANGS)[number]
-  | 'text';
+/** Every id and alias shiki ships, pointing at the name it prints for itself. */
+const NAME_BY_ID = new Map<string, string>(
+  bundledLanguagesInfo.flatMap((info) => [
+    [info.id, info.name] as [string, string],
+    ...(info.aliases ?? []).map((alias): [string, string] => [
+      alias,
+      info.name,
+    ]),
+  ]),
+);
 
+/** A language's own alternative names, for the fence names derived below. */
+const ALIASES_BY_ID = new Map<string, readonly string[]>(
+  bundledLanguagesInfo.map((info) => [info.id, info.aliases ?? []]),
+);
+
+/**
+ * Extension → language. The list is what a code review realistically meets
+ * rather than everything shiki can colour: a grammar nothing here points at is
+ * still in the registry, it just needs a file named for it to be reached.
+ */
 const BY_EXTENSION: Record<string, Lang> = {
-  // Code the highlighter has no grammar for. They are here so a path like
-  // `main.c` is recognised as a file rather than read as prose, and so a paste
-  // of one is named after its language; "text" is deliberate — a lie about the
-  // grammar would also be a lie on the chip, and plain monospace is neither.
-  c: 'text',
+  astro: 'astro',
+  bash: 'shellscript',
+  bat: 'bat',
+  c: 'c',
+  cc: 'cpp',
   cjs: 'javascript',
-  clj: 'text',
-  cpp: 'text',
-  cs: 'text',
+  clj: 'clojure',
+  cljs: 'clojure',
+  cmake: 'cmake',
+  cmd: 'bat',
+  cpp: 'cpp',
+  cs: 'csharp',
   css: 'css',
-  dart: 'text',
+  cts: 'typescript',
+  cxx: 'cpp',
+  dart: 'dart',
   diff: 'diff',
-  ex: 'text',
-  exs: 'text',
+  dockerfile: 'docker',
+  elm: 'elm',
+  erl: 'erlang',
+  ex: 'elixir',
+  exs: 'elixir',
+  fish: 'fish',
+  fs: 'fsharp',
+  fsi: 'fsharp',
+  fsx: 'fsharp',
   go: 'go',
-  h: 'text',
-  hpp: 'text',
-  hs: 'text',
+  gql: 'graphql',
+  gradle: 'groovy',
+  graphql: 'graphql',
+  groovy: 'groovy',
+  h: 'c',
+  hcl: 'hcl',
+  hh: 'cpp',
+  hpp: 'cpp',
+  hrl: 'erlang',
+  hs: 'haskell',
   html: 'html',
+  ini: 'ini',
   java: 'java',
+  jl: 'julia',
   js: 'javascript',
   json: 'json',
-  jsx: 'tsx',
-  kt: 'text',
-  lua: 'text',
-  m: 'text',
+  json5: 'json5',
+  jsonc: 'jsonc',
+  jsx: 'jsx',
+  kt: 'kotlin',
+  kts: 'kotlin',
+  less: 'less',
+  lua: 'lua',
+  m: 'objective-c',
+  makefile: 'make',
+  markdown: 'markdown',
+  md: 'markdown',
+  mdx: 'mdx',
   mjs: 'javascript',
+  mk: 'make',
+  ml: 'ocaml',
+  mli: 'ocaml',
+  mm: 'objective-cpp',
+  mts: 'typescript',
+  nim: 'nim',
+  nix: 'nix',
   patch: 'diff',
   php: 'php',
+  pl: 'perl',
+  pm: 'perl',
+  proto: 'proto',
+  ps1: 'powershell',
+  psm1: 'powershell',
   py: 'python',
-  r: 'text',
-  rb: 'text',
+  pyi: 'python',
+  r: 'r',
+  rb: 'ruby',
   rs: 'rust',
-  scala: 'text',
-  sh: 'bash',
-  sql: 'text',
+  sass: 'sass',
+  scala: 'scala',
+  scss: 'scss',
+  sh: 'shellscript',
+  sol: 'solidity',
+  sql: 'sql',
+  svelte: 'svelte',
   swift: 'swift',
+  tf: 'terraform',
+  tfvars: 'terraform',
+  toml: 'toml',
   ts: 'typescript',
   tsx: 'tsx',
+  vue: 'vue',
+  xml: 'xml',
   yaml: 'yaml',
   yml: 'yaml',
-  zig: 'text',
+  zig: 'zig',
+  zsh: 'shellscript',
 };
 
-/** What the chip on a file header says. */
-const LABELS: Record<Lang, string> = {
-  bash: 'Shell',
-  css: 'CSS',
-  diff: 'Diff',
-  go: 'Go',
-  html: 'HTML',
-  java: 'Java',
-  javascript: 'JavaScript',
-  json: 'JSON',
-  php: 'PHP',
-  python: 'Python',
-  rust: 'Rust',
-  swift: 'Swift',
-  text: 'Text',
-  tsx: 'TSX',
-  typescript: 'TypeScript',
-  yaml: 'YAML',
+/**
+ * The files a repository names rather than extends. `Dockerfile` and
+ * `Makefile` carry no extension at all, and both turn up in almost every
+ * change that touches how a project is built.
+ */
+const BY_FILENAME: Record<string, Lang> = {
+  dockerfile: 'docker',
+  gnumakefile: 'make',
+  makefile: 'make',
 };
 
 function extensionOf(path: string): string {
@@ -104,11 +149,13 @@ function extensionOf(path: string): string {
 }
 
 export function langOf(path: string): Lang {
-  return BY_EXTENSION[extensionOf(path)] ?? 'text';
+  const base = path.slice(path.lastIndexOf('/') + 1).toLowerCase();
+  return BY_EXTENSION[extensionOf(path)] ?? BY_FILENAME[base] ?? 'text';
 }
 
+/** What the chip on a file header says: shiki's own name for the grammar. */
 export function langLabel(lang: Lang): string {
-  return LABELS[lang];
+  return lang === 'text' ? 'Text' : (NAME_BY_ID.get(lang) ?? 'Text');
 }
 
 /** `src/billing/refund.ts` → `["src/billing/", "refund.ts"]`, for the two-tone path. */
@@ -117,38 +164,58 @@ export function splitPath(path: string): [string, string] {
   return cut < 0 ? ['', path] : [path.slice(0, cut + 1), path.slice(cut + 1)];
 }
 
+/** The shortest of a language's extensions, alphabetical between equals. */
+function shortestExtension(extensions: readonly string[]): string {
+  return extensions.reduce((best, extension) =>
+    extension.length < best.length ||
+    (extension.length === best.length && extension < best)
+      ? extension
+      : best,
+  );
+}
+
+/**
+ * Fence name → the extension a paste of that language is named after.
+ *
+ * Derived from the table above and shiki's own aliases rather than written a
+ * second time: ```` ```c++ ```` places a paste because `cpp` is in the table
+ * and `c++` is what shiki calls it, and a language added to the table is a
+ * fence name the same day.
+ */
+function fenceExtensions(): Record<string, string> {
+  const byLang = new Map<Lang, string[]>();
+  for (const [extension, lang] of Object.entries(BY_EXTENSION)) {
+    const known = byLang.get(lang);
+    if (known) {
+      known.push(extension);
+    } else {
+      byLang.set(lang, [extension]);
+    }
+  }
+  const names: Record<string, string> = {};
+  for (const [lang, extensions] of byLang) {
+    const extension = shortestExtension(extensions);
+    for (const name of [
+      lang,
+      ...(ALIASES_BY_ID.get(lang) ?? []),
+      ...extensions,
+    ]) {
+      names[name] = extension;
+    }
+  }
+  // The one fence name shiki does not carry as an alias of its own.
+  names.golang = 'go';
+  return names;
+}
+
+const EXTENSION_BY_FENCE = fenceExtensions();
+
 /** The extension a fence or shebang on the first line implies, if any. */
 export function extensionFromHint(firstLine: string): string | null {
   const line = firstLine.trim();
   const fence = /^```+\s*([A-Za-z0-9+#-]+)\s*$/.exec(line);
   if (fence) {
-    const named = fence[1].toLowerCase();
-    const byName: Record<string, string> = {
-      bash: 'sh',
-      css: 'css',
-      go: 'go',
-      golang: 'go',
-      html: 'html',
-      java: 'java',
-      javascript: 'js',
-      js: 'js',
-      json: 'json',
-      jsx: 'jsx',
-      php: 'php',
-      py: 'py',
-      python: 'py',
-      rs: 'rs',
-      rust: 'rs',
-      sh: 'sh',
-      shell: 'sh',
-      swift: 'swift',
-      ts: 'ts',
-      tsx: 'tsx',
-      typescript: 'ts',
-      yaml: 'yml',
-      yml: 'yml',
-    };
-    return byName[named] ?? null;
+    return EXTENSION_BY_FENCE[fence[1].toLowerCase()] ?? null;
   }
   if (/^#!.*\bpython[0-9.]*\b/.test(line)) {
     return 'py';

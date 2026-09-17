@@ -3,9 +3,10 @@
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
-import { GROUPS, questionsFor } from '@/agent/lib/questions';
+import { GROUPS, type Question, questionsFor } from '@/agent/lib/questions';
 import {
   type FileJudgment,
+  isProsePath,
   REVIEW_LIMITS,
   type ReviewFile,
 } from '@/agent/lib/review';
@@ -25,7 +26,7 @@ import {
 } from '@/lib/display';
 import { GroupIcon } from '@/lib/icons';
 import { langLabel, langOf, splitPath } from '@/lib/language';
-import { useChanges } from '@/lib/useChanges';
+import { type Changes, useChanges } from '@/lib/useChanges';
 
 import { Editor, PatchEditor } from './Editor';
 import { Meter } from './Meter';
@@ -97,6 +98,22 @@ export function LangChip({ path }: { path: string }) {
   );
 }
 
+/**
+ * What a prose file wears where a judged file wears its verdict. Grey and
+ * unbold enough not to read as an answer, because it is not one: a README is
+ * on the page for context, and none of the questions is asked about it.
+ */
+export function ProseChip({ className = '' }: { className?: string }) {
+  return (
+    <span
+      className={`shrink-0 rounded-full bg-track px-2 py-0.5 text-tiny text-muted ${className}`}
+      data-prose="1"
+    >
+      prose
+    </span>
+  );
+}
+
 /** "7 smells" beside the verdict, in the header and in the sidebar alike. */
 export function SmellCount({
   count,
@@ -143,7 +160,8 @@ function CardHeader({
   /** How sure Jev is of the verdict, when it said. */
   sure: number | null;
   truncated: boolean;
-  verdict: Verdict;
+  /** Null for a prose file: nothing judged it, so it wears a chip instead. */
+  verdict: Verdict | null;
 }) {
   return (
     <header
@@ -185,20 +203,142 @@ function CardHeader({
         </span>
       ) : null}
       <span className="ml-auto flex shrink-0 items-center gap-2">
-        {sure === null ? null : (
-          <span className="text-tiny text-muted">{pct(sure)} sure</span>
+        {verdict === null ? (
+          <ProseChip />
+        ) : (
+          <>
+            {sure === null ? null : (
+              <span className="text-tiny text-muted">{pct(sure)} sure</span>
+            )}
+            {answers ? <SmellCount count={smells} /> : null}
+            <span
+              className={`rounded-full px-2 py-0.5 text-tiny font-semibold ${verdict.className} ${
+                verdict.key === 'pending' ? 'soft-pulse' : ''
+              }`}
+              data-verdict={verdict.key}
+            >
+              {verdict.label}
+            </span>
+          </>
         )}
-        {answers ? <SmellCount count={smells} /> : null}
-        <span
-          className={`rounded-full px-2 py-0.5 text-tiny font-semibold ${verdict.className} ${
-            verdict.key === 'pending' ? 'soft-pulse' : ''
-          }`}
-          data-verdict={verdict.key}
-        >
-          {verdict.label}
-        </span>
       </span>
     </header>
+  );
+}
+
+/**
+ * The judged half of a card: Luna's paragraph about this file, and Jev's
+ * answers under a fold. Only a code file has one — prose is read, not judged,
+ * so a prose card ends at the text of the file.
+ */
+function Judgment({
+  answers,
+  changes,
+  findingsOpen,
+  onToggleFindings,
+  path,
+  pending,
+  questions,
+  summary,
+}: {
+  answers: Answers | undefined;
+  changes: Changes;
+  /** The meters are unfolded; folded, Luna's paragraph stands alone. */
+  findingsOpen: boolean;
+  onToggleFindings: () => void;
+  path: string;
+  pending: boolean;
+  /** The questions that were asked about this file, in book order. */
+  questions: readonly Question[];
+  summary: SummaryView;
+}) {
+  return (
+    <section className="@container/card border-t border-line">
+      <div className={`px-2 py-2 ${pending && !answers ? 'soft-pulse' : ''}`}>
+        <h3 className="mb-1.5 px-1.5 text-tiny font-semibold tracking-wider text-muted uppercase">
+          Review
+        </h3>
+        <div className="mb-2 px-1.5">
+          <ReviewNote
+            model={summary.model}
+            status={fileSummaryStatus(summary, path)}
+            text={summary.files[path]}
+            writing={isWriting(summary, path)}
+          />
+        </div>
+        <button
+          aria-expanded={findingsOpen}
+          className="mb-0.5 ml-1.5 flex min-h-10 cursor-pointer items-center gap-1 rounded pr-2 text-tiny font-semibold tracking-wider text-muted uppercase hover:text-ink lg:mb-1.5 lg:min-h-0 lg:pr-0"
+          data-toggle="findings"
+          onClick={onToggleFindings}
+          type="button"
+        >
+          {findingsOpen ? (
+            <ChevronDown aria-hidden="true" size={12} />
+          ) : (
+            <ChevronRight aria-hidden="true" size={12} />
+          )}
+          Findings
+        </button>
+        {findingsOpen ? (
+          <div className="grid grid-cols-1 items-start gap-x-5 @[800px]/card:grid-cols-2">
+            {GROUPS.map((group) => (
+              <FindingGroup
+                answers={answers}
+                changes={changes}
+                group={group}
+                key={group.id}
+                questions={questions}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * One chapter of the book, with the rows that were asked about this file. A
+ * chapter with nothing to ask is not a chapter with clean answers, so it is
+ * not shown at all.
+ */
+function FindingGroup({
+  answers,
+  changes,
+  group,
+  questions,
+}: {
+  answers: Answers | undefined;
+  changes: Changes;
+  group: (typeof GROUPS)[number];
+  questions: readonly Question[];
+}) {
+  const rows = questions.filter((q) => q.group === group.id);
+  if (!rows.length) {
+    return null;
+  }
+  return (
+    <div className="@container/group mb-2 last:mb-0">
+      <div className="mb-1 flex flex-wrap items-center gap-x-2 border-b border-line px-1.5 pb-1">
+        <GroupIcon group={group.id} />
+        <h4 className="text-tiny font-semibold tracking-wider text-muted uppercase">
+          {group.title}
+        </h4>
+        <span className="hidden truncate text-tiny text-muted/70 @[320px]/group:inline">
+          {group.blurb}
+        </span>
+      </div>
+      {rows.map((q) => (
+        <Meter
+          answer={answers?.[q.id]}
+          changed={changes.changed[q.id]}
+          delta={changes.delta[q.id]}
+          key={q.id}
+          meta={q}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -217,6 +357,11 @@ function CardHeader({
  * header — a twenty-four file review is a long page, and the header alone is
  * the verdict, the smell count and the name. Inside, "Findings" folds the
  * meters away and leaves Luna's paragraph, which is the same judgment in words.
+ *
+ * A prose file is the one card that is none of this. Clean Code is a book
+ * about code, so a README is read and not judged: no verdict, no review, no
+ * meters, and the text is shown rather than edited, since editing it would
+ * re-judge nothing.
  */
 export function FileCard({
   file,
@@ -244,6 +389,10 @@ export function FileCard({
   onChange: (next: string) => void;
 }) {
   const answers = judgment?.answers;
+  // Documentation, not code: shown with the review, never sent to either
+  // model. There is no verdict, no finding and nothing to edit, so the card
+  // below stops at the text of the file.
+  const prose = isProsePath(file.path);
   // Keyed on what actually decides the rows, so an edit does not hand the
   // change tracker a new question list on every keystroke.
   const questions = useMemo(
@@ -252,9 +401,11 @@ export function FileCard({
   );
   const changes = useChanges(answers ?? null, questions);
   const empty = !file.content.trim();
-  const smells = smellCount(answers);
-  const verdict = fileVerdict(verdictScore(answers), { empty, failed });
-  const sure = verdictConfidence(answers);
+  const smells = prose ? 0 : smellCount(answers);
+  const verdict = prose
+    ? null
+    : fileVerdict(verdictScore(answers), { empty, failed });
+  const sure = prose ? null : verdictConfidence(answers);
   const stats = useMemo(
     () => (file.patch ? diffStats(parsePatch(file.content)) : null),
     [file.patch, file.content],
@@ -291,86 +442,30 @@ export function FileCard({
             {file.patch ? (
               <PatchEditor
                 content={file.content}
-                onChange={onChange}
+                onChange={prose ? null : onChange}
                 path={file.path}
               />
             ) : (
               <Editor
                 content={file.content}
-                onChange={onChange}
+                onChange={prose ? null : onChange}
                 path={file.path}
               />
             )}
           </div>
 
-          <section className="@container/card border-t border-line">
-            <div
-              className={`px-2 py-2 ${pending && !answers ? 'soft-pulse' : ''}`}
-            >
-              <h3 className="mb-1.5 px-1.5 text-tiny font-semibold tracking-wider text-muted uppercase">
-                Review
-              </h3>
-              <div className="mb-2 px-1.5">
-                <ReviewNote
-                  model={summary.model}
-                  status={fileSummaryStatus(summary, file.path)}
-                  text={summary.files[file.path]}
-                  writing={isWriting(summary, file.path)}
-                />
-              </div>
-              <button
-                aria-expanded={findingsOpen}
-                className="mb-0.5 ml-1.5 flex min-h-10 cursor-pointer items-center gap-1 rounded pr-2 text-tiny font-semibold tracking-wider text-muted uppercase hover:text-ink lg:mb-1.5 lg:min-h-0 lg:pr-0"
-                data-toggle="findings"
-                onClick={() => setFindingsOpen((open) => !open)}
-                type="button"
-              >
-                {findingsOpen ? (
-                  <ChevronDown aria-hidden="true" size={12} />
-                ) : (
-                  <ChevronRight aria-hidden="true" size={12} />
-                )}
-                Findings
-              </button>
-              {findingsOpen ? (
-                <div className="grid grid-cols-1 items-start gap-x-5 @[800px]/card:grid-cols-2">
-                  {GROUPS.map((group) => {
-                    const rows = questions.filter((q) => q.group === group.id);
-                    // A chapter with nothing to ask about this file is not a
-                    // chapter with clean answers; it is not shown at all.
-                    if (!rows.length) {
-                      return null;
-                    }
-                    return (
-                      <div
-                        className="@container/group mb-2 last:mb-0"
-                        key={group.id}
-                      >
-                        <div className="mb-1 flex flex-wrap items-center gap-x-2 border-b border-line px-1.5 pb-1">
-                          <GroupIcon group={group.id} />
-                          <h4 className="text-tiny font-semibold tracking-wider text-muted uppercase">
-                            {group.title}
-                          </h4>
-                          <span className="hidden truncate text-tiny text-muted/70 @[320px]/group:inline">
-                            {group.blurb}
-                          </span>
-                        </div>
-                        {rows.map((q) => (
-                          <Meter
-                            answer={answers?.[q.id]}
-                            changed={changes.changed[q.id]}
-                            delta={changes.delta[q.id]}
-                            key={q.id}
-                            meta={q}
-                          />
-                        ))}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </div>
-          </section>
+          {prose ? null : (
+            <Judgment
+              answers={answers}
+              changes={changes}
+              findingsOpen={findingsOpen}
+              onToggleFindings={() => setFindingsOpen((open) => !open)}
+              path={file.path}
+              pending={pending}
+              questions={questions}
+              summary={summary}
+            />
+          )}
         </>
       )}
     </article>

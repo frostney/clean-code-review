@@ -2,9 +2,9 @@
 
 import { useLayoutEffect, useState } from 'react';
 
-import { REVIEW_LIMITS } from '@/agent/lib/review';
+import { isProsePath, REVIEW_LIMITS } from '@/agent/lib/review';
 import { isWriting, overallSummaryStatus } from '@/lib/display';
-import { skippedText } from '@/lib/open-review';
+import { cappedText, skippedText } from '@/lib/open-review';
 
 import { cardId, FileCard } from './FileCard';
 import { FileList } from './FileList';
@@ -38,6 +38,18 @@ export function ReviewBody() {
 
   /** Whether anything has been judged yet, which is what the review is of. */
   const judged = Object.keys(judge.judgments).length > 0;
+
+  // Is there anything here to judge at all? A documentation-only change has no
+  // code file in it, so no judging turn is ever started and nothing will ever
+  // arrive: the review has to say so rather than pulse "Judging…" for the life
+  // of the tab.
+  const judgeable = review.files.some(
+    (file) => !isProsePath(file.path) && file.content.trim(),
+  );
+
+  /** Every file here is writing: a docs-only pull request, or a paste of one. */
+  const proseOnly =
+    review.files.length > 0 && review.files.every((f) => isProsePath(f.path));
 
   // Folding is about this review's files; another example is a fresh page.
   // Reset during the render that carries the new review rather than in an
@@ -77,12 +89,17 @@ export function ReviewBody() {
       review.skipped,
       Math.max(review.skipped.length, review.skippedCount),
     ),
+    // Two caps, so two reasons a file is missing: code past the per-turn limit
+    // and prose past its own smaller one. The notice names both rather than
+    // implying every dropped file was code that lost on size.
     review.dropped
-      ? `${review.dropped} more ${review.dropped === 1 ? 'file' : 'files'} not judged (largest ${REVIEW_LIMITS.maxFiles} kept)`
+      ? `${review.dropped} more ${review.dropped === 1 ? 'file' : 'files'} not shown: the largest ${REVIEW_LIMITS.maxFiles} code files are judged and the first ${REVIEW_LIMITS.maxProseFiles} prose files are kept for context`
       : null,
   ]
     .filter(Boolean)
     .join(' · ');
+
+  const capped = cappedText(review);
 
   return (
     <>
@@ -92,7 +109,7 @@ export function ReviewBody() {
             decision={judge.summary.decision}
             error={judge.summary.error}
             model={judge.summary.model}
-            pills={<ReviewPills review={judge} />}
+            pills={<ReviewPills judgeable={judgeable} review={judge} />}
             status={overallSummaryStatus(judge.summary)}
             text={judge.summary.overall}
             tone="overall"
@@ -107,7 +124,7 @@ export function ReviewBody() {
             data-overall="placeholder"
           >
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <ReviewPills review={judge} />
+              <ReviewPills judgeable={judgeable} review={judge} />
             </div>
           </section>
         )}
@@ -118,13 +135,8 @@ export function ReviewBody() {
       {selectionNotice && (
         <Notice data-files="skipped">{selectionNotice}</Notice>
       )}
-      {review.totalFiles > review.files.length && (
-        <Notice data-files="capped">
-          Showing the first {review.files.length} of {review.totalFiles} files.
-          A review is judged in one turn, and one turn carries{' '}
-          {REVIEW_LIMITS.maxFiles}.
-        </Notice>
-      )}
+      {capped && <Notice data-files="capped">{capped}</Notice>}
+      {proseOnly ? <NothingToJudge /> : null}
       <Paste />
 
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
@@ -172,6 +184,20 @@ export function ReviewBody() {
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * A change with no code in it. Clean Code is a book about code, so there is
+ * nothing here any of the questions is about — and, unlike a review that is
+ * still running, nothing is coming either.
+ */
+function NothingToJudge() {
+  return (
+    <Notice data-files="prose-only">
+      Nothing to judge: every file in this review is prose. They are shown as
+      they were written, and neither model was asked about them.
+    </Notice>
   );
 }
 
