@@ -1,0 +1,251 @@
+import { type Question, SMELL_IDS } from "@/agent/lib/questions";
+import type { Answer, Answers } from "@/agent/lib/schema";
+import type { Summary } from "@/agent/lib/summary";
+
+export function pct(p: number): string {
+  return `${Math.round(p * 100)}%`;
+}
+
+/** The levels of a score question, in order. */
+export function levelsOf(meta: Question): readonly string[] {
+  return meta.type === "score" ? meta.levels : [];
+}
+
+/** The level a score landed closest to, so the number reads as a judgment. */
+function nearestLevel(levels: readonly string[], score: number): string {
+  const i = Math.max(0, Math.min(levels.length - 1, Math.round(score)));
+  return levels[i];
+}
+
+/** The answer, in one word. */
+export function headline(meta: Question, answer: Answer | undefined): string {
+  if (!answer) return "—";
+  if (answer.type === "noul") return answer.noul >= 0.5 ? "Yes" : "No";
+  // `choice` is no longer one of the question types; the payload schema still
+  // tolerates one, so print it rather than dropping the row.
+  if (answer.type === "choice") return answer.choice;
+  const levels = levelsOf(meta);
+  return levels.length ? nearestLevel(levels, answer.score) : answer.score.toFixed(2);
+}
+
+/**
+ * The number beside it, when there is one: a noul's probability of "yes", or
+ * Jev's own certainty for a score or a choice, which it does not always report.
+ */
+export function detail(answer: Answer | undefined): string {
+  if (!answer) return "";
+  if (answer.type === "noul") return pct(answer.noul);
+  return answer.confidence === undefined ? "" : `${pct(answer.confidence)} sure`;
+}
+
+/**
+ * Did this answer change enough to be worth the reader's attention? Thresholds
+ * are deliberately coarse: a bar that twitches on every pause teaches nothing,
+ * so we only flag flips and real moves.
+ */
+export function isMeaningful(prev: Answer | undefined, next: Answer | undefined): boolean {
+  if (!prev || !next || prev.type !== next.type) return false;
+  if (prev.type === "noul" && next.type === "noul") {
+    return (prev.noul >= 0.5) !== (next.noul >= 0.5) || Math.abs(prev.noul - next.noul) >= 0.15;
+  }
+  if (prev.type === "score" && next.type === "score") {
+    return Math.abs(prev.score - next.score) >= 0.75;
+  }
+  if (prev.type === "choice" && next.type === "choice") {
+    return prev.choice !== next.choice;
+  }
+  return false;
+}
+
+/** "45% → 73%" — the receipt for a flash. Empty when there's nothing to show. */
+export function deltaText(meta: Question, prev: Answer, next: Answer): string {
+  if (prev.type === "noul" && next.type === "noul") {
+    return `${pct(prev.noul)} → ${pct(next.noul)}`;
+  }
+  if (prev.type === "score" && next.type === "score") {
+    const levels = levelsOf(meta);
+    if (!levels.length) return "";
+    const from = nearestLevel(levels, prev.score);
+    const to = nearestLevel(levels, next.score);
+    return from === to ? "" : `${from} → ${to}`;
+  }
+  // A choice flip flashes the row but prints no delta: the new headline is
+  // already the whole story, and "Exceptions → Result types" would only repeat it.
+  return "";
+}
+
+/* ── Verdicts ───────────────────────────────────────────────────────────── */
+
+export type VerdictKey = "approved" | "tidy" | "changes" | "pending" | "failed" | "empty";
+
+export interface Verdict {
+  key: VerdictKey;
+  label: string;
+  /** Tailwind classes for the badge, from the palette in globals.css. */
+  className: string;
+}
+
+const VERDICTS: Record<VerdictKey, Verdict> = {
+  approved: { key: "approved", label: "Approved", className: "bg-ok-bg text-ok" },
+  tidy: { key: "tidy", label: "Needs tidying", className: "bg-warn-bg text-warn" },
+  changes: { key: "changes", label: "Changes requested", className: "bg-bad-bg text-bad" },
+  pending: { key: "pending", label: "Judging…", className: "bg-track text-muted" },
+  // Not judgments: the two ways a card ends up with no answers and no reason
+  // to keep pulsing. Grey, because neither is a verdict about the code.
+  failed: { key: "failed", label: "Could not judge", className: "bg-track text-muted" },
+  empty: { key: "empty", label: "Nothing to judge", className: "bg-track text-muted" },
+};
+
+/**
+ * The verdict question answers on the same five-level scale as every other
+ * score (0 = "Rewrite it", 4 = "Ship it"). These two cuts turn it into the
+ * three words a review ends with.
+ */
+export function verdictOf(score: number | null): Verdict {
+  if (score === null) return VERDICTS.pending;
+  if (score >= 3) return VERDICTS.approved;
+  if (score >= 1.5) return VERDICTS.tidy;
+  return VERDICTS.changes;
+}
+
+/**
+ * The badge a file wears: its verdict, unless there is nothing to judge or the
+ * judging did not come back — a card with no answer coming must not go on
+ * saying "Judging…".
+ */
+export function fileVerdict(score: number | null, state: { empty?: boolean; failed?: boolean }): Verdict {
+  if (state.empty) return VERDICTS.empty;
+  if (score === null && state.failed) return VERDICTS.failed;
+  return verdictOf(score);
+}
+
+/** The verdict score of one file, or null when Jev has not answered for it. */
+export function verdictScore(answers: Answers | undefined): number | null {
+  const answer = answers?.verdict;
+  return answer?.type === "score" ? answer.score : null;
+}
+
+/** Jev's own certainty about the verdict, when it reported one. */
+export function verdictConfidence(answers: Answers | undefined): number | null {
+  const answer = answers?.verdict;
+  return answer?.type === "score" && answer.confidence !== undefined ? answer.confidence : null;
+}
+
+/** The review's verdict: the mean of the files that have one. */
+export function meanVerdict(scores: readonly (number | null)[]): number | null {
+  const known = scores.filter((s): s is number => s !== null);
+  return known.length ? known.reduce((a, b) => a + b, 0) / known.length : null;
+}
+
+/** How full a verdict bar is: the score's position on its five levels. */
+export function verdictFill(score: number | null): number {
+  return score === null ? 0 : Math.max(0, Math.min(1, score / 4));
+}
+
+/* ── Smells ─────────────────────────────────────────────────────────────── */
+
+/** A yes/no row is a finding when Jev puts "yes" at even odds or better. */
+export function isFinding(answer: Answer | undefined): boolean {
+  return answer?.type === "noul" && answer.noul >= 0.5;
+}
+
+/** How many of the yes/no smell rows this file lit up. */
+export function smellCount(answers: Answers | undefined): number {
+  if (!answers) return 0;
+  let n = 0;
+  for (const id of SMELL_IDS) if (isFinding(answers[id])) n++;
+  return n;
+}
+
+/** "7 smells", "1 smell", "no smells" — the count as a reader would say it. */
+export function smellLabel(count: number): string {
+  if (count === 0) return "no smells";
+  return count === 1 ? "1 smell" : `${count} smells`;
+}
+
+/* ── Luna's review ──────────────────────────────────────────────────────── */
+
+export type Decision = Summary["decision"];
+
+/** The model behind the prose review, when a payload did not name one. */
+export { REVIEWER_MODEL } from "@/agent/lib/summary";
+
+export const DECISIONS: Record<Decision, { label: string; className: string }> = {
+  approve: { label: "Approve", className: "bg-ok-bg text-ok" },
+  comment: { label: "Comment", className: "bg-track text-muted" },
+  request_changes: { label: "Request changes", className: "bg-bad-bg text-bad" },
+};
+
+/**
+ * What one review block is doing right now.
+ *
+ *  - pending:   nothing written yet and something is (or will be) running
+ *  - streaming: the reviewer is writing this block and its text is arriving
+ *  - stale:     previous text on screen while a fresh review is being written
+ *  - ready:     settled text
+ *  - failed:    a review turn ended without text for this block
+ */
+export type SummaryStatus = "pending" | "streaming" | "ready" | "stale" | "failed";
+
+export interface SummaryView {
+  overall: string | null;
+  decision: Decision | null;
+  /** Path → that file's review. Kept for files a re-run did not replace. */
+  files: Record<string, string>;
+  /** A summarize turn is on the wire. */
+  running: boolean;
+  /** The reviewer's own text is arriving delta by delta; the fields above are a partial parse. */
+  streaming: boolean;
+  /** The block being written right now: "overall", a path, or null. A caret sits at its end. */
+  writing: string | null;
+  /** The paths the running turn will replace. */
+  replacing: Record<string, true>;
+  /** At least one summarize turn has settled for this review. */
+  settled: boolean;
+  /** The last summarize turn ended with nothing to show and none is queued. */
+  failed: boolean;
+  /** Why it ended that way, when the agent said: shown with the failure. */
+  error: string | null;
+  /** The model that wrote it, as the payload named it. */
+  model: string | null;
+  /** The review came back from the agent's one-hour cache rather than from Luna. */
+  cached: boolean;
+}
+
+export const NO_SUMMARY: SummaryView = {
+  overall: null,
+  decision: null,
+  files: {},
+  running: false,
+  streaming: false,
+  writing: null,
+  replacing: {},
+  settled: false,
+  failed: false,
+  error: null,
+  model: null,
+  cached: false,
+};
+
+export function overallSummaryStatus(summary: SummaryView): SummaryStatus {
+  if (summary.streaming) return summary.overall ? "streaming" : "pending";
+  if (summary.running) return summary.overall ? "stale" : "pending";
+  if (summary.overall) return "ready";
+  // A settled review that never wrote an overall will not write one later: the
+  // spinner would spin for good. The same rule the file blocks follow.
+  return summary.failed || summary.settled ? "failed" : "pending";
+}
+
+export function fileSummaryStatus(summary: SummaryView, path: string): SummaryStatus {
+  const text = summary.files[path];
+  if (summary.streaming && summary.replacing[path]) return text ? "streaming" : "pending";
+  if (summary.running && summary.replacing[path]) return text ? "stale" : "pending";
+  if (text) return "ready";
+  // A settled review that said nothing about this file will not say more later.
+  return summary.failed || summary.settled ? "failed" : "pending";
+}
+
+/** True while the caret belongs at the end of this block's text. */
+export function isWriting(summary: SummaryView, block: string): boolean {
+  return summary.streaming && summary.writing === block;
+}

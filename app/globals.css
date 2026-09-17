@@ -1,83 +1,37 @@
 @import "tailwindcss";
-@source "../node_modules/streamdown/dist/*.js";
 
+/* The whole palette. A code review is read, not admired: one ink, one muted
+   grey, one accent, three verdict colours, and the diff backgrounds. Light
+   only — there is no dark variant, because a review has one paper colour. */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
   --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+
+  --color-ink: #1f2328;
+  --color-muted: #656d76;
+  --color-line: #d0d7de;
+  --color-surface: #f6f8fa;
+  --color-accent: #0969da;
+  --color-track: #eaeef2;
+
+  --color-ok: #1a7f37;
+  --color-ok-bg: #dafbe1;
+  --color-warn: #9a6700;
+  --color-warn-bg: #fff8c5;
+  --color-bad: #cf222e;
+  --color-bad-bg: #ffebe9;
+
+  --color-add-bg: #e6ffec;
+  --color-add-gutter: #ccffd8;
+  --color-del-bg: #ffebe9;
+  --color-del-gutter: #ffcecb;
+  --color-hunk-bg: #ddf4ff;
 }
 
-:root {
-  color-scheme: light;
-  /* Soft neutral page with white elevated surfaces so cards/composer pop. */
-  --background: oklch(0.971 0 0);
-  --foreground: oklch(0.16 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.16 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.16 0 0);
-  --primary: oklch(0.19 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.94 0 0);
-  --secondary-foreground: oklch(0.19 0 0);
-  --muted: oklch(0.94 0 0);
-  --muted-foreground: oklch(0.6 0 0);
-  --accent: oklch(0.94 0 0);
-  --accent-foreground: oklch(0.19 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.916 0 0);
-  --input: oklch(0.916 0 0);
-  --ring: oklch(0.708 0 0);
-  --radius: 0.625rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-  }
-}
-
-* {
-  border-color: var(--border);
+html,
+body {
+  background: #fff;
+  color: #1f2328;
 }
 
 html {
@@ -89,12 +43,238 @@ html {
 body {
   min-height: 100%;
   margin: 0;
-  background: var(--background);
   font-family: var(--font-sans);
+  font-size: 14px;
 }
 
 button,
 input,
 textarea {
   font: inherit;
+}
+
+/* Every line of code on the page, in one place: the code view, the diff and
+   the editor overlay all have to agree to the pixel or the caret drifts. */
+.code-line {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 20px;
+  tab-size: 2;
+  -moz-tab-size: 2;
+  white-space: pre;
+}
+
+/* A row whose judgment moved lights up and fades back out. 900ms: long enough
+   to catch the eye mid-scan, short enough to be gone before the next turn. */
+@keyframes rowFlash {
+  from {
+    background: #fff8c5;
+  }
+  to {
+    background: transparent;
+  }
+}
+
+.row-flash {
+  animation: rowFlash 900ms ease-out;
+}
+
+/* A file the agent has not answered for yet. Slower and shallower than the
+   flash: this is "working", not "look here". */
+@keyframes softPulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+.soft-pulse {
+  animation: softPulse 1.4s ease-in-out infinite;
+}
+
+/* Where prose is being written but is not there yet. A ring rather than a
+   placeholder paragraph: the review is a few seconds away, not a few frames,
+   and a spinner says "working" without pretending to be text. */
+@keyframes spinnerTurn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border: 2px solid var(--color-track);
+  border-top-color: var(--color-accent);
+  border-radius: 9999px;
+  animation: spinnerTurn 700ms linear infinite;
+}
+
+/* The end of the sentence the reviewer is writing right now. A terminal caret,
+   because the text arrives a word at a time and the eye needs the edge. */
+@keyframes caretBlink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: var(--color-accent);
+  animation: caretBlink 1s step-end infinite;
+}
+
+/* The pull request's own description, rendered as GitHub-flavoured markdown.
+   Compact on purpose: this is the author speaking above the review, not the
+   review, so the rhythm is tighter than a document's and the headings are one
+   size up from the body rather than three. */
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown p,
+.markdown ul,
+.markdown ol,
+.markdown blockquote,
+.markdown pre,
+.markdown table {
+  margin: 0.5em 0;
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  margin: 0.9em 0 0.35em;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-ink);
+  line-height: 1.35;
+}
+
+.markdown h1,
+.markdown h2 {
+  padding-bottom: 0.2em;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.markdown ul,
+.markdown ol {
+  padding-left: 1.4em;
+}
+
+.markdown ul {
+  list-style: disc;
+}
+
+.markdown ol {
+  list-style: decimal;
+}
+
+.markdown li {
+  margin: 0.15em 0;
+}
+
+/* A GFM task list carries its own bullet — the checkbox. */
+.markdown li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -1.2em;
+}
+
+.markdown input[type="checkbox"] {
+  margin-right: 0.45em;
+  vertical-align: -0.1em;
+}
+
+.markdown a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--color-track);
+  color: var(--color-ink);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+
+.markdown pre {
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  padding: 0.5em 0.7em;
+  overflow-x: auto;
+}
+
+.markdown pre code {
+  background: none;
+  padding: 0;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.markdown blockquote {
+  border-left: 3px solid var(--color-line);
+  padding-left: 0.8em;
+  color: var(--color-muted);
+}
+
+.markdown table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.markdown th,
+.markdown td {
+  border: 1px solid var(--color-line);
+  padding: 0.25em 0.6em;
+  text-align: left;
+}
+
+.markdown th {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+.markdown hr {
+  margin: 0.8em 0;
+  border: 0;
+  border-top: 1px solid var(--color-line);
+}
+
+.markdown img {
+  max-width: 100%;
+  height: auto;
+}
+
+.markdown strong {
+  color: var(--color-ink);
+  font-weight: 600;
 }
