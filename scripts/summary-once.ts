@@ -4,7 +4,7 @@
  * the turn's own response, exactly as the page does. Prints timings, the
  * parsed result, and whether it came from the cache.
  *
- *   npx tsx scripts/summary-once.ts [host] [preset-index | github PR url]
+ *   bun run review [host] [preset-index | github PR url]
  */
 import { Client } from "eve/client";
 import { fetchPullRequest, selectReviewFiles } from "../agent/lib/github";

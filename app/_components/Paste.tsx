@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useReviewControls, useReviewView } from "./ReviewProvider";
 
 /**
  * The other way in: paste a diff, a file, or several files marked up with
@@ -12,16 +13,14 @@ import { useEffect, useRef, useState } from "react";
  * backdrop, its own Escape, and its own promise to hand focus back to whatever
  * opened it. The element stays mounted and is opened and closed imperatively,
  * which is what makes that promise keepable.
+ *
+ * It takes no props: whether it is open, what a judged paste does and where
+ * focus goes afterwards are all the review's, and reading them here is what
+ * lets the button that opens it stay a three-line island of its own.
  */
-export function Paste({
-  open,
-  onJudge,
-  onClose,
-}: {
-  open: boolean;
-  onJudge: (text: string) => void;
-  onClose: () => void;
-}) {
+export function Paste() {
+  const { pasting: open, stopPasting } = useReviewView();
+  const { judgePasted, pasteButtonRef } = useReviewControls();
   const [text, setText] = useState("");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -38,6 +37,14 @@ export function Paste({
       dialog.close();
     }
   }, [open]);
+
+  /** The dialog closed, whichever of its three ways was used. */
+  function onClose() {
+    stopPasting();
+    // A `<dialog>` hands focus back on its own, but only while it stays
+    // mounted and focused; saying so is what makes it certain.
+    pasteButtonRef.current?.focus();
+  }
 
   return (
     <dialog
@@ -87,7 +94,7 @@ export function Paste({
             // Close first: the review that opens behind it is the answer, and
             // a modal over it would only be in the way.
             dialogRef.current?.close();
-            onJudge(text);
+            judgePasted(text);
           }}
           className="cursor-pointer rounded-md bg-ink px-3 py-1 text-[13px] font-semibold text-white disabled:cursor-default disabled:opacity-40"
         >

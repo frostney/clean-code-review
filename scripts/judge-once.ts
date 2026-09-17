@@ -3,7 +3,7 @@
  * line per judged file — turn latency, tokens, cost, and headline answers.
  * One session, cleared between turns, exactly as the page does it.
  *
- *   npx tsx scripts/judge-once.ts [host]
+ *   bun run judge [host]
  *
  * Defaults to the local eve dev server (`npx eve dev --no-ui`).
  */

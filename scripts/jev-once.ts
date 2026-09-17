@@ -3,7 +3,7 @@
  * on the command line, and print the raw answers with timing. Proves gateway
  * access and shows what a single evaluation looks like.
  *
- *   npx tsx --env-file=.env.local scripts/jev-once.ts [preset-index | path/to/file]
+ *   bun run jev [preset-index | path/to/file]
  */
 import { readFileSync } from "node:fs";
 import { judgeFile } from "../agent/lib/judge";

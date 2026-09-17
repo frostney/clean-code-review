@@ -1,30 +1,18 @@
 import { fetchPullRequest } from "@/agent/lib/github";
+import { callerIp, throttled } from "@/lib/throttle";
 
 export const dynamic = "force-dynamic";
-
-/** Best-effort brake, like the session one: this instance's memory only. */
-const REQUESTS_PER_WINDOW = 20;
-const WINDOW_MS = 10 * 60 * 1_000;
-const seen = new Map<string, number[]>();
-
-function throttled(request: Request): boolean {
-  const ip = request.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip");
-  if (!ip) return false;
-  const now = Date.now();
-  const recent = (seen.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
-  if (recent.length >= REQUESTS_PER_WINDOW) return true;
-  recent.push(now);
-  seen.set(ip, recent);
-  if (seen.size > 10_000) seen.clear();
-  return false;
-}
 
 /**
  * GET /api/github-pr?url=https://github.com/owner/repo/pull/123
  * Returns { url, title, body, diff, changedFiles } for a public pull request.
+ *
+ * The page itself no longer calls this — it uses the `openPullRequest` server
+ * action, which renders the description on the server — but scripts and other
+ * callers still do, so it stays, sharing the action's rate limit.
  */
 export async function GET(request: Request) {
-  if (throttled(request)) return Response.json({ error: "Too many pull requests fetched from this address. Try again in a few minutes." }, { status: 429 });
+  if (throttled(callerIp(request.headers))) return Response.json({ error: "Too many pull requests fetched from this address. Try again in a few minutes." }, { status: 429 });
   const url = new URL(request.url).searchParams.get("url") ?? "";
   try {
     const pr = await fetchPullRequest(url);

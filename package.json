@@ -1,5 +1,5 @@
 {
-  "name": "JevCleanCodeCheck",
+  "name": "clean-code-review",
   "version": "0.0.0",
   "type": "module",
   "imports": {
@@ -7,12 +7,15 @@
     "#evals/*": "./evals/*"
   },
   "scripts": {
-    "build": "next build",
-    "deploy": "eve deploy",
     "dev": "next dev",
-    "eval": "eve eval",
+    "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit -p tsconfig.json",
+    "judge": "bun scripts/judge-once.ts",
+    "review": "bun scripts/summary-once.ts",
+    "jev": "bun --env-file=.env.local scripts/jev-once.ts",
+    "deploy": "eve deploy",
+    "eval": "eve eval",
     "build:eve": "eve build",
     "dev:eve": "eve dev",
     "start:eve": "eve start"
@@ -38,11 +41,11 @@
     "@types/node": "24.x",
     "@types/react": "19.2.15",
     "@types/react-dom": "19.2.3",
-    "tsx": "^4.23.13",
     "typescript": "6.0.3",
     "vercel": "^59.20.0"
   },
   "engines": {
     "node": "24.x"
-  }
+  },
+  "packageManager": "bun@1.4.0"
 }
