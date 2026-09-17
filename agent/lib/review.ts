@@ -6,7 +6,10 @@ import type { Answers } from './schema';
  * each one. Jev sees one file at a time; the fan-out is the runtime's job.
  */
 export interface ReviewFile {
-  /** Repo-relative path; doubles as the file's key in the result. */
+  /**
+   * Repo-relative path; doubles as the file's key in the result. A prose path
+   * (see `isProsePath`) is shown with the review but never judged.
+   */
   path: string;
   /** The file's text, or its unified-diff hunks when `patch` is true. */
   content: string;
@@ -43,6 +46,8 @@ export interface ReviewResult {
 export const REVIEW_LIMITS = {
   maxCharsPerFile: 16_000,
   maxFiles: 24,
+  /** Prose files shown alongside a review. They are not judged, so they do not count against `maxFiles`. */
+  maxProseFiles: 10,
 } as const;
 
 /** Trim an input to the caps rather than refusing it. */
@@ -60,7 +65,19 @@ export function clampReview(input: ReviewInput): ReviewInput {
 const BINARY_EXT =
   /\.(svg|png|jpe?g|gif|ico|bmp|tiff?|webp|avif|heic|psd|ai|eps|mp3|mp4|mov|avi|webm|wav|ogg|flac|woff2?|ttf|otf|eot|pdf|zip|gz|tgz|bz2|xz|7z|rar|jar|war|wasm|exe|dll|so|dylib|o|a|class|pyc|pyo|bin|dat|db|sqlite|parquet)$/i;
 
-/** Lockfiles, minified bundles, generated code, snapshots, env files: not worth judging. Markdown and text are judged like any other file. */
+/**
+ * Documentation and other writing. Clean Code is a book about code, so a
+ * README or a changelog is shown for context — a pull request is read with its
+ * description — but none of the questions is asked about it.
+ */
+const PROSE_EXT = /\.(md|mdx|markdown|mkd|txt|text|rst|adoc|asciidoc|org)$/i;
+
+/** True for a file that is writing rather than code: shown, never judged. */
+export function isProsePath(path: string): boolean {
+  return PROSE_EXT.test(path);
+}
+
+/** Lockfiles, minified bundles, generated code, snapshots, env files: not worth judging. */
 const GENERATED_PATH =
   /(^|\/)(package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|Cargo\.lock|poetry\.lock|Gemfile\.lock|composer\.lock|go\.sum)$|\.min\.(js|css)$|\.(snap|map|lock|csv)$|(^|\/)(dist|build|vendor|node_modules|__generated__|generated|\.changeset)\/|(^|\/)\.env(\.|$)/i;
 
@@ -118,19 +135,32 @@ export function skipReason(file: {
   return null;
 }
 
-/** Split a file list into what gets judged and what does not, with reasons. */
+/**
+ * Split a file list three ways: what gets judged, the prose that is shown
+ * beside it, and what is left out altogether, with reasons. Every way in —
+ * paste, example, pull request, a JSON turn from any other client — goes
+ * through this one partition, so no path is judged on one side and not the
+ * other.
+ */
 export function partitionJudgeable<T extends { path: string; content: string }>(
   files: readonly T[],
-): { judgeable: T[]; skipped: { path: string; reason: SkipReason }[] } {
+): {
+  judgeable: T[];
+  prose: T[];
+  skipped: { path: string; reason: SkipReason }[];
+} {
   const judgeable: T[] = [];
+  const prose: T[] = [];
   const skipped: { path: string; reason: SkipReason }[] = [];
   for (const f of files) {
     const reason = skipReason(f);
     if (reason) {
       skipped.push({ path: f.path, reason });
+    } else if (isProsePath(f.path)) {
+      prose.push(f);
     } else {
       judgeable.push(f);
     }
   }
-  return { judgeable, skipped };
+  return { judgeable, prose, skipped };
 }

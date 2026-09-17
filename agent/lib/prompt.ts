@@ -21,6 +21,7 @@ export function buildInstructions(): string {
     "This agent's model is Jev, TypeSafe AI's System One evaluation model, reached through the Vercel AI Gateway.",
     `A judge turn's user message is a review: up to ${REVIEW_LIMITS.maxFiles} files (whole files or per-file unified-diff hunks) of at most ${REVIEW_LIMITS.maxCharsPerFile} characters each, as JSON, or a single code snippet or diff as plain text. Every file is evaluated against the ${QUESTIONS.length} Clean Code questions in agent/lib/questions.ts in parallel, and the reply is a JSON payload of calibrated answers per file.`,
     "A summarize turn's user message carries the files and their judgments; the reviewer (Luna, through the AI Gateway) writes the prose review from those findings in parallel parts, and the turn streams the combined text as its reply.",
+    'Images, binaries and generated files are left out on both sides, and prose files (markdown, text, reStructuredText, AsciiDoc) are shown with a review but never judged: the questions are about code.',
     'There is no conversation beyond these two turn kinds.',
     '',
     ...QUESTIONS.map((q) => `- ${q.id} (${q.type}): ${q.label}`),
@@ -151,6 +152,7 @@ function readFiles(raw: unknown): ReviewFile[] | null {
       ...(f.patch === true ? { patch: true } : {}),
     }));
   // The page applies the same rule; this is the guard for any other caller.
+  // Prose the page shows beside the code is not judged, so it is not read.
   return partitionJudgeable(files).judgeable;
 }
 

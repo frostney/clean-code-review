@@ -3,10 +3,12 @@ import type { ReactNode } from 'react';
 import { filesFromPatch } from '@/agent/lib/patch';
 import type { Preset } from '@/agent/lib/presets';
 import {
+  isProsePath,
   partitionJudgeable,
   REVIEW_LIMITS,
   type ReviewFile,
   type SkipReason,
+  skipReason,
 } from '@/agent/lib/review';
 import { selectReviewFiles } from '@/agent/lib/select';
 import type { PullRequestPayload } from '@/app/actions';
@@ -52,10 +54,12 @@ export interface OpenReview {
 }
 
 /**
- * What a review actually shows. Only what will be judged makes it onto the
- * page: unique paths, because every key, edit and judgment is by path; at most
- * `maxFiles`, because a turn judges no more than that; and no more characters
- * per file than one is judged on, so the code on screen is the code Jev read.
+ * What a review actually shows. Only what will be judged, and the prose that
+ * goes with it, makes it onto the page: unique paths, because every key, edit
+ * and judgment is by path; at most `maxFiles` code files, because a turn
+ * judges no more than that, plus at most `maxProseFiles` of writing, which is
+ * shown for context and never sent; and no more characters per file than one
+ * is judged on, so the code on screen is the code Jev read.
  *
  * A patch file is split here as well: the headers are the file's name in
  * machine and are not on screen, so they are not edited either — they wait in
@@ -69,11 +73,12 @@ export interface OpenReview {
 function opened(
   files: readonly ReviewFile[],
 ): Omit<OpenReview, 'id' | 'preset' | 'pr' | 'dropped' | 'skippedCount'> {
-  const { judgeable, skipped } = partitionJudgeable(files);
-  const unique = uniquePaths(judgeable);
+  const { skipped } = partitionJudgeable(files);
+  // Code and prose in the order they came: a README pasted first stays first.
+  const unique = uniquePaths(files.filter((f) => skipReason(f) === null));
   const truncated: Record<string, true> = {};
   const headers: Record<string, string> = {};
-  const kept = unique.slice(0, REVIEW_LIMITS.maxFiles).map((file) => {
+  const kept = withinCaps(unique).map((file) => {
     let shown = file;
     if (shown.content.length > REVIEW_LIMITS.maxCharsPerFile) {
       truncated[shown.path] = true;
@@ -98,6 +103,25 @@ function opened(
     totalFiles: unique.length,
     truncated,
   };
+}
+
+/**
+ * The first `maxFiles` code files and the first `maxProseFiles` prose files,
+ * in the order they came. Two caps rather than one, so a change that is
+ * mostly documentation does not spend the review's turn on files nobody is
+ * asked about.
+ */
+function withinCaps(files: readonly ReviewFile[]): ReviewFile[] {
+  let code = 0;
+  let prose = 0;
+  return files.filter((file) => {
+    if (isProsePath(file.path)) {
+      prose++;
+      return prose <= REVIEW_LIMITS.maxProseFiles;
+    }
+    code++;
+    return code <= REVIEW_LIMITS.maxFiles;
+  });
 }
 
 export function fromPreset(preset: Preset, id: string): OpenReview {

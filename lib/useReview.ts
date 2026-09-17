@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { judgeMessage, summarizeMessage } from '@/agent/lib/prompt';
 import {
   type FileJudgment,
+  isProsePath,
   REVIEW_LIMITS,
   type ReviewFile,
   type ReviewResult,
@@ -1321,10 +1322,14 @@ export function useReview(
       }
     }
     setState((s) => withoutStalePaths(s, stale));
-    // An empty file is not a question; Jev is never asked about one.
+    // An empty file is not a question; Jev is never asked about one. Nor is
+    // prose: a README is on the page for reading, not for judging.
     const dirty = files
       .filter(
-        (f) => f.content.trim() && sentRef.current.get(f.path) !== f.content,
+        (f) =>
+          !isProsePath(f.path) &&
+          f.content.trim() &&
+          sentRef.current.get(f.path) !== f.content,
       )
       .slice(0, REVIEW_LIMITS.maxFiles);
     if (!dirty.length) {
