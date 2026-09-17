@@ -6,6 +6,7 @@ import { PresetChip } from "./PresetChip";
 import { PullRequestField } from "./PullRequestField";
 import { PullRequestSummary } from "./PullRequestSummary";
 import { ReviewStats } from "./ReviewStats";
+import { ThemeToggle } from "./ThemeToggle";
 
 /**
  * The top of a review: what is being reviewed, and how it got here.
@@ -32,19 +33,34 @@ export function Hero() {
   return (
     <header className="mb-4">
       <h1 className="sr-only">{SITE.name}</h1>
-      <PullRequestField
-        duck={
-          <Image
-            src="/ducky-64.png"
-            width={32}
-            height={32}
-            alt=""
-            priority
-            className="h-7 w-7 shrink-0 sm:h-8 sm:w-8"
+      {/* The theme switch lives up here, in plain sight: beside the field where
+          there is room, and at the end of the hint line on phones, where the
+          field needs every pixel for the repository name. */}
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <PullRequestField
+            duck={
+              <Image
+                src="/ducky-64.png"
+                width={32}
+                height={32}
+                alt=""
+                priority
+                className="h-7 w-7 shrink-0 sm:h-8 sm:w-8"
+              />
+            }
           />
-        }
-      />
-      <p className="mt-1.5 text-tiny text-muted">public repositories only</p>
+        </div>
+        <div className="hidden h-11 shrink-0 items-center sm:flex">
+          <ThemeToggle />
+        </div>
+      </div>
+      <div className="mt-1.5 flex items-center justify-between gap-2">
+        <p className="text-tiny text-muted">public repositories only</p>
+        <div className="flex sm:hidden">
+          <ThemeToggle />
+        </div>
+      </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <span className="text-[12px] text-muted">Or choose one of the examples:</span>

@@ -1,5 +1,4 @@
 import { SITE } from "@/lib/site";
-import { ThemeToggle } from "./ThemeToggle";
 import { TokenCount } from "./TokenCount";
 
 /**
@@ -25,7 +24,6 @@ export function Footer() {
         view source
       </a>
       <span className="ml-auto">
-        <ThemeToggle />
       </span>
     </footer>
   );
