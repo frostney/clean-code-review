@@ -128,8 +128,8 @@ export function Hero() {
         <div className={COLUMN}>
           <div className="mt-1.5 flex items-center justify-between gap-2">
             <p className="text-tiny text-muted">
-              Public repositories only. Every file is judged against Clean Code,
-              then reviewed.
+              Public repositories only. Every code file is judged against Clean
+              Code, then reviewed.
             </p>
             <div className="flex shrink-0 sm:hidden">
               <ThemeToggle />
