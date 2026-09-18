@@ -95,10 +95,17 @@ export function proxy(request: NextRequest): NextResponse {
 export const config = {
   matcher: [
     // Everything that is a page: not eve's agent endpoints, not the route
-    // handlers, not the build output, and not a file served for its own bytes.
-    // The extension list is anchored at the end of the path so that a
-    // repository with a dot in its name still reaches the permalink route.
+    // handlers, not the build output, not Vercel's own `/_vercel/` paths
+    // (Speed Insights' default script and beacon), and not a file served for
+    // its own bytes. The extension list is anchored at the end of the path so
+    // that a repository with a dot in its name still reaches the permalink
+    // route.
+    // On Vercel, Speed Insights may instead use a per-build path of its own,
+    // `/<unique-path>/script.js` and `/<unique-path>/vitals`. The script is a
+    // `.js` and excluded below; the beacon cannot be named here, and needs no
+    // exclusion: it is a POST whose Accept is not `text/markdown`, so it goes
+    // through untouched on the `NextResponse.next()` branch above.
     // biome-ignore lint/security/noSecrets: a path matcher, not a credential
-    '/((?!api/|_next/|_eve_internal/|eve/|.*\\.(?:png|jpg|jpeg|gif|webp|avif|svg|ico|txt|xml|json|webmanifest|css|js|map)$).*)',
+    '/((?!api/|_next/|_vercel/|_eve_internal/|eve/|.*\\.(?:png|jpg|jpeg|gif|webp|avif|svg|ico|txt|xml|json|webmanifest|css|js|map)$).*)',
   ],
 };

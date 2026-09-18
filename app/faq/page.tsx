@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 
+import { DuckTransition } from '@/app/_components/Duck';
 import { Faq } from '@/app/_components/Faq';
 import { Footer } from '@/app/_components/Footer';
 import { FAQ } from '@/lib/faq';
@@ -76,19 +77,23 @@ export default function FaqPage() {
       <div className="mx-auto max-w-[1280px] px-4 py-5">
         <main>
           <header className="mb-4">
-            <Link
-              aria-label={`Back to ${SITE.name}`}
-              className="inline-flex rounded-md"
-              href="/"
-            >
-              <Image
-                alt=""
-                height={DUCK_PX}
-                priority={true}
-                src="/ducky-64.png"
-                width={DUCK_PX}
-              />
-            </Link>
+            {/* The landing page's duck, arriving: a link here from `/`, or this
+                one back to it, morphs one bird into the other. */}
+            <DuckTransition>
+              <Link
+                aria-label={`Back to ${SITE.name}`}
+                className="inline-flex rounded-md"
+                href="/"
+              >
+                <Image
+                  alt=""
+                  height={DUCK_PX}
+                  priority={true}
+                  src="/ducky-64.png"
+                  width={DUCK_PX}
+                />
+              </Link>
+            </DuckTransition>
             <h1 className="mt-3 text-[16px] font-semibold text-ink lg:text-[14px]">
               {TITLE}
             </h1>

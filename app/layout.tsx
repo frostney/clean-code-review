@@ -1,7 +1,9 @@
+import { SpeedInsights } from '@vercel/speed-insights/next';
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import type { ReactNode } from 'react';
 
+import { ThemeToggle } from '@/app/_components/ThemeToggle';
 import { SITE } from '@/lib/site';
 import { THEME_SCRIPT } from '@/lib/theme';
 import './globals.css';
@@ -90,7 +92,29 @@ export default function RootLayout({
           // biome-ignore lint/security/noDangerouslySetInnerHtml: an inline script is the only thing that runs before paint, and every byte of it is written in lib/theme.ts
           dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }}
         />
+        {/* The theme switch, once for every page, in the top right corner of
+            the page's own column. It is laid over the page rather than given a
+            row, because on every page but one that corner is empty: the
+            landing duck is centred, the questions and the privacy page open on
+            the left, and from `lg` up the code view's field is four fifths
+            wide. The one exception is the code view below `lg`, where the
+            field takes the whole line, and `Shell` makes room above it there
+            rather than let this take width from the address.
+            It comes first in the document, so it is the first stop on the way
+            down the page with Tab, which is where it is on screen. The strip is
+            click-through; only the button takes the pointer. */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10">
+          <div className="mx-auto flex max-w-[1280px] justify-end px-4 lg:pt-5">
+            <div className="-mr-3 pointer-events-auto flex h-10 items-center lg:-mr-2.5 lg:h-9">
+              <ThemeToggle />
+            </div>
+          </div>
+        </div>
         {children}
+        {/* Page-speed measurement, and nothing else: what it sends and where
+            is on /privacy. It renders nothing, and its script is added from
+            the browser once the page has hydrated. */}
+        <SpeedInsights />
       </body>
     </html>
   );

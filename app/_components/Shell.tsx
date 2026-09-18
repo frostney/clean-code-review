@@ -34,7 +34,14 @@ export function Shell({
       initialError={error}
       initialPullRequest={pullRequest}
     >
-      <div className="mx-auto max-w-[1280px] px-4 py-5">
+      {/* The theme switch sits over the top right corner of every page (the
+          root layout puts it there). Below `lg` the code view is the one page
+          with something in that corner, since the address takes the whole
+          line, so it starts the page one switch lower: 40px, the switch's own
+          height, which is the least that keeps the two from touching without
+          taking any width from the address. The home duck's presence is how
+          the markup already says a review is open, as in `Hero`. */}
+      <div className="mx-auto max-w-[1280px] px-4 py-5 max-lg:has-[[data-duck=home]]:pt-10">
         <main>
           {/* The page's own name. On screen it is the browser tab and the
               first field's placeholder; a document still needs a heading. */}

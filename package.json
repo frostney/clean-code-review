@@ -3,6 +3,7 @@
     "@modelcontextprotocol/server": "2.0.0",
     "@tailwindcss/postcss": "4.3.0",
     "@vercel/functions": "^3.9.8",
+    "@vercel/speed-insights": "2.0.0",
     "ai": "^7.0.93",
     "eve": "^0.57.0",
     "lucide-react": "^1.47.0",

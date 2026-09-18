@@ -19,6 +19,9 @@
   /* What a modal dims the page with. Ink would invert with the theme; the
      scrim is a shadow in both, so it is a colour of its own. */
   --color-scrim: var(--scrim);
+  /* The duck's speech bubble, which is always the page's opposite. */
+  --color-bubble: var(--bubble);
+  --color-bubble-ink: var(--bubble-ink);
 
   --color-ok: var(--ok);
   --color-ok-bg: var(--ok-bg);
@@ -47,6 +50,8 @@
   --accent: #0969da;
   --track: #eaeef2;
   --scrim: rgb(31 35 40 / 0.4);
+  --bubble: #000000;
+  --bubble-ink: #ffffff;
 
   --ok: #1a7f37;
   --ok-bg: #dafbe1;
@@ -78,6 +83,8 @@
   --dark-accent: #58a6ff;
   --dark-track: #21262d;
   --dark-scrim: rgb(1 4 9 / 0.7);
+  --dark-bubble: #ffffff;
+  --dark-bubble-ink: #000000;
 
   --dark-ok: #3fb950;
   --dark-ok-bg: #12261d;
@@ -104,6 +111,8 @@
   --accent: var(--dark-accent);
   --track: var(--dark-track);
   --scrim: var(--dark-scrim);
+  --bubble: var(--dark-bubble);
+  --bubble-ink: var(--dark-bubble-ink);
 
   --ok: var(--dark-ok);
   --ok-bg: var(--dark-ok-bg);
@@ -133,6 +142,8 @@
     --accent: var(--dark-accent);
     --track: var(--dark-track);
     --scrim: var(--dark-scrim);
+    --bubble: var(--dark-bubble);
+    --bubble-ink: var(--dark-bubble-ink);
 
     --ok: var(--dark-ok);
     --ok-bg: var(--dark-ok-bg);
@@ -214,6 +225,27 @@ textarea {
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation-duration: 180ms;
+}
+
+/* The same bird on the way to the questions and back. A client-side
+   navigation between `/` and `/faq` is a React transition, and React's own
+   `<ViewTransition name="duck">` on both ducks (`Duck.tsx`, `app/faq/page.tsx`)
+   is what names them for it; the page around them crosses over under the root
+   rule above. Nothing else is named, so nothing else moves.
+   Reduced motion is honoured here rather than in code, because React starts
+   these transitions itself: every part of one ends as soon as it starts, and
+   the new page is simply there. The landing and code-view switch never starts
+   one for that reader at all (`lib/view-transition.ts`). The root is named as
+   well as matched by `*` because the rule above names it, and a name is more
+   specific than a wildcard: this one comes later and wins by order. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
 }
 
 /* A row whose judgment moved lights up and fades back out. 900ms: long enough

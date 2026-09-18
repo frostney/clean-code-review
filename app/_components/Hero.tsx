@@ -9,7 +9,6 @@ import { PresetChip } from './PresetChip';
 import { PullRequestField } from './PullRequestField';
 import { PullRequestSummary } from './PullRequestSummary';
 import { ReviewStats } from './ReviewStats';
-import { ThemeToggle } from './ThemeToggle';
 import {
   TutorialBubble,
   TutorialDuck,
@@ -82,44 +81,27 @@ export function Hero() {
             <TutorialDuckPicture />
           </TutorialDuck>
         </LandingDuck>
-        {/* The theme switch lives up here, in plain sight: beside the field where
-            there is room, and at the end of the hint line on phones, where the
-            field needs every pixel for the repository name. From `lg` up it is
-            pinned to the page's right edge in both views rather than riding at
-            the end of the landing column: that way it does not jump when a
-            review opens, and the column stays centred on the duck instead of
-            being pushed off-centre by a button. */}
-        <div className="relative flex items-start gap-2">
-          <div className={`min-w-0 flex-1 lg:flex-none ${COLUMN}`}>
-            <PullRequestField
-              duck={
-                <HomeDuck>
-                  <Image
-                    alt=""
-                    className="h-7 w-7 shrink-0 sm:h-8 sm:w-8"
-                    height={32}
-                    priority={true}
-                    src="/ducky-64.png"
-                    width={32}
-                  />
-                </HomeDuck>
-              }
-            />
-          </div>
-          <div className="hidden h-11 shrink-0 items-center sm:flex lg:absolute lg:top-0 lg:right-0">
-            <ThemeToggle />
-          </div>
+        <div className={`min-w-0 ${COLUMN}`}>
+          <PullRequestField
+            duck={
+              <HomeDuck>
+                <Image
+                  alt=""
+                  className="h-7 w-7 shrink-0 sm:h-8 sm:w-8"
+                  height={32}
+                  priority={true}
+                  src="/ducky-64.png"
+                  width={32}
+                />
+              </HomeDuck>
+            }
+          />
         </div>
         <div className={COLUMN}>
-          <div className="mt-1.5 flex items-center justify-between gap-2">
-            <p className="text-tiny text-muted">
-              Public repositories only. The code is judged file by file against
-              Clean Code, then reviewed.
-            </p>
-            <div className="flex shrink-0 sm:hidden">
-              <ThemeToggle />
-            </div>
-          </div>
+          <p className="mt-1.5 text-tiny text-muted">
+            Public repositories only. The code is judged file by file against
+            Clean Code, then reviewed.
+          </p>
 
           <TutorialSpotlight>
             <div className="flex flex-wrap items-center gap-2">
