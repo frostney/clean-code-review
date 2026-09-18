@@ -14,7 +14,12 @@ import type { Answer, Answers } from './schema';
 /** Jev, TypeSafe AI's System One model, as the AI Gateway lists it. */
 export const JEV = 'typesafe-ai/jev';
 
-/** Jev answers in well under a second; a call past this is stuck, not slow. */
+/**
+ * Jev answers in well under a second; a call past this is stuck, not slow.
+ * The limit is per attempt, which is why the SDK's own retries are off below:
+ * with them on, its backoff sleeps counted against these twelve seconds, and
+ * the timeout firing mid-sleep looked exactly like the caller cancelling.
+ */
 const CALL_TIMEOUT_MS = 12_000;
 
 /** The rows for one file, in the shape `evaluate` takes. TypeSafe's "noul" is the SDK's "boolean". */
@@ -41,6 +46,8 @@ function evaluateFile(file: ReviewFile, signal?: AbortSignal) {
     abortSignal: signal
       ? AbortSignal.any([signal, AbortSignal.timeout(CALL_TIMEOUT_MS)])
       : AbortSignal.timeout(CALL_TIMEOUT_MS),
+    // One retry, ours, each attempt with its own twelve seconds.
+    maxRetries: 0,
     model: JEV,
     questions: questionsOf(questionsFor(file)),
     // For a diff, Jev gets the code as it reads after the change (what a
@@ -56,16 +63,21 @@ function evaluateFile(file: ReviewFile, signal?: AbortSignal) {
   });
 }
 
-/** A timed-out or failed call gets exactly one more try; a cancelled one does not. */
-async function withOneRetry<T>(call: () => Promise<T>): Promise<T> {
+/**
+ * A timed-out or failed call gets exactly one more try; a cancelled one does
+ * not. Which it was is decided by asking the caller's signal, never by the
+ * error's shape: our own timeout and the caller's cancel both surface as an
+ * `AbortError`, and telling them apart by their `cause` let a stuck call pass
+ * for a cancelled one and leave its file unjudged.
+ */
+async function withOneRetry<T>(
+  call: () => Promise<T>,
+  signal?: AbortSignal,
+): Promise<T> {
   try {
     return await call();
   } catch (err) {
-    if (
-      err instanceof Error &&
-      err.name === 'AbortError' &&
-      !(err as { cause?: unknown }).cause
-    ) {
+    if (signal?.aborted) {
       throw err;
     }
     return await call();
@@ -87,7 +99,7 @@ export async function judgeFile(file: ReviewFile, signal?: AbortSignal) {
     v: QUESTIONS_VERSION,
   });
   const { value, hit } = await cached(key, 'jev-judgment', async () =>
-    toJudgment(await withOneRetry(() => evaluateFile(file, signal))),
+    toJudgment(await withOneRetry(() => evaluateFile(file, signal), signal)),
   );
   const judgment: FileJudgment = {
     ...value.judgment,
