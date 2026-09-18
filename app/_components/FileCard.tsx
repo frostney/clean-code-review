@@ -32,9 +32,14 @@ import { Editor, PatchEditor } from './Editor';
 import { Meter } from './Meter';
 import { ReviewNote } from './ReviewNote';
 
-/** The anchor the sidebar scrolls to. */
-export function cardId(path: string): string {
-  return `file-${encodeURIComponent(path)}`;
+/**
+ * The anchor the sidebar scrolls to: the card's place in the review, not its
+ * path. Speed Insights names the element a layout shift or a slow tap
+ * happened on by the nearest id, and a path would say which file, and so
+ * which repository, was being read.
+ */
+export function cardId(index: number): string {
+  return `file-${index}`;
 }
 
 /**
@@ -366,6 +371,7 @@ function FindingGroup({
  */
 export function FileCard({
   file,
+  index,
   judgment,
   pending,
   failed,
@@ -377,6 +383,8 @@ export function FileCard({
   onChange,
 }: {
   file: ReviewFile;
+  /** Where the card stands in the review, which is its anchor. */
+  index: number;
   judgment: FileJudgment | undefined;
   pending: boolean;
   /** Jev was asked about this file twice and answered for neither. */
@@ -425,7 +433,7 @@ export function FileCard({
       className="overflow-hidden rounded-md border border-line scroll-mt-4"
       data-collapsed={collapsed ? '1' : undefined}
       data-file={file.path}
-      id={cardId(file.path)}
+      id={cardId(index)}
     >
       <CardHeader
         answers={answers}

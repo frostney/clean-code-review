@@ -29,9 +29,10 @@ export function ReviewBody() {
   /** Paths folded to their header. Per review: another example starts open. */
   const [collapsed, setCollapsed] = useState<Record<string, true>>({});
   /** The card the sidebar was last clicked for, scrolled to once it is open. */
-  const [revealed, setRevealed] = useState<{ path: string; at: number } | null>(
-    null,
-  );
+  const [revealed, setRevealed] = useState<{
+    index: number;
+    at: number;
+  } | null>(null);
 
   const allCollapsed =
     review.files.length > 0 &&
@@ -75,7 +76,7 @@ export function ReviewBody() {
       return;
     }
     document
-      .getElementById(cardId(revealed.path))
+      .getElementById(cardId(revealed.index))
       ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [revealed]);
 
@@ -89,7 +90,10 @@ export function ReviewBody() {
       delete next[path];
       return next;
     });
-    setRevealed({ at: Date.now(), path });
+    setRevealed({
+      at: Date.now(),
+      index: review.files.findIndex((f) => f.path === path),
+    });
   }
 
   const selectionNotice = [
@@ -164,11 +168,12 @@ export function ReviewBody() {
           paused={judge.pausedFiles}
         />
         <div className="flex min-w-0 flex-col gap-4">
-          {review.files.map((file) => (
+          {review.files.map((file, index) => (
             <FileCard
               collapsed={collapsed[file.path] === true}
               failed={judge.failed[file.path] === true}
               file={file}
+              index={index}
               judgment={judge.judgments[file.path]}
               key={file.path}
               onChange={(content) => edit(file.path, content)}

@@ -14,6 +14,8 @@ import {
   useState,
 } from 'react';
 
+import { SITE } from '@/lib/site';
+
 import { useReviewView } from './ReviewProvider';
 
 /**
@@ -46,9 +48,24 @@ const pixel = Press_Start_2P({
  * prose in a change is shown and never judged, and a pull request can hold
  * more code files than one review takes. "File by file" is true of all of it. The copy is plain ASCII
  * on purpose, since the pixel face below carries Latin and nothing more.
+ *
+ * The book's name is a link, in the bubble's own ink and underlined, so it
+ * reads on the black bubble and the white one alike without a colour of its
+ * own. The FAQ names the author in full; the greeting can be friendlier.
  */
-const LINES: readonly string[] = [
-  "Hello. This page reviews code against Robert C. Martin's Clean Code.",
+const LINES: readonly ReactNode[] = [
+  <>
+    Quack. This page reviews code against Uncle Bob's{' '}
+    <a
+      className="rounded-sm text-bubble-ink underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-bubble-ink focus-visible:outline-offset-2"
+      href={SITE.book}
+      rel="noopener noreferrer"
+      target="_blank"
+    >
+      Clean Code
+    </a>
+    .
+  </>,
   'The code is judged file by file against the book, then reviewed in plain words.',
   'Try one of the examples below, or paste a pull request address into the field.',
 ];
@@ -57,7 +74,7 @@ const LAST = LINES.length - 1;
 
 interface Tutorial {
   /** The sentence on screen, or null once the greeting is over. */
-  line: string | null;
+  line: ReactNode | null;
   /**
    * The greeting is running and has another sentence after this one, so there
    * is something for a click to do. False the moment it is over, which is what
