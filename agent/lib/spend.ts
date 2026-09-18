@@ -433,6 +433,15 @@ export function createSpendBrake(
     let read = await readOnce(hourKey, dayKey);
     if (read.written === null) {
       await probe(read);
+      // The first batch may have failed as a whole, a timeout returning null
+      // for every key, so its missing counters say nothing. Now that the store
+      // has shown it answers, read them again rather than count from zero.
+      read = await readOnce(hourKey, dayKey);
+      if (read.written === null) {
+        throw new Unreadable(
+          `${writtenKey} read as missing after it was written`,
+        );
+      }
     } else if (lostCounter(read)) {
       // A counter this scope wrote reads as missing: ask once more.
       read = await readOnce(hourKey, dayKey);
