@@ -179,12 +179,6 @@ body {
   font-size: 14px;
 }
 
-button,
-input,
-textarea {
-  font: inherit;
-}
-
 /* The page's smallest type, in one place. Eleven pixels is a desk-monitor
    size: held at arm's length on a phone it is below what the screen renders
    honestly, so the floor is twelve until the layout is wide enough to have
