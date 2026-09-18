@@ -114,7 +114,6 @@ export function useReviewView(): ReviewView {
  * "no files" is a state each of those parts already understands.
  */
 const NO_REVIEW: OpenReview = {
-  dropped: 0,
   files: [],
   headers: {},
   id: 'landing',
@@ -122,7 +121,7 @@ const NO_REVIEW: OpenReview = {
   preset: null,
   skipped: [],
   skippedCount: 0,
-  totalFiles: 0,
+  total: { code: 0, prose: 0 },
   truncated: {},
 };
 
