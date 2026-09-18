@@ -18,18 +18,35 @@ import { useReviewControls, useReviewView } from './ReviewProvider';
  */
 const SAME_DUCK = { viewTransitionName: 'duck' } as const;
 
-/** The mascot on the landing view: nothing is open, so nothing to click. */
-export function LandingDuck({ children }: { children: ReactNode }) {
+/**
+ * The mascot on the landing view, and whatever it is saying.
+ *
+ * `aside` is a slot beside the bird rather than part of it: the duck keeps the
+ * `view-transition-name`, so anything inside that span is snapshotted and
+ * morphed with it when a review opens, and a speech bubble is not the duck.
+ * The column is what puts the bubble under the duck on a phone, where there is
+ * no room beside it; from `lg` up the bubble takes itself out of the flow and
+ * stands to the right, which is why the duck does not move when it appears.
+ */
+export function LandingDuck({
+  aside,
+  children,
+}: {
+  /** Rendered after the duck, in the same positioning context. */
+  aside?: ReactNode;
+  children: ReactNode;
+}) {
   const { open } = useReviewView();
   if (open) {
     return null;
   }
 
   return (
-    <div className="mt-4 mb-5 flex justify-center sm:mt-8 sm:mb-6">
+    <div className="relative mt-4 mb-5 flex flex-col items-center sm:mt-8 sm:mb-6">
       <span className="inline-flex" style={SAME_DUCK}>
         {children}
       </span>
+      {aside}
     </div>
   );
 }

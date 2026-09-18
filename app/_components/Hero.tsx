@@ -10,6 +10,12 @@ import { PullRequestField } from './PullRequestField';
 import { PullRequestSummary } from './PullRequestSummary';
 import { ReviewStats } from './ReviewStats';
 import { ThemeToggle } from './ThemeToggle';
+import {
+  TutorialBubble,
+  TutorialDuck,
+  TutorialProvider,
+  TutorialSpotlight,
+} from './Tutorial';
 
 /**
  * The top of a review: what is being reviewed, and how it got here.
@@ -27,6 +33,10 @@ import { ThemeToggle } from './ThemeToggle';
  * open, and shrunk to a mark at the left of it once something is. The name is
  * carried by a heading only a crawler and a screen reader ever meet.
  *
+ * What the duck says is the other half of that introduction, and it spans the
+ * duck and the examples it ends by pointing at, which is why the greeting's
+ * state is provided around both of them here rather than inside either.
+ *
  * Everything here that is the same on every visit is rendered on the server:
  * the duck, the line the chips sit on, the labels in them, the hint under the
  * field. The browser gets the three small pieces that answer a click and the
@@ -36,65 +46,85 @@ export function Hero() {
   return (
     <header className="mb-4">
       <h1 className="sr-only">{SITE.name}</h1>
-      {/* The landing view's duck: above the field and centred rather than
-          beside it, because at 375px there is no "beside" — the address needs
-          the whole line — and a mascot on the centre line is what a door looks
-          like at any width. It is gone the moment a review opens, and the one
-          in the field is the same bird arriving. */}
-      <LandingDuck>
-        <Image
-          alt=""
-          className="h-40 w-40 sm:h-56 sm:w-56"
-          height={256}
-          priority={true}
-          src="/ducky-256.png"
-          width={256}
-        />
-      </LandingDuck>
-      {/* The theme switch lives up here, in plain sight: beside the field where
-          there is room, and at the end of the hint line on phones, where the
-          field needs every pixel for the repository name. */}
-      <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <PullRequestField
-            duck={
-              <HomeDuck>
-                <Image
-                  alt=""
-                  className="h-7 w-7 shrink-0 sm:h-8 sm:w-8"
-                  height={32}
-                  priority={true}
-                  src="/ducky-64.png"
-                  width={32}
-                />
-              </HomeDuck>
-            }
-          />
+      <TutorialProvider>
+        {/* The landing view's duck: above the field and centred rather than
+            beside it, because at 375px there is no "beside" — the address needs
+            the whole line — and a mascot on the centre line is what a door looks
+            like at any width. It is gone the moment a review opens, and the one
+            in the field is the same bird arriving.
+            It winks. The optimiser rewrites an image and drops every frame but
+            the first, so this one is handed to the browser exactly as it sits
+            on disk; `picture` is what swaps in the matching still for a reader
+            who has asked for less motion, with no script and no second
+            download. The box is larger than the still duck's was because this
+            artwork carries more padding inside its canvas: at 176 and 248 the
+            bird itself measures what it measured at 160 and 224. */}
+        <LandingDuck aside={<TutorialBubble />}>
+          <TutorialDuck>
+            <picture>
+              <source
+                media="(prefers-reduced-motion: reduce)"
+                srcSet="/ducky-still.png"
+              />
+              <Image
+                alt=""
+                className="h-44 w-44 sm:h-62 sm:w-62"
+                height={480}
+                loading="eager"
+                src="/ducky-wink.webp"
+                unoptimized={true}
+                width={480}
+              />
+            </picture>
+          </TutorialDuck>
+        </LandingDuck>
+        {/* The theme switch lives up here, in plain sight: beside the field where
+            there is room, and at the end of the hint line on phones, where the
+            field needs every pixel for the repository name. */}
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <PullRequestField
+              duck={
+                <HomeDuck>
+                  <Image
+                    alt=""
+                    className="h-7 w-7 shrink-0 sm:h-8 sm:w-8"
+                    height={32}
+                    priority={true}
+                    src="/ducky-64.png"
+                    width={32}
+                  />
+                </HomeDuck>
+              }
+            />
+          </div>
+          <div className="hidden h-11 shrink-0 items-center sm:flex">
+            <ThemeToggle />
+          </div>
         </div>
-        <div className="hidden h-11 shrink-0 items-center sm:flex">
-          <ThemeToggle />
+        <div className="mt-1.5 flex items-center justify-between gap-2">
+          <p className="text-tiny text-muted">public repositories only</p>
+          <div className="flex sm:hidden">
+            <ThemeToggle />
+          </div>
         </div>
-      </div>
-      <div className="mt-1.5 flex items-center justify-between gap-2">
-        <p className="text-tiny text-muted">public repositories only</p>
-        <div className="flex sm:hidden">
-          <ThemeToggle />
-        </div>
-      </div>
 
-      <div className="mt-2 flex flex-wrap items-center gap-2">
-        <span className="text-[12px] text-muted">
-          Or choose one of the examples:
-        </span>
-        {PRESETS.map((preset) => (
-          <PresetChip
-            blurb={preset.blurb}
-            key={preset.label}
-            label={preset.label}
-          />
-        ))}
-        <PasteButton />
-      </div>
+        <TutorialSpotlight>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[12px] text-muted">
+              Or choose one of the examples:
+            </span>
+            {PRESETS.map((preset) => (
+              <PresetChip
+                blurb={preset.blurb}
+                key={preset.label}
+                label={preset.label}
+              />
+            ))}
+            <PasteButton />
+          </div>
+        </TutorialSpotlight>
+      </TutorialProvider>
 
       <PullRequestSummary />
       <ReviewStats />
