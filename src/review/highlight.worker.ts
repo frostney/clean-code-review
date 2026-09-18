@@ -30,6 +30,11 @@ function highlighter(): Promise<HighlighterCore> {
       import('shiki/themes/github-dark.mjs'),
     ],
   });
+  // A highlighter that would not start — a theme chunk that did not arrive —
+  // is tried again by the next file rather than remembered as broken.
+  ready.catch(() => {
+    ready = null;
+  });
   return ready;
 }
 
@@ -95,6 +100,18 @@ async function tokenise({
 
 self.addEventListener('message', (event: MessageEvent<HighlightRequest>) => {
   const request = event.data;
+  // Shiki itself would not start: the page's failure to handle, with its
+  // pause before the next try, not a file to leave plain for good.
+  highlighter().then(
+    () => answer(request),
+    () => {
+      const reply: HighlightReply = { id: request.id, unavailable: true };
+      self.postMessage(reply);
+    },
+  );
+});
+
+function answer(request: HighlightRequest) {
   tokenise(request).then(
     (lines) => {
       const reply: HighlightReply = { id: request.id, lines };
@@ -106,4 +123,4 @@ self.addEventListener('message', (event: MessageEvent<HighlightRequest>) => {
       self.postMessage(reply);
     },
   );
-});
+}

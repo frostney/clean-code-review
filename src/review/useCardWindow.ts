@@ -162,13 +162,21 @@ export function useCardWindow(reviewId: string, paths: readonly string[]) {
   const pathsNowRef = useRef(paths);
   pathsNowRef.current = paths;
   useEffect(() => {
-    // The physical F key, whatever the layout calls it, with the platform's
-    // own modifier: Cmd on a Mac, where Ctrl+F moves the caret in an editor,
-    // and Ctrl everywhere else.
+    // The key the layout calls F — Dvorak's F is where QWERTY has Y — or,
+    // on a layout whose letters are not Latin, the key where F would be, as
+    // the browser itself reads the shortcut. With the platform's own
+    // modifier: Cmd on a Mac, where Ctrl+F moves the caret in an editor, and
+    // Ctrl everywhere else.
     const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+    function isF(event: KeyboardEvent): boolean {
+      return (
+        event.key.toLowerCase() === 'f' ||
+        (!/^[a-z]$/i.test(event.key) && event.code === 'KeyF')
+      );
+    }
     function onKeyDown(event: KeyboardEvent) {
       const modifier = mac ? event.metaKey : event.ctrlKey;
-      if (!modifier || event.altKey || event.code !== 'KeyF') {
+      if (!modifier || event.altKey || !isF(event)) {
         return;
       }
       const all = pathsNowRef.current;

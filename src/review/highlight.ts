@@ -46,11 +46,13 @@ export interface HighlightRequest {
 /**
  * What comes back: first word that the file is being tokenised — everything
  * it needed has been fetched — then its lines, or null when its grammar would
- * not load.
+ * not load. `unavailable` is the worker saying shiki itself would not start,
+ * which is the worker's failure rather than the file's.
  */
 export type HighlightReply =
   | { id: number; tokenising: true }
-  | { id: number; lines: Token[][] | null };
+  | { id: number; lines: Token[][] | null }
+  | { id: number; unavailable: true };
 
 interface Job {
   request: HighlightRequest;
@@ -59,7 +61,19 @@ interface Job {
   done: (lines: Token[][] | null) => void;
   /** The card no longer wants it. */
   cancelled: boolean;
+  /** The worker has everything it needs and is inside shiki with this file. */
+  tokenising: boolean;
+  /** Workers that failed to get this file started. */
+  loadFailures: number;
 }
+
+/**
+ * How many workers may fail to get one file started before the file is left
+ * plain. A worker that cannot load is the connection's fault, not the
+ * file's, but a file that is always the one in hand when it happens should
+ * not keep the rest of the queue waiting on it.
+ */
+const LOAD_TRIES = 3;
 
 /**
  * The one worker every card shares, and the queue in front of it.
@@ -137,15 +151,23 @@ function drop(w: Worker) {
 }
 
 /**
- * The worker failed to start or died: wait, then try a new one. The file it
- * had goes back to the front of the queue, since the worker never got to it.
+ * The worker failed before it got to the file it had — it would not load, or
+ * shiki, the themes or the grammar would not arrive: wait, then try a new
+ * one. The file goes to the back of the queue, so the files behind it are not
+ * held up by it, and after `LOAD_TRIES` workers it is left plain.
  */
 function failed(w: Worker) {
   drop(w);
-  if (running && !running.cancelled) {
-    queue.unshift(running);
-  }
+  const job = running;
   running = null;
+  if (job && !job.cancelled) {
+    job.loadFailures += 1;
+    if (job.loadFailures < LOAD_TRIES) {
+      queue.push(job);
+    } else {
+      job.done(null);
+    }
+  }
   stopWatchdog();
   failures += 1;
   retryAt =
@@ -186,9 +208,14 @@ function spawn(): Worker | null {
     if (worker !== w || running?.request.id !== reply.id) {
       return;
     }
-    failures = 0;
     stopWatchdog();
+    if ('unavailable' in reply) {
+      failed(w);
+      return;
+    }
+    failures = 0;
     if ('tokenising' in reply) {
+      running.tokenising = true;
       watchdog = setTimeout(() => timedOut(w), FILE_TIMEOUT_MS);
       return;
     }
@@ -197,8 +224,17 @@ function spawn(): Worker | null {
     job.done(reply.lines);
     pump();
   });
+  // A worker that dies inside shiki died of the file it had — out of memory
+  // on a pathological file, say — and would die of it again: that file is
+  // treated as one that ran out of time. Dying any earlier is the worker's.
   w.addEventListener('error', () => {
-    if (worker === w) {
+    if (worker !== w) {
+      return;
+    }
+    stopWatchdog();
+    if (running?.tokenising) {
+      timedOut(w);
+    } else {
       failed(w);
     }
   });
@@ -206,9 +242,11 @@ function spawn(): Worker | null {
 }
 
 /**
- * The file in the worker ran out of time. The worker cannot be interrupted
- * mid-file, so it is thrown away with the grammars it had loaded; the file
- * stays plain, and the next one goes to a new worker.
+ * The file in the worker ran out of time, or took the worker down with it.
+ * The worker cannot be interrupted mid-file, so it is thrown away with the
+ * grammars it had loaded; the file stays plain — and so does any copy of it
+ * still waiting, a theme switch's say — and the next one goes to a new
+ * worker.
  */
 function timedOut(w: Worker) {
   watchdog = null;
@@ -216,11 +254,16 @@ function timedOut(w: Worker) {
   running = null;
   drop(w);
   if (job) {
-    hung.push(hungKey(job.request));
+    const key = hungKey(job.request);
+    hung.push(key);
     if (hung.length > HUNG_KEEP) {
       hung.shift();
     }
     job.done(null);
+    for (const waiting of queue.filter((q) => hungKey(q.request) === key)) {
+      queue.splice(queue.indexOf(waiting), 1);
+      waiting.done(null);
+    }
   }
   pump();
 }
@@ -259,7 +302,9 @@ function highlight(
   const job: Job = {
     cancelled: false,
     done,
+    loadFailures: 0,
     request: { code, id: nextId++, lang, theme },
+    tokenising: false,
     urgent,
   };
   if (hung.includes(hungKey(job.request))) {
