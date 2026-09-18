@@ -1,9 +1,13 @@
 import type { ReactNode } from 'react';
 
 import { QUESTION_COUNT, SMELL_IDS } from '@/agent/lib/questions';
-import { REVIEW_LIMITS } from '@/agent/lib/review';
+import { REVIEW_LIMITS, SESSION_COST_CAP_USD } from '@/agent/lib/review';
 import { REVIEWER_MODEL } from '@/agent/lib/summary';
 import { SITE } from '@/lib/site';
+
+/** The session cap, in the unit the answer says it in. */
+const CENTS_PER_DOLLAR = 100;
+const CAP_CENTS = SESSION_COST_CAP_USD * CENTS_PER_DOLLAR;
 
 /** How many of the answers are scales rather than probabilities. */
 const SCALE_COUNT = QUESTION_COUNT - SMELL_IDS.length;
@@ -31,11 +35,11 @@ export const FAQ: readonly { q: string; a: string }[] = [
     q: 'Is my code stored?',
   },
   {
-    a: `A pull request arrives as one unified diff and is split per file. The question set adjusts: a diff is also asked whether it leaves the code worse than it found it, and only a test file is asked whether its tests are clear. One turn judges at most ${REVIEW_LIMITS.maxFiles} code files, the most-changed first, and shows up to ${REVIEW_LIMITS.maxProseFiles} prose files beside them. Images, lockfiles and generated files are skipped, and only public repositories can be fetched.`,
+    a: `A pull request arrives as one unified diff and is split per file. The question set adjusts: a diff is also asked whether it leaves the code worse than it found it, and only a test file is asked whether its tests are clear. One turn judges at most ${REVIEW_LIMITS.maxFiles} code files, whichever changed most, and shows up to ${REVIEW_LIMITS.maxProseFiles} prose files beside them. Images, lockfiles and generated files are skipped, and only public repositories can be fetched.`,
     q: 'How is a pull request judged?',
   },
   {
-    a: `Yes, and there is nothing to sign in to. Each browser tab carries its own cap of 50 cents of model time, so a single session cannot run up a bill; when a tab reaches the cap the meters keep their last answers and a reload starts a fresh session. The source is MIT-licensed, at ${SITE.source.replace(/^https?:\/\//, '')}.`,
+    a: `Yes, and there is nothing to sign in to. Each browser tab carries its own cap of ${CAP_CENTS} cents of model time, so a single session cannot run up a bill; when a tab reaches the cap the meters keep their last answers and a reload starts a fresh session. The source is MIT-licensed, at ${SITE.source.replace(/^https?:\/\//, '')}.`,
     q: 'Is it free?',
   },
 ];
@@ -49,7 +53,7 @@ export const FAQ: readonly { q: string; a: string }[] = [
 const LINKS: readonly { href: string; text: string }[] = [
   {
     href: 'https://en.wikipedia.org/wiki/Robert_C._Martin',
-    text: "Robert C. Martin's Clean Code",
+    text: 'Robert C. Martin',
   },
   { href: SITE.jev, text: "Jev, TypeSafe's evaluation model" },
 ];

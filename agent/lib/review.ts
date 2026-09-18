@@ -42,6 +42,13 @@ export interface ReviewResult {
   usage: Usage;
 }
 
+/**
+ * What one browser tab may spend on models before the agent stops and asks.
+ * It lives here rather than in `agent/agent.ts` because the page quotes it:
+ * importing the agent into a React component would pull eve's runtime with it.
+ */
+export const SESSION_COST_CAP_USD = 0.5;
+
 /** Caps enforced on both ends. Jev is fast and cheap; these keep one review to one screen of results. */
 export const REVIEW_LIMITS = {
   maxCharsPerFile: 16_000,

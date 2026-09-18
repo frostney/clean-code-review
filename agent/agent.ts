@@ -1,6 +1,7 @@
 import { defineAgent } from 'eve';
 
 import { jev } from './lib/jev-model';
+import { SESSION_COST_CAP_USD } from './lib/review';
 
 /** A tab that closes without saying so should not hold a session for long. */
 const ONE_HOUR_MS = 3_600_000;
@@ -22,7 +23,7 @@ export default defineAgent({
     // Each browser tab is one durable session. The gateway reports every
     // call's cost — Jev's fractions of a cent and the reviewer subagent's
     // cents — so this caps what a single tab can spend.
-    maxTokenCostUsdPerSession: 0.5,
+    maxTokenCostUsdPerSession: SESSION_COST_CAP_USD,
     sessionTimeoutMs: ONE_HOUR_MS,
   },
   model: jev(),

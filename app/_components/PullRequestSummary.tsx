@@ -25,13 +25,29 @@ import { useReviewView } from './ReviewProvider';
 /** The avatar, in CSS pixels: the cap height of the line it sits on. */
 const AVATAR_PX = 20;
 
+/** Twice the drawn size, for a screen with twice the pixels. */
+const AVATAR_REQUEST_PX = AVATAR_PX * 2;
+
+/** GitHub sizes an avatar itself when asked: `?s=40` on a URL that already has a query. */
+function sized(src: string): string {
+  return `${src}${src.includes('?') ? '&' : '?'}s=${AVATAR_REQUEST_PX}`;
+}
+
 /**
  * The owner's avatar, or nothing.
  *
  * GitHub may have sent none, and the one it sent may not load: a blocked
  * request, an offline reader, an account deleted since. The line it sits on
  * already names the owner, so a failure takes the image away rather than
- * leaving a broken frame in the header.
+ * leaving a broken frame in the header. One project's avatar failing says
+ * nothing about the next one's, so the caller keys this on the address and a
+ * new project starts with a fresh attempt.
+ *
+ * `unoptimized`, and GitHub asked for the size instead. Routing it through
+ * Next's optimiser would mean allowing that host in `next.config.ts`, and
+ * `/_next/image` answers anyone: an allowed host with no path is a public
+ * image proxy, billed per transformation, on a site whose whole design is a
+ * spending cap. GitHub resizes its own avatars for free.
  */
 function OwnerAvatar({ src }: { src: string }) {
   const [broken, setBroken] = useState(false);
@@ -46,7 +62,8 @@ function OwnerAvatar({ src }: { src: string }) {
       data-pr-avatar={true}
       height={AVATAR_PX}
       onError={() => setBroken(true)}
-      src={src}
+      src={sized(src)}
+      unoptimized={true}
       width={AVATAR_PX}
     />
   );
@@ -71,7 +88,7 @@ export function PullRequestSummary() {
             className="flex min-w-0 items-center gap-1.5 font-mono text-[12px] text-muted"
             data-pr-name={true}
           >
-            <OwnerAvatar src={pr.avatarUrl} />
+            <OwnerAvatar key={pr.avatarUrl} src={pr.avatarUrl} />
             <span className="truncate">
               {address.repo}#{address.number}
             </span>

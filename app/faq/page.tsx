@@ -26,17 +26,32 @@ const TITLE = 'Questions about this page';
 const DESCRIPTION = `What ${SITE.name} judges, which models do the work, what happens to your code and what it costs.`;
 
 /**
- * No Open Graph or Twitter block here on purpose. A route that writes one
- * replaces the layout's whole block, and the card `app/opengraph-image.tsx`
- * draws goes with it; leaving both unwritten is what keeps the site's own
- * image on a link to this page. Unlike a permalinked review, these answers are
- * this site's to be found by, so this one is indexed.
+ * The Open Graph block names this page rather than the site. A route that
+ * writes one replaces the layout's whole block, so everything the card needs
+ * is written again here, with one exception: `images` stays unset, which is
+ * what keeps the picture `app/opengraph-image.tsx` draws. Without this, every
+ * share of these answers announced itself as the front page.
+ *
+ * Unlike a permalinked review, these answers are this site's own to be found
+ * by, so this page is indexed.
  */
 export const metadata: Metadata = {
   alternates: { canonical: '/faq' },
   description: DESCRIPTION,
+  openGraph: {
+    description: DESCRIPTION,
+    siteName: SITE.name,
+    title: TITLE,
+    type: 'article',
+    url: `${SITE.url}/faq`,
+  },
   robots: { follow: true, index: true },
   title: TITLE,
+  twitter: {
+    card: 'summary_large_image',
+    description: DESCRIPTION,
+    title: TITLE,
+  },
 };
 
 /** The five answers, in the shape an answer engine reads. This URL and no other. */
