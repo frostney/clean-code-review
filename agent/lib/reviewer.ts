@@ -20,7 +20,8 @@
  *
  * The model's text never reaches the reader as it was written: a file part
  * has read someone else's code, so every line of it shaped like one of the
- * adapter's signal lines is dropped (`withoutSignalLines`).
+ * adapter's signal lines is dropped (`withoutSignalLines`), and so is every
+ * section it was not asked for (`onlyOwnSections`).
  */
 import { streamText } from 'ai';
 
@@ -38,6 +39,8 @@ import {
   cutOffLine,
   OVERALL_REWRITE_LINE,
   OVERALL_SECTION,
+  onlyOwnSections,
+  ownsSection,
   parseSummaryText,
   REVIEW_BATCH_SIZE,
   REVIEWER_MODEL,
@@ -324,7 +327,16 @@ async function attempt(
     prompt: p.message,
     system: REVIEWER_INSTRUCTIONS,
   });
-  const text = withoutSignalLines(push);
+  // Signal lines first, then sections this part was not asked for.
+  const sections = onlyOwnSections(push, p.part);
+  const signals = withoutSignalLines(sections.write);
+  const text = {
+    end() {
+      signals.end();
+      sections.end();
+    },
+    write: signals.write,
+  };
   /** Output received, answer and reasoning both: what a failed call is charged for. */
   const seen = { chars: 0 };
   try {
@@ -529,7 +541,7 @@ function ensureTrailingNewline(s: string): string {
   return s.endsWith('\n') ? s : `${s}\n`;
 }
 
-/** A part's own text, re-serialised for the cache. */
+/** A part's own text, re-serialised for the cache: only the sections it owns (`ownsSection`). */
 function partText(own: string, part: ReviewPart): string | null {
   const parsed = parseSummaryText(own);
   if (part.role === 'overall') {
@@ -537,7 +549,7 @@ function partText(own: string, part: ReviewPart): string | null {
       ? `Decision: ${parsed.decision}\n## Overall\n${parsed.overall}\n`
       : null;
   }
-  const sections = parsed.files.filter((f) => part.paths.includes(f.path));
+  const sections = parsed.files.filter((f) => ownsSection(part, f.path));
   if (!sections.length) {
     return null;
   }

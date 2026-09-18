@@ -20,9 +20,10 @@
  * written again, and `cutOffLine` after a part that was cut off even so. A
  * file part is written after reading someone else's code, so its text is
  * untrusted: `withoutSignalLines` drops every line of model text shaped like
- * a signal before the parser can see it, and the parser takes the decision,
- * the overall paragraph and a rewrite only from the part that comes first,
- * the overall one, before any file section has opened.
+ * a signal before the parser can see it, `onlyOwnSections` drops every
+ * section a part was not asked for, and the parser takes the decision, the
+ * overall paragraph and a rewrite only from the part that comes first, the
+ * overall one, before any file section has opened.
  */
 
 /**
@@ -181,6 +182,93 @@ function readHeading(line: string): string | null {
   const heading = /^\s*#{1,6}\s+(.+?)\s*$/.exec(line);
   // Models decorate headings: `path`, **path**, _path_.
   return heading ? heading[1].replace(/^[`*_\s]+|[`*_\s]+$/g, '').trim() : null;
+}
+
+/**
+ * Whether a section with this title belongs to this part: a file part owns
+ * the sections for its own files, the overall part owns `Overall`. The one
+ * rule both the live stream (`onlyOwnSections`) and the cache (`partText` in
+ * `./reviewer.ts`) apply, so the text a reader watches arrive and the text
+ * stored for the next reader can never disagree about whose section is whose.
+ */
+export function ownsSection(part: ReviewPart, title: string): boolean {
+  return part.role === 'overall'
+    ? /^overall$/i.test(title)
+    : part.paths.includes(title);
+}
+
+/**
+ * A part's text as it streams, with every section the part was not asked for
+ * dropped: `ownsSection`, applied a heading at a time as the words arrive
+ * rather than to the finished part. A file part may write `## <path>` sections for its own files and
+ * nothing else; the overall part may write its decision line and `## Overall`.
+ * Without this, a later part could write a heading for a file from an earlier
+ * batch, and the parser, which keeps the last text written for a path, would
+ * put that text in place of the file's own review. A part's text is written
+ * after reading someone else's code, so it is not trusted to stay in its lane.
+ *
+ * Headings are read with `readHeading`, the parser's own, so the two agree on
+ * what a path is. A file part's text before its first heading of its own is
+ * dropped too: in the combined review it would otherwise run on into the
+ * section before it, which another part wrote. A line that could still become
+ * a heading is held until it ends; every other line streams as it comes.
+ * Runs after `withoutSignalLines`, on text that no longer has signal lines.
+ */
+export function onlyOwnSections(
+  push: (delta: string) => void,
+  part: ReviewPart,
+): { write(delta: string): void; end(): void } {
+  /** Inside a section this part may not write, or before a file part's first. */
+  let skipping = part.role === 'files';
+  /** The start of the current line, held while it may yet be a heading. */
+  let held = '';
+  /** Whether the current line streams (true), is dropped (false), or is not yet known. */
+  let keep: boolean | null = null;
+
+  const settleHeld = () => {
+    const head = held.trimStart();
+    // Blank so far, or starting like a heading: wait for the whole line.
+    if (head.length === 0 || head.startsWith('#')) {
+      return;
+    }
+    keep = !skipping;
+    if (keep) {
+      push(held);
+    }
+    held = '';
+  };
+  const endLine = (newline: string) => {
+    if (keep === null) {
+      const title = readHeading(held);
+      if (title !== null) {
+        skipping = !ownsSection(part, title);
+      }
+      keep = !skipping;
+      if (keep) {
+        push(held);
+      }
+    }
+    if (keep && newline) {
+      push(newline);
+    }
+    held = '';
+    keep = null;
+  };
+  return {
+    end: () => endLine(''),
+    write(delta) {
+      for (const piece of delta.split(/(\r\n|\r|\n)/)) {
+        if (piece === '\n' || piece === '\r' || piece === '\r\n') {
+          endLine(piece);
+        } else if (keep === true) {
+          push(piece);
+        } else if (keep === null && piece) {
+          held += piece;
+          settleHeld();
+        }
+      }
+    },
+  };
 }
 
 /**
