@@ -29,8 +29,11 @@ Next.js project.
 - **Documentation is read, not judged** — a README or a changelog in the
   change gets a card with its own highlighting and no verdict, because
   none of the 34 questions is a question about prose.
-- **Cheap to run** — a 24-file PR costs about $0.03 to judge and
+- **Cheap to run** — a 24-file PR costs about $0.02 to judge and
   review; judgments and review parts are cached for an hour.
+- **An MCP server for agents**: `/api/mcp` gives an agent without a
+  browser the same review: every answer, the decision, the paragraphs and
+  the permalink, as structured content.
 
 🌐 **Live:** <https://clean-code-review.vercel.app>
 
@@ -56,6 +59,30 @@ bun run review http://localhost:3000 0         # judge + streamed review of pres
 bun run review http://localhost:3000 https://github.com/vercel/ai/pull/20851
 bun run jev 1                                  # one preset straight to Jev, no eve
 ```
+
+## Connect an agent
+
+The same review is an MCP server at
+`https://clean-code-review.vercel.app/api/mcp`: stateless Streamable HTTP, no
+sign-in. It has two tools.
+
+| Tool | Input | Use it for |
+|---|---|---|
+| `review_pull_request` | `url`: a public GitHub pull request | A change on GitHub. The result carries the permalink. |
+| `review_pasted_code` | `paste`: a unified diff, files each under a `// file: path` line, or one file (up to 1,000,000 characters) | Private code, `git diff` output, files on disk. |
+
+Each call returns every judged file's answers keyed by question id, Luna's
+decision and paragraphs, the prose files and the files that were not judged
+with the reason, the model ids and the cost, as structured content and as
+Markdown text. Identical work comes back from the same one-hour cache the page
+uses. A fresh 24-file pull request takes 5 to 20 seconds.
+
+```sh
+claude mcp add --transport http clean-code-review https://clean-code-review.vercel.app/api/mcp
+```
+
+Any client that speaks Streamable HTTP takes the URL as is; a stdio-only
+client can go through `npx mcp-remote <url>`.
 
 ## Development
 
@@ -103,6 +130,7 @@ browser ──── summarize turn ─▶ eve session ──▶ Luna, one call 
 | Model adapter for eve | `agent/lib/jev-model.ts` |
 | Diff parsing, skip rules, file selection | `agent/lib/patch.ts`, `agent/lib/review.ts`, `agent/lib/select.ts` |
 | GitHub PR fetcher | `agent/lib/github.ts`, `app/api/github-pr/route.ts` |
+| MCP server and its one-request review | `app/api/mcp/route.ts`, `lib/mcp-server.ts`, `lib/mcp-review.ts` |
 | Page state and the two turns | `lib/useReview.ts` |
 
 ## Deploy
@@ -122,8 +150,8 @@ functions themselves run on Node.js 24, which eve requires.
 
 ## Abuse limits
 
-The page talks to the agent anonymously, so the deployment carries four
-brakes, outside in:
+The page and the MCP server talk to the models anonymously, so the
+deployment carries these brakes, outside in:
 
 | Brake | Setting |
 |---|---|
@@ -131,6 +159,7 @@ brakes, outside in:
 | AI Gateway budget on the project | $15 per week (`vercel ai-gateway budgets set project clean-code-review --limit 15 --refresh-period weekly`) |
 | Per-session spend cap | `maxTokenCostUsdPerSession` in `agent/agent.ts` |
 | In-agent per-address limit on new sessions | `agent/channels/eve.ts`, best effort, one instance's memory |
+| MCP per-address limit on tool calls | 10 calls per 10 minutes, `lib/mcp-server.ts`, best effort, one instance's memory; `maxDuration` 120 s, the written review cut off at 60 s |
 
 ## Limits
 
