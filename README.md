@@ -19,9 +19,10 @@ Next.js project.
   and a decision for the whole change, from Jev's findings, in parallel
   parts streamed as they are written. 300 characters per file, by
   instruction, not truncation.
-- **Real pull requests** — type `owner/repo` and a number; the diff is
-  split per file, generated and binary files are skipped, the largest
-  24 code files are judged, the PR description is rendered as markdown.
+- **Real pull requests** — type `owner/repo` and a number, or open
+  `/owner/repo/pull/123` directly; the diff is split per file, generated
+  and binary files are skipped, the largest 24 code files are judged, the
+  PR description is rendered as markdown and the address is a permalink.
 - **Everything is editable** — whole files and diff hunks alike, and only
   the file you touched is re-judged. Around sixty file types are
   highlighted, each grammar fetched the first time a review needs it.
