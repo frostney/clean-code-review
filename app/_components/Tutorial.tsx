@@ -299,24 +299,63 @@ function afterFirstPaint(then: () => void): () => void {
   return () => observer.disconnect();
 }
 
+/** Both loops run for this long, and the duck changes between them on whole loops. */
+const LOOP_MS = 4800;
+/** One wink, then two rounds of foot taps, then round again. */
+const WINK_LOOPS = 1;
+const FOOT_TAP_LOOPS = 2;
+
+type DuckLoop = 'foot-taps' | 'wink';
+
 /**
- * The landing duck's artwork: a wink while it is talking, foot taps once it is
- * waiting for you to choose an example.
+ * Which loop the duck is in: the wink, then the foot taps, then the wink
+ * again, for as long as the landing duck is on screen, on its own clock rather
+ * than the bubbles'. Tied to the bubbles, the wink lasted only as long as it
+ * took to read two lines, and the duck spent the rest of every visit tapping.
+ *
+ * It starts on the wink, which is on screen from first paint, and stays there
+ * until the foot taps have arrived; under reduced motion they never do, so no
+ * timer ever runs. Coming home from a review mounts the duck again, so it
+ * greets with a wink each time.
+ */
+function useDuckLoop(): DuckLoop {
+  const ready = useFootTaps();
+  const [loop, setLoop] = useState<DuckLoop>('wink');
+
+  useEffect(() => {
+    if (!ready) {
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout>;
+    const show = (next: DuckLoop) => {
+      setLoop(next);
+      const loops = next === 'wink' ? WINK_LOOPS : FOOT_TAP_LOOPS;
+      timer = setTimeout(
+        () => show(next === 'wink' ? 'foot-taps' : 'wink'),
+        loops * LOOP_MS,
+      );
+    };
+    // The wink has been playing since the page painted; let it finish.
+    timer = setTimeout(() => show('foot-taps'), WINK_LOOPS * LOOP_MS);
+    return () => clearTimeout(timer);
+  }, [ready]);
+
+  return ready ? loop : 'wink';
+}
+
+/**
+ * The landing duck's artwork, which alternates between a wink and foot taps.
  *
  * Both loops are cut from the same canvas, so they fill the same box with the
- * bird in the same place, and the change is one `src` on one element. It only
- * happens once the foot taps are decoded, which is why there is never a blank
- * frame between them: until then the wink carries on. `picture` swaps in the
- * matching still for a reader who has asked for less motion, and the foot taps
- * are never fetched for them. Neither loop goes through the optimiser, which
- * keeps an animated image's first frame and drops the rest.
+ * bird in the same place, and the change is one `src` on one element. The foot
+ * taps are only shown once they are decoded, which is why there is never a
+ * blank frame between them. `picture` swaps in the matching still for a
+ * reader who has asked for less motion, and the foot taps are never fetched
+ * for them. Neither loop goes through the optimiser, which keeps an animated
+ * image's first frame and drops the rest.
  */
 export function TutorialDuckPicture() {
-  // Nothing left to say: the last line is showing, or the greeting is over
-  // because a review opened. A reader who skipped straight to an example
-  // comes home to a duck that has finished talking, and it taps its feet.
-  const { more } = useTutorial();
-  const tapping = useFootTaps() && !more;
+  const tapping = useDuckLoop() === 'foot-taps';
 
   return (
     <picture>
