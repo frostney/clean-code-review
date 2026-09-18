@@ -198,7 +198,7 @@ decide whether to fetch again.
 This site measures how fast its pages load for the people using them, with
 Vercel Speed Insights. A small script from Vercel, served from this site's own
 domain, reads the loading and responsiveness timings the browser already keeps
-(the Web Vitals) and sends them to Vercel after a page loads.
+(the Web Vitals) and sends them to Vercel as the page is used and when it is left.
 
 Each measurement carries the timing and its value, the address and the route of
 the page it was taken on, the page element it concerns (as a selector, such as
@@ -206,7 +206,9 @@ the page it was taken on, the page element it concerns (as a selector, such as
 system, the network speed the browser reports, the country, the version of the
 Speed Insights script, and the time Vercel received it. For a review opened
 from a pull request, the address names that public repository and the pull
-request number. Code you paste, the files and the reviews are never part of it.
+request number. The responsiveness timing also names the kind of input it
+measured, such as a tap or a key press, along with the element. Code you paste,
+the files and the reviews are never part of it.
 
 The script sets no cookie and stores nothing in your browser. Vercel describes
 the measurements as anonymous: they are not tied to a visitor or to a network
@@ -220,8 +222,7 @@ on Vercel's paid tier.
 ## What is not here
 
 No sign-in. No profile. No database. No advertising and no tracking pixels, and
-nothing that records who visits or what they do here: the one measurement is the
-page speed above. Nothing is sold, because there is nothing collected to sell.
+nothing that records who visits: the one measurement is the page speed above. Nothing is sold, because there is nothing collected to sell.
 
 ## Machine-readable
 

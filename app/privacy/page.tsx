@@ -185,7 +185,7 @@ export default function PrivacyPage() {
             them, with Vercel Speed Insights. A small script from Vercel, served
             from this site's own domain, reads the loading and responsiveness
             timings the browser already keeps (the Web Vitals) and sends them to
-            Vercel after a page loads.
+            Vercel as the page is used and when it is left.
           </p>
           <p>
             Each measurement carries the timing and its value, the address and
@@ -195,8 +195,10 @@ export default function PrivacyPage() {
             the browser reports, the country, the version of the Speed Insights
             script, and the time Vercel received it. For a review opened from a
             pull request, the address names that public repository and the pull
-            request number. Code you paste, the files and the reviews are never
-            part of it.
+            request number. The responsiveness timing also names the kind of
+            input it measured, such as a tap or a key press, along with the
+            element. Code you paste, the files and the reviews are never part of
+            it.
           </p>
           <p>
             The script sets no cookie and stores nothing in your browser. Vercel
@@ -225,9 +227,8 @@ export default function PrivacyPage() {
             No sign-in and no profile. No database. No cookies and no local
             storage beyond the light or dark setting this page remembers for
             you. No advertising and no tracking pixels, and nothing that records
-            who visits or what they do here: the one measurement is the page
-            speed above. Nothing is sold, because there is nothing collected to
-            sell.
+            who visits: the one measurement is the page speed above. Nothing is
+            sold, because there is nothing collected to sell.
           </p>
           <p>
             The whole application is open source, so none of the above has to be

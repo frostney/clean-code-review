@@ -36,15 +36,17 @@ function answerNodes(answer: string): ReactNode[] {
  * The questions, folded: one line each, so the page reads as a list of what
  * can be asked, and each opens where it stands.
  *
- * A native `<details>` does the folding, which is what makes it sound for
- * everyone without a line of script: the summary is a button to the keyboard
- * and to a screen reader, Enter and Space open it, and the state it announces
- * is the browser's own. A closed answer is still in the document, so the
+ * A native `<details>` does the folding, which works without a line of
+ * script: Enter and Space open it, and the state it announces is the
+ * browser's own. A closed answer is still in the document, so the
  * server-rendered HTML carries every answer the page's `FAQPage` structured
  * data claims, and the browser's find-in-page opens the one it lands in.
  *
  * The question's heading is inside the summary so that the whole line is the
- * control. The chevron turns to say which way it will go, and is hidden from
+ * control. Checked in Chrome's accessibility tree on 2026-09-18: each question
+ * is still a heading, inside its disclosure control, so moving by heading
+ * finds every one. Safari with VoiceOver was not tested; some screen readers
+ * are said to flatten a summary's contents. The chevron turns to say which way it will go, and is hidden from
  * a screen reader, which hears expanded or collapsed instead.
  */
 export function Faq() {
