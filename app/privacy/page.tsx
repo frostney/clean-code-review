@@ -28,9 +28,10 @@ import { REQUESTS_PER_WINDOW, WINDOW_MS } from '@/lib/throttle';
  * every figure is imported from the module that enforces it. There is no
  * consent banner to describe, no cookie and no account, so the page is short:
  * a privacy policy that lists rights against data nobody collects is a worse
- * answer than the true one. The one thing measured is how fast the pages
- * load, by Vercel Speed Insights (`<SpeedInsights />` in the root layout), and
- * what that sends is written from Vercel's own documentation, which is linked.
+ * answer than the true one. Two things are measured, page views by Vercel Web
+ * Analytics and page speed by Vercel Speed Insights (both in `Measurement`,
+ * from the root layout), and what they send is written from Vercel's own
+ * documentation, which is linked, and from the scripts themselves.
  *
  * Nothing links here from this file's side. The footer's link is the footer's.
  */
@@ -39,6 +40,10 @@ import { REQUESTS_PER_WINDOW, WINDOW_MS } from '@/lib/throttle';
 const MS_PER_MINUTE = 60_000;
 const WINDOW_MINUTES = Math.round(WINDOW_MS / MS_PER_MINUTE);
 
+/** Where Vercel says what Web Analytics collects. */
+const WEB_ANALYTICS_PRIVACY =
+  'https://vercel.com/docs/analytics/privacy-policy';
+
 /** Where Vercel says what Speed Insights collects. */
 const SPEED_INSIGHTS_PRIVACY =
   'https://vercel.com/docs/speed-insights/privacy-policy';
@@ -46,7 +51,7 @@ const SPEED_INSIGHTS_PRIVACY =
 export const metadata: Metadata = {
   alternates: { canonical: '/privacy' },
   description:
-    'No account, no database and no cookies. What leaves the browser when you paste code here, who processes it, how long anything is kept, and what the page-speed measurement sends.',
+    'No account, no database and no cookies. What leaves the browser when you paste code here, who processes it, how long anything is kept, and what the page-view and page-speed measurements send.',
   openGraph: {
     description:
       'What leaves the browser when you paste code into Clean Code Review, who processes it, and how long anything is kept.',
@@ -99,9 +104,9 @@ export default function PrivacyPage() {
           There is no account, no database and no cookie on this site. Nothing
           you paste is written down anywhere this site keeps, and nothing is
           tied to you, because there is no you here: there is a browser tab and
-          the session it holds open. The one thing measured is how fast the
-          pages load, with Vercel Speed Insights, and what that sends is
-          described below.
+          the session it holds open. Two things are measured: how many pages are
+          viewed, with Vercel Web Analytics, and how fast they load, with Vercel
+          Speed Insights. What each one sends is described below.
         </p>
 
         <Section id="what-leaves" title="What leaves the browser">
@@ -179,6 +184,56 @@ export default function PrivacyPage() {
           </p>
         </Section>
 
+        <Section id="page-views" title="Page views">
+          <p>
+            This site counts page views with Vercel Web Analytics. A small
+            script from Vercel, served from this site's own domain, sends a
+            record to Vercel each time a page is opened, including a review
+            opened without reloading the page. Nothing else is sent: not a
+            click, not the code you paste and not a review.
+          </p>
+          <p>
+            Each record carries the address and the route of the page, the
+            address of the page that linked here if it is on another site, a
+            location worked out from the request (such as the country, region
+            and city), the browser and its version, the operating system and its
+            version, the device type, the version of the script, and the time.
+            The linking page's address is sent as your browser gives it, which
+            this site does not change.
+          </p>
+          <p>
+            This site's own addresses are cleaned before they are sent. The home
+            page, <code>/faq</code> and <code>/privacy</code> go as they are. A
+            review opened from a pull request, and any other address under a
+            repository's <code>/pull</code>, goes as{' '}
+            <code>/[owner]/[repo]/pull/[number]</code>, so the record says that
+            a review was read and not which one. Any other address can only be a
+            page that does not exist, and goes as <code>/[not-found]</code>.
+            None of them carries its query or fragment.
+          </p>
+          <p>
+            The script sets no cookie and stores nothing in your browser. To
+            tell visitors apart, Vercel makes a hash from the incoming request
+            instead, and resets it after a day, so a visitor cannot be followed
+            from one day to the next or from this site to another. Vercel
+            describes the records as anonymous: they are not tied to a person or
+            to a network address. Vercel keeps them for at least the reporting
+            window of this site's plan, one month on the free plan and one or
+            two years on paid ones, and says it may keep them longer.
+          </p>
+          <p>
+            <a
+              className="underline hover:text-ink"
+              href={WEB_ANALYTICS_PRIVACY}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Vercel's own account of what Web Analytics collects
+            </a>
+            .
+          </p>
+        </Section>
+
         <Section id="page-speed" title="How fast the page loads">
           <p>
             This site measures how fast its pages load for the people using
@@ -189,16 +244,26 @@ export default function PrivacyPage() {
           </p>
           <p>
             Each measurement carries the timing and its value, the address and
-            the route of the page it was taken on, the page element it concerns
-            (as a selector, such as <code>main &gt; img</code>), the browser and
-            its version, the device type and operating system, the network speed
-            the browser reports, the country, the version of the Speed Insights
-            script, and the time Vercel received it. For a review opened from a
-            pull request, the address names that public repository and the pull
-            request number. The responsiveness timing also names the kind of
-            input it measured, such as a tap or a key press, along with the
-            element. Code you paste, the files and the reviews are never part of
-            it.
+            the route of the page it was taken on, the page element it concerns,
+            the browser and its version, the device type and operating system,
+            the network speed the browser reports, the country, the version of
+            the Speed Insights script, and the time Vercel received it. The
+            address and the route are cleaned the same way as for page views, so
+            each is one of the three pages,{' '}
+            <code>/[owner]/[repo]/pull/[number]</code> or{' '}
+            <code>/[not-found]</code>, with no query or fragment. The
+            responsiveness timing also names the kind of input it measured, such
+            as a tap or a key press, along with the element.
+          </p>
+          <p>
+            The element is named by a short selector the script builds from tag
+            names, style class names and at most one id, such as{' '}
+            <code>main&gt;img</code> or <code>#file-3&gt;div.flex</code>. No id
+            or class on this site carries a file name, a repository or words
+            from a pull request: the file cards are numbered, and the ids and
+            code-language classes a pull request's description would bring are
+            renumbered or dropped. Code you paste, the names of the files and
+            the reviews are never part of a measurement.
           </p>
           <p>
             The script sets no cookie and stores nothing in your browser. Vercel
@@ -227,8 +292,9 @@ export default function PrivacyPage() {
             No sign-in and no profile. No database. No cookies and no local
             storage beyond the light or dark setting this page remembers for
             you. No advertising and no tracking pixels, and nothing that records
-            who visits: the one measurement is the page speed above. Nothing is
-            sold, because there is nothing collected to sell.
+            who visits: the page views and page speed above are counted without
+            saying who you are. Nothing is sold, because there is nothing
+            collected to sell.
           </p>
           <p>
             The whole application is open source, so none of the above has to be

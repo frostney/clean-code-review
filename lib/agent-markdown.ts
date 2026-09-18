@@ -151,8 +151,9 @@ const PRIVACY = `# Privacy
 There is no account, no database and no cookie on this site. Nothing you paste
 is written down anywhere this site controls, and nothing is associated with you,
 because there is no you: there is a browser tab and the session it holds open.
-The one thing measured is how fast the pages load, with Vercel Speed Insights,
-and what that sends is described below.
+Two things are measured: how many pages are viewed, with Vercel Web Analytics,
+and how fast they load, with Vercel Speed Insights. What each one sends is
+described below.
 
 ## What leaves the browser
 
@@ -193,6 +194,37 @@ per network address, which is the one thing about a visitor this site's server h
 memory at all, and it holds it for minutes, in one server instance's memory, to
 decide whether to fetch again.
 
+## Page views
+
+This site counts page views with Vercel Web Analytics. A small script from
+Vercel, served from this site's own domain, sends a record to Vercel each time a
+page is opened, including a review opened without reloading the page. Nothing
+else is sent: not a click, not the code you paste and not a review.
+
+Each record carries the address and the route of the page, the address of the
+page that linked here if it is on another site, a location worked out from the
+request (such as the country, region and city), the browser and its version,
+the operating system and its version, the device type, the version of the
+script, and the time. The linking page's address is sent as your browser gives
+it, which this site does not change.
+
+This site's own addresses are cleaned before they are sent. The home page,
+\`/faq\` and \`/privacy\` go as they are. A review opened from a pull request,
+and any other address under a repository's \`/pull\`, goes as
+\`/[owner]/[repo]/pull/[number]\`, so the record says that a review was read
+and not which one. Any other address can only be a page that does not exist,
+and goes as \`/[not-found]\`. None of them carries its query or fragment.
+
+The script sets no cookie and stores nothing in your browser. To tell visitors
+apart, Vercel makes a hash from the incoming request instead, and resets it
+after a day, so a visitor cannot be followed from one day to the next or from
+this site to another. Vercel describes the records as anonymous: they are not
+tied to a person or to a network address. Vercel keeps them for at least the
+reporting window of this site's plan, one month on the free plan and one or two
+years on paid ones, and says it may keep them longer.
+
+[Vercel's own account of what Web Analytics collects](https://vercel.com/docs/analytics/privacy-policy).
+
 ## How fast the page loads
 
 This site measures how fast its pages load for the people using them, with
@@ -201,14 +233,20 @@ domain, reads the loading and responsiveness timings the browser already keeps
 (the Web Vitals) and sends them to Vercel as the page is used and when it is left.
 
 Each measurement carries the timing and its value, the address and the route of
-the page it was taken on, the page element it concerns (as a selector, such as
-\`main > img\`), the browser and its version, the device type and operating
-system, the network speed the browser reports, the country, the version of the
-Speed Insights script, and the time Vercel received it. For a review opened
-from a pull request, the address names that public repository and the pull
-request number. The responsiveness timing also names the kind of input it
-measured, such as a tap or a key press, along with the element. Code you paste,
-the files and the reviews are never part of it.
+the page it was taken on, the page element it concerns, the browser and its
+version, the device type and operating system, the network speed the browser
+reports, the country, the version of the Speed Insights script, and the time
+Vercel received it. The address and the route are cleaned the same way as for
+page views, so each is one of the three pages, \`/[owner]/[repo]/pull/[number]\`
+or \`/[not-found]\`, with no query or fragment. The responsiveness timing also names the kind of input it measured,
+such as a tap or a key press, along with the element.
+
+The element is named by a short selector the script builds from tag names, style
+class names and at most one id, such as \`main>img\` or \`#file-3>div.flex\`.
+No id or class on this site carries a file name, a repository or words from a
+pull request: the file cards are numbered, and the ids and code-language classes
+a pull request's description would bring are renumbered or dropped. Code you
+paste, the names of the files and the reviews are never part of a measurement.
 
 The script sets no cookie and stores nothing in your browser. Vercel describes
 the measurements as anonymous: they are not tied to a visitor or to a network
@@ -222,7 +260,8 @@ on Vercel's paid tier.
 ## What is not here
 
 No sign-in. No profile. No database. No advertising and no tracking pixels, and
-nothing that records who visits: the one measurement is the page speed above. Nothing is sold, because there is nothing collected to sell.
+nothing that records who visits: the page views and page speed above are
+counted without saying who you are. Nothing is sold, because there is nothing collected to sell.
 
 ## Machine-readable
 

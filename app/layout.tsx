@@ -1,8 +1,8 @@
-import { SpeedInsights } from '@vercel/speed-insights/next';
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import type { ReactNode } from 'react';
 
+import { Measurement } from '@/app/_components/Measurement';
 import { ThemeToggle } from '@/app/_components/ThemeToggle';
 import { SITE } from '@/lib/site';
 import { THEME_SCRIPT } from '@/lib/theme';
@@ -111,10 +111,10 @@ export default function RootLayout({
           </div>
         </div>
         {children}
-        {/* Page-speed measurement, and nothing else: what it sends and where
-            is on /privacy. It renders nothing, and its script is added from
-            the browser once the page has hydrated. */}
-        <SpeedInsights />
+        {/* Page views and page speed, and nothing else: what they send and
+            where is on /privacy. It renders nothing, and the scripts are added
+            from the browser once the page has hydrated. */}
+        <Measurement />
       </body>
     </html>
   );
