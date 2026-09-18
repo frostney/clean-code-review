@@ -13,6 +13,7 @@ import { ThemeToggle } from './ThemeToggle';
 import {
   TutorialBubble,
   TutorialDuck,
+  TutorialDuckPicture,
   TutorialProvider,
   TutorialSpotlight,
 } from './Tutorial';
@@ -71,30 +72,14 @@ export function Hero() {
             the whole line — and a mascot on the centre line is what a door looks
             like at any width. It is gone the moment a review opens, and the one
             in the field is the same bird arriving.
-            It winks. The optimiser rewrites an image and drops every frame but
-            the first, so this one is handed to the browser exactly as it sits
-            on disk; `picture` is what swaps in the matching still for a reader
-            who has asked for less motion, with no script and no second
-            download. The box is larger than the still duck's was because this
-            artwork carries more padding inside its canvas: at 176 and 248 the
-            bird itself measures what it measured at 160 and 224. */}
+            It winks while it talks and taps its feet once it is waiting for a
+            pick, which is the greeting's business, so the artwork lives with
+            the greeting. The box is larger than the still duck's was because
+            this artwork carries more padding inside its canvas: at 176 and 248
+            the bird itself measures what it measured at 160 and 224. */}
         <LandingDuck aside={<TutorialBubble />}>
           <TutorialDuck>
-            <picture>
-              <source
-                media="(prefers-reduced-motion: reduce)"
-                srcSet="/ducky-still.png"
-              />
-              <Image
-                alt=""
-                className="h-44 w-44 sm:h-62 sm:w-62"
-                height={480}
-                loading="eager"
-                src="/ducky-wink.webp"
-                unoptimized={true}
-                width={480}
-              />
-            </picture>
+            <TutorialDuckPicture />
           </TutorialDuck>
         </LandingDuck>
         {/* The theme switch lives up here, in plain sight: beside the field where
