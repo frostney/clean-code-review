@@ -29,6 +29,8 @@ import { callerIp, throttled } from '@/lib/throttle';
 export interface PullRequestPayload {
   url: string;
   title: string;
+  /** The owner's avatar, for the line above the title. Empty when there is none. */
+  avatarUrl: string;
   /** The description, already rendered. Null when there is none. */
   body: ReactNode;
   /** The description as the author wrote it, for the summarize turn. */
@@ -104,6 +106,7 @@ export const loadPullRequest = cache(
       return {
         ok: true,
         pr: {
+          avatarUrl: pr.avatarUrl,
           body: pr.body.trim()
             ? createElement(PullRequestBody, { body: pr.body })
             : null,

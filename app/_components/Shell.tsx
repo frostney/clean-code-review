@@ -1,7 +1,6 @@
 import type { PullRequestAddress } from '@/lib/address';
 import type { PullRequestPayload } from '@/lib/pull-request';
 
-import { Faq } from './Faq';
 import { Footer } from './Footer';
 import { Hero } from './Hero';
 import { ReviewProvider } from './ReviewProvider';
@@ -11,12 +10,12 @@ import { Stage } from './Stage';
  * The page, once for both routes that render it.
  *
  * `/` renders it with nothing: the landing view, where the duck is large and
- * the questions are on screen. `/owner/repo/pull/123` renders the same tree
- * with the pull request already fetched, so a permalink is a review in the
- * first paint rather than a fetch that starts after the JavaScript arrives.
+ * the field is empty. `/owner/repo/pull/123` renders the same tree with the
+ * pull request already fetched, so a permalink is a review in the first paint
+ * rather than a fetch that starts after the JavaScript arrives.
  *
- * Everything that does not change — the questions, the footer, the labels —
- * is rendered here, on the server, and handed to the provider as children, so
+ * Everything that does not change — the footer, the labels, the hints — is
+ * rendered here, on the server, and handed to the provider as children, so
  * none of it is ever sent to the browser as JavaScript.
  */
 export function Shell({
@@ -40,7 +39,7 @@ export function Shell({
           {/* The page's own name. On screen it is the browser tab and the
               first field's placeholder; a document still needs a heading. */}
           <Hero />
-          <Stage questions={<Faq />} />
+          <Stage />
         </main>
         <Footer />
       </div>

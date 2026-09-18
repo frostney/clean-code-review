@@ -1,74 +1,114 @@
-import { QUESTION_COUNT } from '@/agent/lib/questions';
+import type { ReactNode } from 'react';
+
+import { QUESTION_COUNT, SMELL_IDS } from '@/agent/lib/questions';
 import { REVIEW_LIMITS } from '@/agent/lib/review';
 import { REVIEWER_MODEL } from '@/agent/lib/summary';
 import { SITE } from '@/lib/site';
 
+/** How many of the answers are scales rather than probabilities. */
+const SCALE_COUNT = QUESTION_COUNT - SMELL_IDS.length;
+
 /**
  * The questions people actually ask about this page, answered once and read
- * twice: by whoever opens one of the folds, and by whatever answer engine
- * reads the `FAQPage` structured data in `page.tsx`. The same array feeds both,
- * so the markup can never describe something the page does not say out loud.
+ * twice: by whoever opens `/faq`, and by whatever answer engine reads the
+ * `FAQPage` structured data that route emits. The same array feeds both, so
+ * the markup can never describe something the page does not say out loud.
+ *
+ * Every number here is read from the code it describes rather than typed
+ * twice, and every claim is one that code makes.
  */
 export const FAQ: readonly { q: string; a: string }[] = [
   {
-    a: `Code, one file at a time, against ${QUESTION_COUNT} questions taken from the chapters of Robert C. Martin's Clean Code: names, functions, comments, formatting, objects and data structures, error handling, tests, classes and the smells chapter. Every answer is a probability or a score rather than a sentence, which is what makes the meters comparable between files. Markdown, plain text and the other prose files in a change are shown beside the review and never judged — the questions are about code, and a README would fail most of them for being what it is.`,
+    a: `Code, one file at a time, against ${QUESTION_COUNT} questions drawn from the chapters of Robert C. Martin's Clean Code: names, functions, comments, formatting, objects and data structures, error handling, unit tests, classes and the smells chapter. Of those answers, ${SMELL_IDS.length} are probabilities and ${SCALE_COUNT} are scores on a five-level scale, so the meters compare between files. Markdown and other prose files are shown beside the review and never judged.`,
     q: 'What does it judge?',
   },
   {
-    a: `Jev, TypeSafe's evaluation model, reached through the Vercel AI Gateway. It answers the whole question set for one file in one call, as probabilities and scores, and writes no prose at all. The review you read is Luna (${REVIEWER_MODEL}), a second model: the section about each file is written from Jev's findings and that file's code, and the decision at the top from the findings for every file and the pull request's description.`,
+    a: `Two. Jev, TypeSafe's evaluation model, reached through the Vercel AI Gateway, answers the whole question set for one file in a single call and returns probabilities and scores, no prose. Luna (${REVIEWER_MODEL}) writes the words: each file's section from Jev's findings and that file's code, and the decision at the top from every file's findings and the pull request's title and description.`,
     q: 'Which models do the work?',
   },
   {
-    a: 'No. Each browser tab is one eve session that holds the files only for the turn being judged, the page clears that history before every turn, and the session goes when the tab does. There is no account and no database. Identical turns can come back from a one-hour cache, which is what the “from cache” note means.',
+    a: 'No. Each browser tab is one eve session that holds the files only for the turn being judged, the page clears that history before every turn, and the session ends with the tab. There is no account and no database. An identical turn can come back from a one-hour cache, which is what the "from cache" note means.',
     q: 'Is my code stored?',
   },
   {
-    a: `A pull request arrives as a unified diff and is split per file, each file's hunks kept under the headers git wrote. The questions change to suit: a diff is also asked whether it leaves the code cleaner than it found it, and a file with no test is not asked how good its tests are. One turn judges at most ${REVIEW_LIMITS.maxFiles} code files, the largest changes first, and shows up to ${REVIEW_LIMITS.maxProseFiles} prose files beside them. Images, binaries, lockfiles, minified and generated files never become a card. Public repositories only.`,
-    q: 'How are pull requests and diffs judged?',
+    a: `A pull request arrives as one unified diff and is split per file. The question set adjusts: a diff is also asked whether it leaves the code worse than it found it, and only a test file is asked whether its tests are clear. One turn judges at most ${REVIEW_LIMITS.maxFiles} code files, the most-changed first, and shows up to ${REVIEW_LIMITS.maxProseFiles} prose files beside them. Images, lockfiles and generated files are skipped, and only public repositories can be fetched.`,
+    q: 'How is a pull request judged?',
   },
   {
-    a: 'A verdict is worth what it is made of. One question per idea in the book keeps every answer small enough to check against the code in front of you, and the questions that do not apply to a file are not asked at all — a row nobody answered would read as a clean bill of health.',
-    q: `Why ${QUESTION_COUNT} questions?`,
-  },
-  {
-    a: `Yes, and there is nothing to sign in to. A ${REVIEW_LIMITS.maxFiles}-file pull request costs about three cents of model time, which is what makes an open demo affordable at all. Each tab carries its own spending cap so that one session cannot run up a bill; when a session reaches it the meters freeze on the last answers and a reload starts a fresh one. The source is MIT-licensed, at ${SITE.source.replace(/^https?:\/\//, '')}.`,
+    a: `Yes, and there is nothing to sign in to. Each browser tab carries its own cap of 50 cents of model time, so a single session cannot run up a bill; when a tab reaches the cap the meters keep their last answers and a reload starts a fresh session. The source is MIT-licensed, at ${SITE.source.replace(/^https?:\/\//, '')}.`,
     q: 'Is it free?',
   },
 ];
 
 /**
- * The same questions on the page, folded shut. Structured data that answers
- * something the page does not is a lie to a machine, so this is rendered on
- * the server, as real text, above the footer.
+ * Phrases in the answers that are links on the page and plain words in the
+ * structured data. They live apart from the text because `FAQ` has to stay a
+ * list of strings: a `FAQPage` answer is quoted, not rendered, and an anchor
+ * inside it would reach an answer engine as markup.
+ */
+const LINKS: readonly { href: string; text: string }[] = [
+  {
+    href: 'https://en.wikipedia.org/wiki/Robert_C._Martin',
+    text: "Robert C. Martin's Clean Code",
+  },
+  { href: SITE.jev, text: "Jev, TypeSafe's evaluation model" },
+];
+
+/** The phrases above as one alternation, captured so `split` keeps them. */
+const LINK_PATTERN = new RegExp(
+  `(${LINKS.map((link) => link.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`,
+);
+
+/** The accent link, spelled the way the rest of the page spells one. */
+const LINK_CLASS =
+  'text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent';
+
+/**
+ * One answer as it is read rather than as it is stored: the two phrases above
+ * become links, and every other run of text stays exactly the string the
+ * structured data carries.
+ */
+function answerNodes(answer: string): ReactNode[] {
+  return answer.split(LINK_PATTERN).map((part) => {
+    const link = LINKS.find((item) => item.text === part);
+    if (!link) {
+      return part;
+    }
+    return (
+      <a
+        className={LINK_CLASS}
+        href={link.href}
+        key={part}
+        rel="noreferrer"
+        target="_blank"
+      >
+        {part}
+      </a>
+    );
+  });
+}
+
+/**
+ * The questions, open. They were folds on the landing page, where they were a
+ * footnote to a field; on a page of their own there is nothing to fold them
+ * out of the way of, and structured data that answers something the page keeps
+ * shut is a lie to a machine.
  */
 export function Faq() {
   return (
-    <section
-      aria-labelledby="faq-heading"
-      className="mt-8 border-t border-line pt-4"
-    >
-      <h2
-        className="mb-2 text-tiny font-semibold tracking-wider text-muted uppercase"
-        id="faq-heading"
-      >
-        Questions about this page
-      </h2>
-      <div className="flex max-w-[80ch] flex-col gap-1.5">
-        {FAQ.map((item) => (
-          <details
-            className="rounded-md border border-line bg-surface px-3 py-1.5 lg:py-2"
-            data-faq={true}
-            key={item.q}
-          >
-            <summary className="cursor-pointer py-1.5 text-[13px] font-semibold text-ink marker:text-muted lg:py-0">
-              {item.q}
-            </summary>
-            <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
-              {item.a}
-            </p>
-          </details>
-        ))}
-      </div>
-    </section>
+    <div className="flex max-w-[70ch] flex-col gap-2">
+      {FAQ.map((item) => (
+        <section
+          className="rounded-md border border-line bg-surface px-3 py-2.5"
+          data-faq={true}
+          key={item.q}
+        >
+          <h2 className="text-[13px] font-semibold text-ink">{item.q}</h2>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
+            {answerNodes(item.a)}
+          </p>
+        </section>
+      ))}
+    </div>
   );
 }

@@ -20,6 +20,8 @@ import { filesFromPaste, uniquePaths } from './paste';
 interface OpenPullRequest {
   title: string;
   url: string;
+  /** The owner's avatar, for the line above the title. Empty when there is none. */
+  avatarUrl: string;
   /** The description, rendered on the server. Null when there is none. */
   body: ReactNode;
   /** The same description as text, for the prompt that reaches Luna. */
@@ -179,6 +181,7 @@ export function fromPullRequest(
   return {
     id,
     pr: {
+      avatarUrl: payload.avatarUrl,
       body: payload.body,
       bodyText: payload.bodyText,
       title: payload.title,
