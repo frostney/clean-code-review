@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { type PullRequestRef, parsePullRequest } from '@/agent/lib/github';
 import { Shell } from '@/app/_components/Shell';
-import { pullRequestUrl } from '@/lib/address';
+import { pullRequestPath, pullRequestUrl } from '@/lib/address';
 import { loadPullRequest, type PullRequestAnswer } from '@/lib/pull-request';
 import { SITE } from '@/lib/site';
 
@@ -80,8 +80,11 @@ function describe(answer: PullRequestAnswer, fallback: string): string {
  * block replaces it rather than adding to it; the image is the file
  * convention's and stays inherited.
  *
- * The canonical link is the normalised permalink, not the capitalisation that
- * was typed and not the layout's `/`.
+ * The canonical link is the pull request's own address, not the capitalisation
+ * that was typed and not the layout's `/`. A repository that has been renamed
+ * or moved answers on its old name too, through a redirect GitHub follows for
+ * us, and what comes back is the project as it is called now; the page says
+ * that name everywhere else, so it says it here as well.
  */
 export async function generateMetadata({
   params,
@@ -98,7 +101,10 @@ export async function generateMetadata({
   const name = `${ref.owner}/${ref.repo}#${ref.number}`;
   const title = answer.ok ? answer.pr.title : name;
   const description = describe(answer, `A Clean Code review of ${name}.`);
-  const path = pathOf(ref);
+  // `pathOf(ref)` is the address that was asked for; the answer knows the one
+  // GitHub redirected to, when they differ.
+  const path =
+    (answer.ok ? pullRequestPath(answer.pr.url) : null) ?? pathOf(ref);
   return {
     alternates: { canonical: path },
     description,
