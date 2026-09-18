@@ -107,12 +107,12 @@ export default function PrivacyPage() {
         <Section id="what-leaves" title="What leaves the browser">
           <p>
             The code you paste, or the diff fetched for the pull request you
-            named, is sent to this site&rsquo;s server as the message of one
-            agent turn. The server sends each file to Jev, TypeSafe&rsquo;s
-            evaluation model, through the Vercel AI Gateway, to be answered
-            against {QUESTION_COUNT} questions. It then sends Jev&rsquo;s
-            findings and that file&rsquo;s text to Luna ({REVIEWER_MODEL}),
-            through the same gateway, to be written up as the review you read.
+            named, is sent to this site's server as the message of one agent
+            turn. The server sends each file to Jev, TypeSafe's evaluation
+            model, through the Vercel AI Gateway, to be answered against{' '}
+            {QUESTION_COUNT} questions. It then sends Jev's findings and that
+            file's text to Luna ({REVIEWER_MODEL}), through the same gateway, to
+            be written up as the review you read.
           </p>
           <p>
             That is the whole path. Your code reaches the Vercel AI Gateway and
@@ -130,7 +130,7 @@ export default function PrivacyPage() {
             keeps and nothing more: the same one-hour cache of answers and
             reviews, and a count of calls per network address,{' '}
             {MCP_CALLS_PER_WINDOW} per {MCP_WINDOW_MINUTES} minutes, held in one
-            server instance&rsquo;s memory for that window.
+            server instance's memory for that window.
           </p>
           <p>
             The site has a model budget that every visitor shares:{' '}
@@ -147,8 +147,8 @@ export default function PrivacyPage() {
         <Section id="how-long" title="How long anything is kept">
           <p>
             Each browser tab holds one agent session. The page clears that
-            session&rsquo;s history before every turn, so the only code it holds
-            is the code being judged right now. Closing the tab retires the
+            session's history before every turn, so the only code it holds is
+            the code being judged right now. Closing the tab retires the
             session, and a session left alone expires after an hour.
           </p>
           <p>
@@ -167,16 +167,15 @@ export default function PrivacyPage() {
             Public repositories only. The server fetches the pull request from
             GitHub with no credentials of yours and none are ever asked for. The
             deployment may hold a GitHub token of its own, which raises this
-            site&rsquo;s rate limit with GitHub and grants no access a
-            signed-out visitor would not have.
+            site's rate limit with GitHub and grants no access a signed-out
+            visitor would not have.
           </p>
           <p>
             Fetching is rate limited per network address: {REQUESTS_PER_WINDOW}{' '}
             pull requests per {WINDOW_MINUTES} minutes. That address is the one
-            thing about a visitor this site&rsquo;s own server holds at all. It
-            is held in one server instance&rsquo;s memory, for that window, to
-            decide whether to fetch again, and it is never written anywhere
-            else.
+            thing about a visitor this site's own server holds at all. It is
+            held in one server instance's memory, for that window, to decide
+            whether to fetch again, and it is never written anywhere else.
           </p>
         </Section>
 
