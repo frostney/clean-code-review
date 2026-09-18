@@ -38,7 +38,7 @@ export function ThemeToggle() {
   return (
     <button
       aria-label={`${label}. Change the theme.`}
-      className="-my-1 inline-flex min-h-10 min-w-10 cursor-pointer items-center justify-center gap-1.5 rounded-md text-muted hover:text-ink lg:my-0 lg:min-h-8 lg:min-w-8"
+      className="inline-flex min-h-10 min-w-10 cursor-pointer items-center justify-center gap-1.5 rounded-md text-muted hover:text-ink lg:min-h-8 lg:min-w-8"
       data-theme-toggle={choice}
       onClick={() => {
         // The step is taken from what is written down, not from what this

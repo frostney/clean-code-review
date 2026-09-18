@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { type ReactNode, ViewTransition } from 'react';
 
 import { useReviewControls, useReviewView } from './ReviewProvider';
 
@@ -17,6 +17,29 @@ import { useReviewControls, useReviewView } from './ReviewProvider';
  * the server's bundle and out of this one.
  */
 const SAME_DUCK = { viewTransitionName: 'duck' } as const;
+
+/**
+ * The same bird again, for the transitions React starts rather than this page.
+ *
+ * Opening and closing a review is a synchronous update inside a transition
+ * this page starts itself (`lib/view-transition.ts`), and React leaves those
+ * alone, so the inline name above is what the browser pairs there. Following
+ * a link to `/faq` and back is a navigation, which React runs as a transition
+ * of its own, and there it names only what sits inside a `<ViewTransition>`:
+ * this is that, under the same name as the questions page's duck.
+ *
+ * `default="none"` is what keeps this boundary out of every other transition
+ * on the page, and `share` is spelled out because without it `none` would
+ * stop the morph too. Both ducks are never mounted at once, so the name is
+ * only ever claimed once.
+ */
+export function DuckTransition({ children }: { children: ReactNode }) {
+  return (
+    <ViewTransition default="none" name="duck" share="auto">
+      {children}
+    </ViewTransition>
+  );
+}
 
 /**
  * The mascot on the landing view, and whatever it is saying.
@@ -43,9 +66,11 @@ export function LandingDuck({
 
   return (
     <div className="relative mt-4 mb-5 flex flex-col items-center sm:mt-8 sm:mb-6">
-      <span className="inline-flex" style={SAME_DUCK}>
-        {children}
-      </span>
+      <DuckTransition>
+        <span className="inline-flex" style={SAME_DUCK}>
+          {children}
+        </span>
+      </DuckTransition>
       {aside}
     </div>
   );
@@ -64,16 +89,18 @@ export function HomeDuck({ children }: { children: ReactNode }) {
   }
 
   return (
-    <button
-      aria-label="Close this review and start again"
-      className="inline-flex shrink-0 cursor-pointer items-center rounded-md"
-      data-duck="home"
-      onClick={goHome}
-      style={SAME_DUCK}
-      title="Start again"
-      type="button"
-    >
-      {children}
-    </button>
+    <DuckTransition>
+      <button
+        aria-label="Close this review and start again"
+        className="inline-flex shrink-0 cursor-pointer items-center rounded-md"
+        data-duck="home"
+        onClick={goHome}
+        style={SAME_DUCK}
+        title="Start again"
+        type="button"
+      >
+        {children}
+      </button>
+    </DuckTransition>
   );
 }

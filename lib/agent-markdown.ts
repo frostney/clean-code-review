@@ -148,10 +148,11 @@ ${INDEXES}
 
 const PRIVACY = `# Privacy
 
-There is no account, no database, no cookie and no analytics on this site.
-Nothing you paste is written down anywhere this site controls, and nothing is
-associated with you, because there is no you: there is a browser tab and the
-session it holds open.
+There is no account, no database and no cookie on this site. Nothing you paste
+is written down anywhere this site controls, and nothing is associated with you,
+because there is no you: there is a browser tab and the session it holds open.
+The one thing measured is how fast the pages load, with Vercel Speed Insights,
+and what that sends is described below.
 
 ## What leaves the browser
 
@@ -188,14 +189,39 @@ it expires on its own, and it is not keyed by anything about you.
 Only public repositories can be read. The server fetches the pull request from
 GitHub with no credentials of yours; an optional token on the server raises this
 site's own rate limit with GitHub and is never yours. Fetching is rate limited
-per network address, which is the one thing about a visitor this site holds in
+per network address, which is the one thing about a visitor this site's server holds in
 memory at all, and it holds it for minutes, in one server instance's memory, to
 decide whether to fetch again.
 
+## How fast the page loads
+
+This site measures how fast its pages load for the people using them, with
+Vercel Speed Insights. A small script from Vercel, served from this site's own
+domain, reads the loading and responsiveness timings the browser already keeps
+(the Web Vitals) and sends them to Vercel after a page loads.
+
+Each measurement carries the timing and its value, the address and the route of
+the page it was taken on, the page element it concerns (as a selector, such as
+\`main > img\`), the browser and its version, the device type and operating
+system, the network speed the browser reports, the country, the version of the
+Speed Insights script, and the time Vercel received it. For a review opened
+from a pull request, the address names that public repository and the pull
+request number. Code you paste, the files and the reviews are never part of it.
+
+The script sets no cookie and stores nothing in your browser. Vercel describes
+the measurements as anonymous: they are not tied to a visitor or to a network
+address, and nothing in them would let anyone follow one visitor from page to
+page or say who they are. Vercel does not publish how long it keeps them. The
+dashboard this site's owner reads them in shows the last seven days, or longer
+on Vercel's paid tier.
+
+[Vercel's own account of what Speed Insights collects](https://vercel.com/docs/speed-insights/privacy-policy).
+
 ## What is not here
 
-No sign-in. No profile. No database. No advertising and no third-party analytics.
-Nothing is sold, because there is nothing collected to sell.
+No sign-in. No profile. No database. No advertising and no tracking pixels, and
+nothing that records who visits or what they do here: the one measurement is the
+page speed above. Nothing is sold, because there is nothing collected to sell.
 
 ## Machine-readable
 

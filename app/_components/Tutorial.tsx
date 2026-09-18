@@ -378,17 +378,17 @@ export function TutorialDuckPicture() {
 }
 
 /**
- * The bubble's colours, which are the one place on the page that does not
- * read from the palette: white on black in both themes, so the duck's speech
- * looks the same by day and by night.
+ * The bubble's colours: the page's opposite. Black with white letters on the
+ * white page, white with black letters on the dark one, so the duck's speech is
+ * the one thing on the page printed in reverse whichever paper it is on.
  *
- * The edge is the exception that does follow the theme. On the white page a
- * black bubble needs no outline, and on the near-black one it would vanish
- * without one. The ink token is dark in the light theme and light in the dark
- * one, so a border in ink over black is invisible by day and a light hairline
- * by night, with no theme selector written here.
+ * They come from the palette (`--bubble` and `--bubble-ink` in `globals.css`)
+ * rather than from a `dark:` variant, because the palette is what follows the
+ * reader's own choice: a light page on a dark desktop still gets a black
+ * bubble. The tail is the same colour as the body and needs no outline in
+ * either theme, since the bubble is always the page's opposite.
  */
-const INK_ON_BLACK = 'border-ink/60 bg-black text-white';
+const BUBBLE = 'bg-bubble text-bubble-ink';
 
 /**
  * What the duck is saying, in a bubble beside it.
@@ -423,45 +423,45 @@ export function TutorialBubble() {
 
   return (
     <div
-      className={`relative mt-3 w-full max-w-[22rem] rounded-md border px-3 py-2.5 lg:absolute lg:top-1/2 lg:left-[calc(50%+8.75rem)] lg:mt-0 lg:w-80 lg:-translate-y-1/2 ${INK_ON_BLACK}`}
+      className={`relative mt-3 w-full max-w-[22rem] rounded-md px-3 py-2.5 lg:absolute lg:top-1/2 lg:left-[calc(50%+8.75rem)] lg:mt-0 lg:w-80 lg:-translate-y-1/2 ${BUBBLE}`}
       data-tutorial="bubble"
     >
       {/* The tail, twice: it points up at the duck standing above it on a
           phone, and left at the duck standing beside it once there is room.
-          A square turned 45 degrees with two of its four borders drawn, so the
-          bubble's own outline carries on around the point. */}
+          A square turned 45 degrees, half of it standing out of the bubble. */}
       <span
         aria-hidden="true"
-        className={`-top-[6px] -ml-[6px] absolute left-1/2 size-3 rotate-45 border-t border-l lg:hidden ${INK_ON_BLACK}`}
+        className={`-top-[6px] -ml-[6px] absolute left-1/2 size-3 rotate-45 lg:hidden ${BUBBLE}`}
       />
       <span
         aria-hidden="true"
-        className={`-left-[6px] -mt-[6px] absolute top-1/2 hidden size-3 rotate-45 border-b border-l lg:block ${INK_ON_BLACK}`}
+        className={`-left-[6px] -mt-[6px] absolute top-1/2 hidden size-3 rotate-45 lg:block ${BUBBLE}`}
       />
       {/* A new node per sentence, so the browser has something to start the
           fade from. `starting:` is the whole animation: no keyframes, and
           under reduced motion the transition is not declared at all, so the
           sentence simply appears.
-          16px because the face is drawn on an 8-pixel grid: at 16px one of
-          its pixels is two CSS pixels, which is a whole number of device
-          pixels on a 1x, a 2x and a 3x screen alike, so no edge is ever
-          smeared across two. 12px is crisp only at 2x, and 8px is too small
-          to read. The glyphs are a full em wide, so the lines are spaced
-          generously and the bubble is wider from `lg` up. Ligatures are off:
-          the face joins "fi" into one glyph, which breaks the grid. */}
+          12px, which puts one of the face's 8 grid pixels on 1.5 CSS pixels:
+          three device pixels on a 2x screen, so every edge is crisp there,
+          and half a device pixel off the grid at 1x and 3x, where the edges
+          soften a little. 16px was crisp at every ratio and was traded for a
+          quieter bubble. The lines are 21px apart, fourteen of the face's
+          pixels, which is a whole number of device pixels at 2x and the same
+          air between lines, in proportion, that the 16px setting had. The
+          glyphs are a full em wide, so the bubble stays wide from `lg` up.
+          Ligatures are off: the face joins "fi" into one glyph, which breaks the grid. */}
       <p
         aria-atomic="true"
         aria-live="polite"
-        className={`${pixel.className} text-[16px] leading-[1.75] opacity-100 [font-variant-ligatures:none] starting:opacity-0 motion-safe:transition-opacity motion-safe:duration-200`}
+        className={`${pixel.className} text-[12px] leading-[21px] opacity-100 [font-variant-ligatures:none] starting:opacity-0 motion-safe:transition-opacity motion-safe:duration-200`}
         key={step}
         ref={said}
         tabIndex={-1}
       >
         {line}
       </p>
-      {/* The control is set in the same pixels as the sentence, at the same
-          size and for the same reason: it is part of the bubble, and a
-          dialogue box in two typefaces reads as two things. The arrow is the
+      {/* The control is set in the same pixels as the sentence: it is part of
+          the bubble, and a dialogue box in two typefaces reads as two things. The arrow is the
           face's own `>`, not an icon, so it sits on the same grid. */}
       {/* Small and in the corner, the way a game's dialogue box marks that
           there is more: 8px is the face's own grid, so it stays crisp, and the
@@ -469,7 +469,7 @@ export function TutorialBubble() {
       {more ? (
         <div className="-mb-1 flex justify-end">
           <button
-            className={`${pixel.className} inline-flex min-h-6 min-w-6 cursor-pointer items-center justify-end rounded-sm px-1 text-[8px]! text-white [font-variant-ligatures:none]! underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2`}
+            className={`${pixel.className} inline-flex min-h-6 min-w-6 cursor-pointer items-center justify-end rounded-sm px-1 text-[8px]! text-bubble-ink [font-variant-ligatures:none]! underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-bubble-ink focus-visible:outline-offset-2`}
             data-tutorial="next"
             onClick={advance}
             type="button"

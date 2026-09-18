@@ -1,3 +1,4 @@
+import { ChevronRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { FAQ, FAQ_LINK_PATTERN, FAQ_LINKS } from '@/lib/faq';
@@ -32,25 +33,41 @@ function answerNodes(answer: string): ReactNode[] {
 }
 
 /**
- * The questions, open. They were folds on the landing page, where they were a
- * footnote to a field; on a page of their own there is nothing to fold them
- * out of the way of, and structured data that answers something the page keeps
- * shut is a lie to a machine.
+ * The questions, folded: one line each, so the page reads as a list of what
+ * can be asked, and each opens where it stands.
+ *
+ * A native `<details>` does the folding, which is what makes it sound for
+ * everyone without a line of script: the summary is a button to the keyboard
+ * and to a screen reader, Enter and Space open it, and the state it announces
+ * is the browser's own. A closed answer is still in the document, so the
+ * server-rendered HTML carries every answer the page's `FAQPage` structured
+ * data claims, and the browser's find-in-page opens the one it lands in.
+ *
+ * The question's heading is inside the summary so that the whole line is the
+ * control. The chevron turns to say which way it will go, and is hidden from
+ * a screen reader, which hears expanded or collapsed instead.
  */
 export function Faq() {
   return (
     <div className="flex max-w-[70ch] flex-col gap-2">
       {FAQ.map((item) => (
-        <section
-          className="rounded-md border border-line bg-surface px-3 py-2.5"
+        <details
+          className="group rounded-md border border-line bg-surface"
           data-faq={true}
           key={item.q}
         >
-          <h2 className="text-[13px] font-semibold text-ink">{item.q}</h2>
-          <p className="mt-1.5 text-[13px] leading-relaxed text-muted">
+          <summary className="flex min-h-10 cursor-pointer list-none items-center gap-2 rounded-md px-3 py-2.5 hover:text-ink [&::-webkit-details-marker]:hidden">
+            <ChevronRight
+              aria-hidden="true"
+              className="shrink-0 text-muted motion-safe:transition-transform motion-safe:duration-150 group-open:rotate-90"
+              size={14}
+            />
+            <h2 className="text-[13px] font-semibold text-ink">{item.q}</h2>
+          </summary>
+          <p className="-mt-1 px-3 pb-2.5 pl-[2.125rem] text-[13px] leading-relaxed text-muted">
             {answerNodes(item.a)}
           </p>
-        </section>
+        </details>
       ))}
     </div>
   );
