@@ -3,6 +3,7 @@ import Image from 'next/image';
 import { PRESETS } from '@/agent/lib/presets';
 import { SITE } from '@/lib/site';
 
+import { HomeDuck, LandingDuck } from './Duck';
 import { PasteButton } from './PasteButton';
 import { PresetChip } from './PresetChip';
 import { PullRequestField } from './PullRequestField';
@@ -22,9 +23,9 @@ import { ThemeToggle } from './ThemeToggle';
  *
  * There is no title on screen. A product whose whole surface is one address
  * field does not need to be introduced above it, and the duck says which page
- * this is faster than four words do — so the duck stands at the left of the
- * field, on its line, and the name is carried by a heading only a crawler and
- * a screen reader ever meet.
+ * this is faster than four words do — large above the field while nothing is
+ * open, and shrunk to a mark at the left of it once something is. The name is
+ * carried by a heading only a crawler and a screen reader ever meet.
  *
  * Everything here that is the same on every visit is rendered on the server:
  * the duck, the line the chips sit on, the labels in them, the hint under the
@@ -35,6 +36,21 @@ export function Hero() {
   return (
     <header className="mb-4">
       <h1 className="sr-only">{SITE.name}</h1>
+      {/* The landing view's duck: above the field and centred rather than
+          beside it, because at 375px there is no "beside" — the address needs
+          the whole line — and a mascot on the centre line is what a door looks
+          like at any width. It is gone the moment a review opens, and the one
+          in the field is the same bird arriving. */}
+      <LandingDuck>
+        <Image
+          alt=""
+          className="h-24 w-24 sm:h-32 sm:w-32"
+          height={256}
+          priority={true}
+          src="/ducky-256.png"
+          width={256}
+        />
+      </LandingDuck>
       {/* The theme switch lives up here, in plain sight: beside the field where
           there is room, and at the end of the hint line on phones, where the
           field needs every pixel for the repository name. */}
@@ -42,14 +58,16 @@ export function Hero() {
         <div className="min-w-0 flex-1">
           <PullRequestField
             duck={
-              <Image
-                alt=""
-                className="h-7 w-7 shrink-0 sm:h-8 sm:w-8"
-                height={32}
-                priority={true}
-                src="/ducky-64.png"
-                width={32}
-              />
+              <HomeDuck>
+                <Image
+                  alt=""
+                  className="h-7 w-7 shrink-0 sm:h-8 sm:w-8"
+                  height={32}
+                  priority={true}
+                  src="/ducky-64.png"
+                  width={32}
+                />
+              </HomeDuck>
             }
           />
         </div>

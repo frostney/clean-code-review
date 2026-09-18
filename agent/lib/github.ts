@@ -17,6 +17,20 @@ const NAME = '[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*';
 const PR_URL = new RegExp(
   `^https?:\\/\\/(?:www\\.)?github\\.com\\/(${NAME})\\/(${NAME})\\/pull\\/(\\d+)(?:[/?#].*)?$`,
 );
+const NAME_ONLY = new RegExp(`^${NAME}$`);
+
+/** GitHub allows a repository 100 characters and an owner 39. */
+const MAX_NAME_LENGTH = 100;
+
+/**
+ * Could GitHub have given an owner or a repository this name? What arrives in
+ * a route's parameters is whatever was typed into the address bar, and a
+ * segment that is not a name is a page that does not exist rather than a fetch
+ * worth making.
+ */
+export function isGitHubName(value: string): boolean {
+  return value.length <= MAX_NAME_LENGTH && NAME_ONLY.test(value);
+}
 
 function parsePullRequestUrl(
   input: string,

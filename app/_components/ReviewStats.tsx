@@ -8,7 +8,12 @@ import { useReviewView } from './ReviewProvider';
  * this page is making, and this is the line that makes it.
  */
 export function ReviewStats() {
-  const { review, judge, lineCount } = useReviewView();
+  const { open, review, judge, lineCount } = useReviewView();
+  // Nothing is open, so there is nothing to be the size of. A line reading
+  // "0 files · 0 lines" under the field is a claim about an empty page.
+  if (!open) {
+    return null;
+  }
   const fileCount = review.files.length;
   const cached = judge.cached || judge.summary.cached;
 

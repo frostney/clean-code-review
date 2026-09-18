@@ -78,11 +78,17 @@ export function cacheKey(kind: string, input: unknown): string {
   return `${kind}:${createHash('sha256').update(JSON.stringify(input)).digest('hex').slice(0, KEY_DIGEST_CHARS)}`;
 }
 
-/** Read through: return the cached value or compute, store and return it. Reports whether it was a hit. */
+/**
+ * Read through: return the cached value or compute, store and return it.
+ * Reports whether it was a hit. `ttl` is in seconds, and is the hour above
+ * unless the caller has a reason for a shorter one — a pull request moves
+ * while a judgment of fixed text does not.
+ */
 export async function cached<T>(
   key: string,
   name: string,
   compute: () => Promise<T>,
+  ttl = CACHE_TTL_SECONDS,
 ): Promise<{ value: T; hit: boolean }> {
   const store = await cache();
   try {
@@ -95,7 +101,7 @@ export async function cached<T>(
   }
   const value = await compute();
   try {
-    await store.set(key, value, { name, ttl: CACHE_TTL_SECONDS });
+    await store.set(key, value, { name, ttl });
   } catch {
     /* same */
   }
