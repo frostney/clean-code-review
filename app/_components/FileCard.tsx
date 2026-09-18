@@ -368,6 +368,7 @@ export function FileCard({
   judgment,
   pending,
   failed,
+  paused,
   truncated,
   summary,
   collapsed,
@@ -379,6 +380,8 @@ export function FileCard({
   pending: boolean;
   /** Jev was asked about this file twice and answered for neither. */
   failed: boolean;
+  /** The site's model budget refused this file's turn; nothing is coming until it resets. */
+  paused: boolean;
   /** The paste was longer than one judgment reads, and this is the part that was. */
   truncated: boolean;
   /** Luna's review of the whole change, for the paragraph about this file. */
@@ -404,7 +407,7 @@ export function FileCard({
   const smells = prose ? 0 : smellCount(answers);
   const verdict = prose
     ? null
-    : fileVerdict(verdictScore(answers), { empty, failed });
+    : fileVerdict(verdictScore(answers), { empty, failed, paused });
   const sure = prose ? null : verdictConfidence(answers);
   const stats = useMemo(
     () => (file.patch ? diffStats(parsePatch(file.content)) : null),

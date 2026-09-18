@@ -118,6 +118,7 @@ type VerdictKey =
   | 'changes'
   | 'pending'
   | 'failed'
+  | 'paused'
   | 'empty';
 
 export interface Verdict {
@@ -143,12 +144,17 @@ const VERDICTS: Record<VerdictKey, Verdict> = {
     key: 'empty',
     label: 'Nothing to judge',
   },
-  // Not judgments: the two ways a card ends up with no answers and no reason
-  // to keep pulsing. Grey, because neither is a verdict about the code.
   failed: {
     className: 'bg-track text-muted',
     key: 'failed',
     label: 'Could not judge',
+  },
+  // Not judgments: the ways a card ends up with no answers and no reason to
+  // keep pulsing. Grey, because none is a verdict about the code.
+  paused: {
+    className: 'bg-track text-muted',
+    key: 'paused',
+    label: 'Paused',
   },
   pending: {
     className: 'bg-track text-muted',
@@ -195,13 +201,17 @@ function verdictOf(score: number | null): Verdict {
  */
 export function fileVerdict(
   score: number | null,
-  state: { empty?: boolean; failed?: boolean },
+  state: { empty?: boolean; failed?: boolean; paused?: boolean },
 ): Verdict {
   if (state.empty) {
     return VERDICTS.empty;
   }
   if (score === null && state.failed) {
     return VERDICTS.failed;
+  }
+  // The site's model budget refused the turn: nothing is coming until it resets.
+  if (score === null && state.paused) {
+    return VERDICTS.paused;
   }
   return verdictOf(score);
 }
@@ -215,8 +225,13 @@ export function fileVerdict(
 export function reviewVerdict(
   scores: readonly (number | null)[],
   judgeable: boolean,
+  paused = false,
 ): Verdict {
-  return judgeable ? verdictOf(meanVerdict(scores)) : VERDICTS.empty;
+  if (!judgeable) {
+    return VERDICTS.empty;
+  }
+  const mean = meanVerdict(scores);
+  return mean === null && paused ? VERDICTS.paused : verdictOf(mean);
 }
 
 /** The verdict score of one file, or null when Jev has not answered for it. */

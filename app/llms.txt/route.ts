@@ -1,3 +1,8 @@
+import {
+  dollars,
+  MCP_DAILY_BUDGET_USD,
+  MCP_HOURLY_BUDGET_USD,
+} from '@/agent/lib/budgets';
 import { QUESTION_COUNT } from '@/agent/lib/questions';
 import { REVIEW_LIMITS } from '@/agent/lib/review';
 import {
@@ -36,7 +41,7 @@ An agent without a browser gets the same review from the MCP server at ${SITE.ur
 - \`${MCP_TOOLS.pullRequest}\` takes a public GitHub pull request URL and also returns the permalink to the same review on this site.
 - \`${MCP_TOOLS.paste}\` takes what you would paste into the page: a unified diff, whole files each introduced by a \`// file: path\` line, or a single file, up to ${MAX_PASTE_CHARS.toLocaleString('en-US')} characters.
 
-Each address may make ${MCP_CALLS_PER_WINDOW} calls per ${MCP_WINDOW_MINUTES} minutes.
+Each address may make ${MCP_CALLS_PER_WINDOW} calls per ${MCP_WINDOW_MINUTES} minutes. Every caller shares one model budget of ${dollars(MCP_HOURLY_BUDGET_USD)} per hour and ${dollars(MCP_DAILY_BUDGET_USD)} per UTC day. Once it is spent, the endpoint refuses new reviews and says when the budget resets; a review answered wholly from the cache is still served.
 
 ## Links
 

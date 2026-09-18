@@ -32,6 +32,7 @@ export function ReviewPills({
   const verdict = reviewVerdict(
     judged.map((j) => verdictScore(j.answers)),
     judgeable,
+    review.paused !== null,
   );
   const smells = judged.reduce((total, j) => total + smellCount(j.answers), 0);
 
@@ -74,6 +75,14 @@ function ReviewStatus({ review }: { review: ReviewState }) {
         budget spent
       </span>
     );
+  }
+  if (review.paused) {
+    // With nothing judged the verdict pill already says "Paused".
+    return Object.keys(review.judgments).length ? (
+      <span className={`${base} text-muted`} data-status="paused">
+        paused
+      </span>
+    ) : null;
   }
   if (review.error) {
     return (

@@ -9,6 +9,11 @@ import {
 } from 'eve/client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import {
+  mayBePaused,
+  type PausedReply,
+  parsePaused,
+} from '@/agent/lib/budgets';
 import { judgeMessage, summarizeMessage } from '@/agent/lib/prompt';
 import {
   type FileJudgment,
@@ -73,6 +78,12 @@ export interface ReviewState {
   spentUsd: number;
   /** The session hit the agent's per-session cost cap and will not answer again. */
   budgetSpent: boolean;
+  /**
+   * The site's model budget for this hour or this UTC day is spent, and the
+   * last turn was refused with no model run. Unlike `budgetSpent` this passes:
+   * the next turn that gets through clears it.
+   */
+  paused: PausedReply | null;
   /** Every file of the last judge turn came back from the agent's one-hour cache. */
   cached: boolean;
   /** Luna's prose review of the whole change and of each file. */
@@ -87,10 +98,14 @@ const IDLE: ReviewState = {
   failed: {},
   judgments: {},
   ms: null,
+  paused: null,
   pending: {},
   spentUsd: 0,
   summary: NO_SUMMARY,
 };
+
+/** What a review that was refused for the site's budget says where its text would be. */
+const PAUSED_SUMMARY_ERROR = 'the review budget is spent';
 
 /** The pull request a review came from, when it came from one. */
 export interface PullRequestContext {
@@ -336,6 +351,7 @@ function withSettledSummary(
 ): ReviewState {
   return {
     ...s,
+    paused: null,
     spentUsd: s.spentUsd + run.costUsd,
     summary: {
       ...s.summary,
@@ -381,6 +397,31 @@ function withAbandonedSummary(
       ...s.summary,
       error: retrying ? null : error,
       failed: !retrying,
+      replacing: {},
+      running: false,
+      streaming: false,
+      writing: null,
+    },
+  };
+}
+
+/**
+ * The review as it stops, because the site's budget refused the turn. Whatever
+ * prose is on screen stays; what was not written yet says why it is not there.
+ */
+function withPausedSummary(
+  s: ReviewState,
+  run: SummaryRun,
+  paused: PausedReply,
+): ReviewState {
+  return {
+    ...s,
+    paused,
+    spentUsd: s.spentUsd + run.costUsd,
+    summary: {
+      ...s.summary,
+      error: PAUSED_SUMMARY_ERROR,
+      failed: true,
       replacing: {},
       running: false,
       streaming: false,
@@ -457,6 +498,24 @@ function withBudgetSpentTurn(
   };
 }
 
+/**
+ * A judge turn the site's budget refused: nothing was judged and nothing was
+ * spent, the paths it carried are free again, and the answers already on
+ * screen stay put.
+ */
+function withPausedTurn(
+  s: ReviewState,
+  paths: readonly string[],
+  paused: PausedReply,
+): ReviewState {
+  return {
+    ...s,
+    asking: false,
+    paused,
+    pending: without(s.pending, paths),
+  };
+}
+
 /** A turn the agent could not answer at all. */
 function withFailedTurn(
   s: ReviewState,
@@ -485,6 +544,7 @@ function withJudgeTurn(s: ReviewState, turn: JudgeTurn): ReviewState {
     },
     judgments: { ...s.judgments, ...turn.fresh },
     ms: turn.ms,
+    paused: null,
     pending: without(s.pending, turn.paths),
     spentUsd: s.spentUsd + turn.costUsd,
   };
@@ -919,7 +979,8 @@ export function useReview(
       /** Put the text written so far on screen. */
       const paint = (buffer: string) => {
         decisionSeen ||= DECISION_LINE.test(buffer);
-        if (stale()) {
+        // A refusal arrives on the same stream as a review, and is no review.
+        if (stale() || mayBePaused(buffer)) {
           return;
         }
         const parsed = parseSummaryText(buffer, true);
@@ -963,7 +1024,16 @@ export function useReview(
         return;
       }
 
-      settleSummary(run, paths, asked, timedOut);
+      const paused = run.cancelled
+        ? null
+        : parsePaused(run.complete || run.buffer);
+      if (paused) {
+        // Asked about again once the budget has turned and something moves.
+        forgetSummarized(paths);
+        setState((s) => withPausedSummary(s, run, paused));
+      } else {
+        settleSummary(run, paths, asked, timedOut);
+      }
       // A review that has settled — written, failed or cancelled — is the one
       // that decides the pace: from here on the prose waits for the code to stop
       // moving, whatever this first attempt came back with.
@@ -975,6 +1045,7 @@ export function useReview(
       beginSummary,
       dropSummary,
       endSummaryTurn,
+      forgetSummarized,
       sendTurn,
       settleSummary,
     ],
@@ -1089,13 +1160,18 @@ export function useReview(
         setState((s) => withBudgetSpentTurn(s, paths, costUsd));
         return;
       }
-      if (result.status === 'failed') {
-        // Forget what was sent so the same files can be retried, and count
-        // what the attempt cost all the same.
-        for (const path of paths) {
-          sentRef.current.delete(path);
-        }
-        setState((s) => withFailedTurn(s, paths, costUsd));
+      const paused =
+        result.status === 'failed' ? null : parsePaused(result.message);
+      if (result.status === 'failed' || paused) {
+        // Nothing was judged. Forget what was sent so the same files can be
+        // retried (for a refusal, by the next edit once the budget has
+        // turned), and count what a failed attempt cost all the same.
+        pruneKeys(sentRef.current, (path) => paths.includes(path));
+        setState((s) =>
+          paused
+            ? withPausedTurn(s, paths, paused)
+            : withFailedTurn(s, paths, costUsd),
+        );
         return;
       }
       const review = parseReview(result.message);

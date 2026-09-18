@@ -16,6 +16,11 @@
  * Every figure below is read from the module that enforces it, so a limit
  * cannot be raised in one place and still be promised in another.
  */
+import {
+  dollars,
+  MCP_DAILY_BUDGET_USD,
+  MCP_HOURLY_BUDGET_USD,
+} from '@/agent/lib/budgets';
 import { parsePullRequest } from '@/agent/lib/github';
 import { QUESTION_COUNT } from '@/agent/lib/questions';
 import { REVIEW_LIMITS } from '@/agent/lib/review';
@@ -55,7 +60,7 @@ const url = (path: string) => `${SITE.url}${path}`;
 const INDEXES = [
   `- [llms.txt](${url('/llms.txt')}): this site in one paragraph, for a model.`,
   `- [sitemap.xml](${url('/sitemap.xml')}): every page meant to be indexed.`,
-  `- MCP server at \`${url(MCP_PATH)}\`: the same review for an agent without a browser, over stateless Streamable HTTP. \`${MCP_TOOLS.pullRequest}\` takes a public pull request URL; \`${MCP_TOOLS.paste}\` takes a unified diff or files, up to ${MAX_PASTE_CHARS.toLocaleString('en-US')} characters. ${MCP_CALLS_PER_WINDOW} calls per ${MCP_WINDOW_MINUTES} minutes per address.`,
+  `- MCP server at \`${url(MCP_PATH)}\`: the same review for an agent without a browser, over stateless Streamable HTTP. \`${MCP_TOOLS.pullRequest}\` takes a public pull request URL; \`${MCP_TOOLS.paste}\` takes a unified diff or files, up to ${MAX_PASTE_CHARS.toLocaleString('en-US')} characters. ${MCP_CALLS_PER_WINDOW} calls per ${MCP_WINDOW_MINUTES} minutes per address, and a shared model budget of ${dollars(MCP_HOURLY_BUDGET_USD)} per hour and ${dollars(MCP_DAILY_BUDGET_USD)} per UTC day; once it is spent, new reviews are refused until it resets.`,
   `- [Source](${SITE.source}): the whole application, including the question set and the prompts.`,
 ].join('\n');
 
@@ -187,6 +192,10 @@ Code can also arrive from an agent, through the MCP server at
 a single request, with no session and no browser tab. It keeps what the page
 keeps: the same one-hour cache of answers and reviews, and a count of calls per
 network address, ${MCP_CALLS_PER_WINDOW} per ${MCP_WINDOW_MINUTES} minutes, held in one server instance's memory.
+It also has a model budget that every caller shares, ${dollars(MCP_HOURLY_BUDGET_USD)} per hour and
+${dollars(MCP_DAILY_BUDGET_USD)} per UTC day. Once it is spent, the endpoint refuses new reviews until it
+resets. The budget is a running total of what the models cost, and it holds nothing
+about who called.
 
 ## How long anything is kept
 

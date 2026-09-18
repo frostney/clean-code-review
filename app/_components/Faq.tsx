@@ -1,5 +1,10 @@
 import type { ReactNode } from 'react';
 
+import {
+  dollars,
+  PAGE_DAILY_BUDGET_USD,
+  PAGE_HOURLY_BUDGET_USD,
+} from '@/agent/lib/budgets';
 import { QUESTION_COUNT, SMELL_IDS } from '@/agent/lib/questions';
 import { REVIEW_LIMITS, SESSION_COST_CAP_USD } from '@/agent/lib/review';
 import { REVIEWER_MODEL } from '@/agent/lib/summary';
@@ -39,7 +44,7 @@ export const FAQ: readonly { q: string; a: string }[] = [
     q: 'How is a pull request judged?',
   },
   {
-    a: `Yes, and there is nothing to sign in to. Each browser tab carries its own cap of ${CAP_CENTS} cents of model time, so a single session cannot run up a bill; when a tab reaches the cap the meters keep their last answers and a reload starts a fresh session. The source is MIT-licensed, at ${SITE.source.replace(/^https?:\/\//, '')}.`,
+    a: `Yes, and there is nothing to sign in to. Each browser tab carries its own cap of ${CAP_CENTS} cents of model time, so a single session cannot run up a bill; when a tab reaches the cap the meters keep their last answers and a reload starts a fresh session. The whole site shares a model budget of ${dollars(PAGE_HOURLY_BUDGET_USD)} an hour and ${dollars(PAGE_DAILY_BUDGET_USD)} a UTC day, and pauses new reviews until it resets once that is spent. The source is MIT-licensed, at ${SITE.source.replace(/^https?:\/\//, '')}.`,
     q: 'Is it free?',
   },
 ];

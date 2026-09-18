@@ -132,13 +132,15 @@ export async function cacheGet<T>(key: string): Promise<T | undefined> {
   }
 }
 
+/** Store a value for the hour above, or for `ttl` seconds when a caller needs longer. */
 export async function cacheSet(
   key: string,
   value: unknown,
   name: string,
+  ttl = CACHE_TTL_SECONDS,
 ): Promise<void> {
   try {
-    await (await cache()).set(key, value, { name, ttl: CACHE_TTL_SECONDS });
+    await (await cache()).set(key, value, { name, ttl });
   } catch {
     /* ignore */
   }
