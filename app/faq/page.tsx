@@ -2,8 +2,9 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 
-import { FAQ, Faq } from '@/app/_components/Faq';
+import { Faq } from '@/app/_components/Faq';
 import { Footer } from '@/app/_components/Footer';
+import { FAQ } from '@/lib/faq';
 import { SITE } from '@/lib/site';
 
 /**

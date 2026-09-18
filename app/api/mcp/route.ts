@@ -1,5 +1,6 @@
 import { createMcpHandler } from 'mcp-handler';
 
+import { MCP_SERVER_NAME, MCP_SERVER_VERSION } from '@/lib/mcp-limits';
 import { registerReviewTools } from '@/lib/mcp-server';
 import { SITE } from '@/lib/site';
 
@@ -16,8 +17,10 @@ import { SITE } from '@/lib/site';
  * everything under `/api/`.
  */
 const handler = createMcpHandler(registerReviewTools, {
-  instructions: `${SITE.name}: ${SITE.tagline} Jev answers the questions for every code file and Luna writes the review. Use review_pull_request for a public GitHub pull request, and review_pasted_code for a diff or files that are not on GitHub.`,
-  serverInfo: { name: 'clean-code-review', version: '1.0.0' },
+  instructions: `${SITE.name}: ${SITE.tagline} Jev judges the code file by file and Luna writes the review. Use review_pull_request for a public GitHub pull request, and review_pasted_code for a diff or files that are not on GitHub.`,
+  // The same name and version the server card declares, so a client that read
+  // the card first finds what it expected when it connects.
+  serverInfo: { name: MCP_SERVER_NAME, version: MCP_SERVER_VERSION },
 });
 
 /** JSON-RPC's "Invalid Request": the body is JSON, but not one request. */

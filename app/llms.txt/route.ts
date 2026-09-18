@@ -9,6 +9,7 @@ import {
   MAX_PASTE_CHARS,
   MCP_CALLS_PER_WINDOW,
   MCP_PATH,
+  MCP_SERVER_CARD_PATH,
   MCP_TOOLS,
   MCP_WINDOW_MINUTES,
 } from '@/lib/mcp-limits';
@@ -42,6 +43,8 @@ An agent without a browser gets the same review from the MCP server at ${SITE.ur
 - \`${MCP_TOOLS.paste}\` takes what you would paste into the page: a unified diff, whole files each introduced by a \`// file: path\` line, or a single file, up to ${MAX_PASTE_CHARS.toLocaleString('en-US')} characters.
 
 Each address may make ${MCP_CALLS_PER_WINDOW} calls per ${MCP_WINDOW_MINUTES} minutes. Every caller shares one model budget of ${dollars(MCP_HOURLY_BUDGET_USD)} per hour and ${dollars(MCP_DAILY_BUDGET_USD)} per UTC day. Once it is spent, the endpoint refuses new reviews and says when the budget resets; a review answered wholly from the cache is still served.
+
+A server card describing it is at ${SITE.url}${MCP_SERVER_CARD_PATH}, and the site's AI Catalog at ${SITE.url}/.well-known/ai-catalog.json lists it. Both follow the server card proposal, which is not yet part of the MCP specification.
 
 ## Links
 

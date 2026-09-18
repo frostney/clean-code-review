@@ -88,6 +88,11 @@ endpoint refuses new reviews with the time the budget resets. A review answered
 wholly from the cache is still served. The endpoint takes one JSON-RPC message
 per request and answers a batch with HTTP 400.
 
+A server card is at `/api/mcp/server-card` and the site's AI Catalog at
+`/.well-known/ai-catalog.json` lists it, both in the shape the server card
+proposal uses; that proposal is not yet part of the MCP specification. The
+server is deliberately not listed in the MCP Registry.
+
 ```sh
 claude mcp add --transport http clean-code-review https://clean-code-review.vercel.app/api/mcp
 ```

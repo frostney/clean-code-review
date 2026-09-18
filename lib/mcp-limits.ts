@@ -12,6 +12,20 @@ import { WINDOW_MS } from './throttle';
 /** Where the endpoint is mounted: `app/api/mcp/route.ts`. */
 export const MCP_PATH = '/api/mcp';
 
+/**
+ * Where its server card is: the endpoint's own address plus `/server-card`,
+ * the location the server card proposal reserves for it.
+ */
+export const MCP_SERVER_CARD_PATH = `${MCP_PATH}/server-card`;
+
+/**
+ * The server's name and version, as it reports them when a client connects
+ * and as its server card declares them. The card format wants a reverse-DNS
+ * name, so the runtime uses the same one rather than contradict it.
+ */
+export const MCP_SERVER_NAME = 'app.vercel.clean-code-review/review';
+export const MCP_SERVER_VERSION = '1.0.0';
+
 /** The two tools, by the names a client calls them. */
 export const MCP_TOOLS = {
   paste: 'review_pasted_code',

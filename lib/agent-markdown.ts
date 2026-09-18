@@ -27,6 +27,7 @@ import { REVIEW_LIMITS } from '@/agent/lib/review';
 import { REVIEWER_MODEL } from '@/agent/lib/summary';
 
 import { pullRequestUrl } from './address';
+import { answerMarkdown, FAQ } from './faq';
 import {
   MAX_PASTE_CHARS,
   MCP_CALLS_PER_WINDOW,
@@ -125,42 +126,16 @@ ${LIMITS}
 ${INDEXES}
 `;
 
+/**
+ * `/faq` for an agent: the same answers the page shows, from the same array,
+ * with the page's linked phrases as Markdown links, so this copy cannot drift
+ * from the one on screen.
+ */
 const FAQ_PAGE = `# Questions about ${SITE.name}
 
-The same answers the page gives on screen, for a reader that cannot open a
-disclosure triangle.
+${FAQ.map((item) => `## ${item.q}\n\n${answerMarkdown(item.a)}`).join('\n\n')}
 
-## What does it judge?
-
-Code, one file at a time, against ${QUESTION_COUNT} questions taken from the chapters of
-Robert C. Martin's *Clean Code*. Every answer is a probability or a score rather
-than a sentence, which is what makes the meters comparable between files.
-Markdown, plain text and the other prose in a change are shown beside the review
-and never judged: the questions are about code, and a README would fail most of
-them for being what it is.
-
-## Which models do the work?
-
-Jev, TypeSafe's evaluation model, reached through the Vercel AI Gateway. It
-answers the whole question set for one file in one call and writes no prose at
-all. The review you read is Luna (${REVIEWER_MODEL}), a second model: each file's
-section is written from Jev's findings and that file's code, and the decision at
-the top from the findings for every file and the pull request's description.
-
-## Is my code stored?
-
-No. Each browser tab is one agent session that holds the files only for the turn
-being judged, the page clears that history before every turn, and the session
-goes when the tab does. There is no account and no database. Identical turns can
-come back from a one-hour cache, which is what the "from cache" note means.
-[/privacy](${url('/privacy')}) says this at length.
-
-## How are pull requests and diffs judged?
-
-A pull request arrives as a unified diff and is split per file, each file's hunks
-kept under the headers git wrote. The questions change to suit: a diff is also
-asked whether it leaves the code cleaner than it found it, and a file with no
-test is not asked how good its tests are.
+What leaves the browser, and how long anything is kept, is on [/privacy](${url('/privacy')}).
 
 ## Limits
 
