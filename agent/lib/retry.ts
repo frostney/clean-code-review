@@ -6,7 +6,7 @@
  * the caller's cancel both surface as an `AbortError`, so the error's shape
  * cannot tell them apart, but the two signals can.
  */
-/** The most a `retry-after` is honoured for: a longer one is a limit that one retry will not outlast. */
+/** The longest `retry-after` worth waiting for: a longer one is a limit that one retry will not outlast, so it is not retried. */
 const MAX_RETRY_AFTER_MS = 3000;
 
 /** With no `retry-after`, a pause somewhere in here, so parallel calls do not retry in step. */
@@ -81,8 +81,9 @@ type RetryDecision = { retry: false } | { retry: true; waitMs: number };
 /**
  * The decision, from the failure and from which of the two signals fired.
  * A cancel never retries. A timeout of ours was a stuck call, and goes again
- * at once. A rate limit, a timeout below us or a server error waits what the server asked, at most
- * three seconds, or a jittered moment when it asked nothing. Any other client
+ * at once. A rate limit, a timeout below us or a server error waits what the
+ * server asked, or a jittered moment when it asked nothing; one that asks for
+ * more than three seconds is not retried at all. Any other client
  * error would fail the same way twice. A failure with no status at all, a
  * dropped connection or a reply that did not parse, gets the jittered moment.
  */
@@ -107,7 +108,10 @@ function retryDecision(
   }
   const asked = retryAfterMs(headersOf(err));
   if (asked !== undefined && asked >= 0) {
-    return { retry: true, waitMs: Math.min(asked, MAX_RETRY_AFTER_MS) };
+    // A wait cut short would only be retried into the same limit.
+    return asked > MAX_RETRY_AFTER_MS
+      ? { retry: false }
+      : { retry: true, waitMs: asked };
   }
   return {
     retry: true,

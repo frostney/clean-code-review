@@ -341,6 +341,11 @@ export interface SummaryView {
   model: string | null;
   /** The review came back from the agent's one-hour cache rather than from Luna. */
   cached: boolean;
+  /**
+   * Blocks Luna was cut off in, having run into its output ceiling twice:
+   * "overall" or a path. Their text is as far as it got.
+   */
+  incomplete: Record<string, true>;
 }
 
 export const NO_SUMMARY: SummaryView = {
@@ -349,6 +354,7 @@ export const NO_SUMMARY: SummaryView = {
   error: null,
   failed: false,
   files: {},
+  incomplete: {},
   model: null,
   overall: null,
   replacing: {},

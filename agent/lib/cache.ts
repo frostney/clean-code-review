@@ -62,25 +62,82 @@ const memoryCache: CacheLike = {
   },
 };
 
-let backend: Promise<CacheLike> | null = null;
+/**
+ * The store, and whether it is the one it should be. On Vercel a store that
+ * fell back to this instance's memory is `shared: false`: fine for a judgment
+ * cache, which only repeats work, and wrong for a counter every instance
+ * must see (`./spend.ts`).
+ */
+let backend: Promise<{ store: CacheLike; shared: boolean }> | null = null;
 
-function cache(): Promise<CacheLike> {
+function backendOf(): Promise<{ store: CacheLike; shared: boolean }> {
   backend ??= (async () => {
     if (!process.env.VERCEL) {
-      return memoryCache;
+      // Off Vercel there is one process, and its memory is the whole store.
+      return { shared: true, store: memoryCache };
     }
     try {
       const { getCache } = await import('@vercel/functions');
       const runtime = getCache({ namespace: 'clean-code-judge' });
       return {
-        get: (key) => runtime.get(key),
-        set: (key, value, options) => runtime.set(key, value, options),
+        shared: true,
+        store: {
+          get: (key) => runtime.get(key),
+          set: (key, value, options) => runtime.set(key, value, options),
+        },
       };
     } catch {
-      return memoryCache;
+      return { shared: false, store: memoryCache };
     }
   })();
   return backend;
+}
+
+async function cache(): Promise<CacheLike> {
+  return (await backendOf()).store;
+}
+
+/** Why a strict read or write did not happen: the store failed, or it is not the shared one. */
+export class CacheUnavailableError extends Error {}
+
+/** The shared store, or a `CacheUnavailableError` when this instance only has its own memory. */
+async function sharedCache(): Promise<CacheLike> {
+  const { store, shared } = await backendOf();
+  if (!shared) {
+    throw new CacheUnavailableError(
+      'the Runtime Cache could not be loaded, so this instance only has its own memory',
+    );
+  }
+  return store;
+}
+
+/**
+ * Read a key for a caller that must tell a failed read from a missing one:
+ * undefined means the key is not there, and a throw means nobody knows.
+ */
+export async function cacheGetStrict(key: string): Promise<unknown> {
+  const store = await sharedCache();
+  try {
+    const value = await store.get(key);
+    return value === null ? undefined : value;
+  } catch (err) {
+    throw new CacheUnavailableError(`reading ${key} failed`, { cause: err });
+  }
+}
+
+/** Write a key, and throw when it could not be written. */
+export async function cacheSetStrict(
+  key: string,
+  value: unknown,
+  name: string,
+  ttl: number,
+): Promise<void> {
+  const store = await sharedCache();
+  try {
+    await store.set(key, value, { name, ttl });
+  } catch (err) {
+    throw new CacheUnavailableError(`writing ${key} failed`, { cause: err });
+  }
 }
 
 /** A stable key for any JSON-serialisable description of the work. */

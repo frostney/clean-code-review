@@ -260,6 +260,7 @@ function Judgment({
         </h3>
         <div className="mb-2 px-1.5">
           <ReviewNote
+            incomplete={summary.incomplete[path] === true}
             model={summary.model}
             status={fileSummaryStatus(summary, path)}
             text={summary.files[path]}

@@ -30,6 +30,7 @@ export function ReviewNote({
   error,
   model,
   pills,
+  incomplete = false,
   writing = false,
   tone = 'file',
 }: {
@@ -43,6 +44,8 @@ export function ReviewNote({
   error?: string | null;
   /** The model that wrote it, as the payload named it. */
   model?: string | null;
+  /** Luna was cut off in this block at its length limit: the text is as far as it got. */
+  incomplete?: boolean;
   /** This is the block being written right now: the caret belongs at its end. */
   writing?: boolean;
   tone?: 'overall' | 'file';
@@ -63,6 +66,7 @@ export function ReviewNote({
       )}
       <Body
         error={error}
+        incomplete={incomplete}
         status={status}
         text={text}
         tone={tone}
@@ -99,12 +103,14 @@ function Body({
   status,
   text,
   error,
+  incomplete,
   tone,
   writing,
 }: {
   status: SummaryStatus;
   text: string | null | undefined;
   error?: string | null;
+  incomplete: boolean;
   tone: 'overall' | 'file';
   writing: boolean;
 }) {
@@ -118,6 +124,16 @@ function Body({
   }
   // Still quiet — a review that did not arrive is not an error banner — but
   // with the reason on it when there is one.
+  if (!text && incomplete) {
+    return (
+      <p
+        className="text-[14px] text-muted lg:text-[13px]"
+        data-incomplete="true"
+      >
+        No review: Luna ran into its length limit before it reached this.
+      </p>
+    );
+  }
   if (!text) {
     const why = error?.trim().slice(0, ERROR_CHARS);
     return (
@@ -127,13 +143,20 @@ function Body({
     );
   }
   return (
-    <p
-      className={`leading-relaxed text-ink ${tone === 'overall' ? 'text-[14px] lg:text-[13px]' : 'text-[13px] lg:text-[12.5px]'}`}
-      style={status === 'stale' ? { opacity: 0.5 } : undefined}
-    >
-      {ticked(text)}
-      {writing ? <span aria-hidden="true" className="caret" /> : null}
-    </p>
+    <>
+      <p
+        className={`leading-relaxed text-ink ${tone === 'overall' ? 'text-[14px] lg:text-[13px]' : 'text-[13px] lg:text-[12.5px]'}`}
+        style={status === 'stale' ? { opacity: 0.5 } : undefined}
+      >
+        {ticked(text)}
+        {writing ? <span aria-hidden="true" className="caret" /> : null}
+      </p>
+      {incomplete && !writing ? (
+        <p className="mt-1 text-tiny text-muted" data-incomplete="true">
+          Cut off: Luna ran into its length limit, so this is as far as it got.
+        </p>
+      ) : null}
+    </>
   );
 }
 

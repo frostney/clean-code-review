@@ -14,7 +14,33 @@
  *
  * `parseSummaryText` is tolerant of partial text, so it can run on every
  * streamed delta as well as on the final result.
+ *
+ * Some lines are the adapter's, never the model's, and are read as signals
+ * rather than as text: `OVERALL_REWRITE_LINE` before the overall part is
+ * written again, and `cutOffLine` after a part that was cut off even so.
  */
+
+/**
+ * Written before the overall part is written again, having run into its
+ * output ceiling: what it wrote before is dropped. A file part written again
+ * needs no line of its own, because a repeated file section replaces the one
+ * before it.
+ */
+export const OVERALL_REWRITE_LINE = '<!-- overall written again -->';
+
+/** How the overall section is named in a `cutOffLine`. */
+export const OVERALL_SECTION = 'overall';
+
+const CUT_OFF = /^<!-- cut off: (.+) -->$/;
+
+/**
+ * Written after a part that was cut off at its ceiling twice, once for each
+ * section it leaves incomplete: the one it stopped in, and any it never
+ * reached. `section` is a path, or `OVERALL_SECTION`.
+ */
+export function cutOffLine(section: string): string {
+  return `<!-- cut off: ${section} -->`;
+}
 
 /** Files per reviewer task. A review is split into parallel tasks of this many files, plus one overall task. */
 export const REVIEW_BATCH_SIZE = 6;
@@ -38,7 +64,9 @@ type Decision = 'approve' | 'comment' | 'request_changes';
 export interface Summary {
   overall: string;
   decision: Decision;
-  files: { path: string; summary: string }[];
+  files: { path: string; summary: string; incomplete?: true }[];
+  /** The overall part was cut off at its output ceiling twice: what is here is all it wrote. */
+  overallIncomplete?: true;
   /** True when the text is still arriving and the last section may be cut. */
   partial?: boolean;
 }
@@ -56,8 +84,11 @@ interface SummaryParse {
   /** The path that section is about, or null while the overall one is open. */
   currentPath: string | null;
   decision: Decision;
-  files: { path: string; summary: string }[];
+  files: { path: string; summary: string; incomplete?: true }[];
+  /** Paths cut off by their part's output ceiling. */
+  incomplete: Set<string>;
   overall: string[];
+  overallIncomplete: boolean;
 }
 
 /**
@@ -80,16 +111,48 @@ function readHeading(line: string): string | null {
   return heading ? heading[1].replace(/^[`*_\s]+|[`*_\s]+$/g, '').trim() : null;
 }
 
-/** Close the section being read, if one is open. */
+/**
+ * Close the section being read, if one is open. A path written twice keeps
+ * its first place and its last text: a part written again repeats sections.
+ */
 function flushSection(parse: SummaryParse): void {
   if (parse.currentPath !== null && parse.current) {
-    parse.files.push({
+    const section = {
       path: parse.currentPath,
       summary: parse.current.join('\n').trim(),
-    });
+    };
+    const earlier = parse.files.findIndex((f) => f.path === section.path);
+    if (earlier === -1) {
+      parse.files.push(section);
+    } else {
+      parse.files[earlier] = section;
+    }
   }
   parse.current = null;
   parse.currentPath = null;
+}
+
+/** One of the adapter's own lines: true when `line` was one and has been acted on. */
+function readSignalLine(parse: SummaryParse, line: string): boolean {
+  const trimmed = line.trim();
+  if (trimmed === OVERALL_REWRITE_LINE) {
+    flushSection(parse);
+    // The overall part starts over, its decision line included.
+    parse.overall.length = 0;
+    parse.overallIncomplete = false;
+    parse.current = parse.overall;
+    return true;
+  }
+  const cut = CUT_OFF.exec(trimmed)?.[1];
+  if (cut === undefined) {
+    return false;
+  }
+  if (cut === OVERALL_SECTION) {
+    parse.overallIncomplete = true;
+  } else {
+    parse.incomplete.add(cut);
+  }
+  return true;
 }
 
 /** Open the section a heading names. A second `Overall` continues the first. */
@@ -107,6 +170,9 @@ function openSection(parse: SummaryParse, title: string): void {
 /** Read one line of the reviewer's text into the parse. */
 function readSummaryLine(parse: SummaryParse, raw: string): void {
   const line = raw.trimEnd();
+  if (readSignalLine(parse, line)) {
+    return;
+  }
   const named = readDecisionLine(line);
   if (named && parse.currentPath === null && parse.overall.length === 0) {
     if (named !== 'unrecognised') {
@@ -132,7 +198,9 @@ export function parseSummaryText(text: string, partial = false): Summary {
     currentPath: null,
     decision: 'comment',
     files: [],
+    incomplete: new Set(),
     overall: [],
+    overallIncomplete: false,
   };
   for (const raw of text.replace(/\r\n?/g, '\n').split('\n')) {
     readSummaryLine(parse, raw);
@@ -140,8 +208,17 @@ export function parseSummaryText(text: string, partial = false): Summary {
   flushSection(parse);
   return {
     decision: parse.decision,
-    files: parse.files,
+    files: [
+      ...parse.files.map((f) =>
+        parse.incomplete.has(f.path) ? { ...f, incomplete: true as const } : f,
+      ),
+      // A section a cut-off part never reached is still one to say is missing.
+      ...[...parse.incomplete]
+        .filter((path) => !parse.files.some((f) => f.path === path))
+        .map((path) => ({ incomplete: true as const, path, summary: '' })),
+    ],
     overall: parse.overall.join('\n').trim(),
+    ...(parse.overallIncomplete ? { overallIncomplete: true as const } : {}),
     ...(partial ? { partial: true } : {}),
   };
 }

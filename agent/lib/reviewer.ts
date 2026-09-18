@@ -7,7 +7,14 @@
  * fixed order (overall first, then the batches), so the combined text is
  * always a well-formed review even while it is still arriving: a part that
  * finished early simply flushes when its turn comes. Each part is cached for
- * an hour on its own.
+ * an hour on its own, but only once it has finished on its own: a part cut
+ * off at its output ceiling is written once more with twice the room, and one
+ * cut off even then is shown as far as it got, marked incomplete, and never
+ * cached.
+ *
+ * Every part that ran is paid for, finished or not. A part that reports its
+ * cost adds that; one that fails or is cancelled first cannot say, and adds
+ * the estimate it was reserved at instead (`./spend.ts`).
  */
 import { streamText } from 'ai';
 
@@ -15,7 +22,11 @@ import { cacheGet, cacheKey, cacheSet } from './cache';
 import type { SummarizeInput } from './prompt';
 import { questionById, SMELL_IDS } from './questions';
 import { REVIEWER_INSTRUCTIONS } from './reviewer-prompt';
+import { lunaCostUsd, lunaPartEstimateUsd } from './spend';
 import {
+  cutOffLine,
+  OVERALL_REWRITE_LINE,
+  OVERALL_SECTION,
   parseSummaryText,
   REVIEW_BATCH_SIZE,
   REVIEWER_MODEL,
@@ -36,14 +47,18 @@ const PR_BODY_CHARS = 2_000;
  * and never as a length control: the 300-character rule per file is the
  * prompt's to keep. A file part is fed up to 8,000 characters of someone
  * else's code per file, and without a ceiling that text could keep the model
- * writing. Each is about four times the most measured on real reviews (a
- * 6-file batch of a 24-file pull request wrote 816 tokens, the overall part
- * of five reviews at most 183), so no normal review comes near it.
+ * writing. The most measured on real reviews, over few samples, was 816
+ * tokens for a 6-file batch of a 24-file pull request and 183 for the overall
+ * part, so these sit five and ten times above that. A part that reaches its
+ * ceiling anyway is written again with `RETRY_CEILING_FACTOR` times the room.
  */
 const MAX_OUTPUT_TOKENS: Record<ReviewPart['role'], number> = {
-  files: 3300,
-  overall: 750,
+  files: 4000,
+  overall: 2000,
 };
+
+/** How much more room a part cut off at its ceiling is given for its one retry. */
+const RETRY_CEILING_FACTOR = 2;
 
 /** Jev's yes/no answers are odds; at even odds or better the smell is a finding. */
 const EVEN_ODDS = 0.5;
@@ -121,6 +136,17 @@ interface PlannedPart {
   key: string;
 }
 
+/** A part as a run starts it: from the cache, or to be written. */
+interface PlanEntry extends PlannedPart {
+  /** The cached text, or null when Luna has to write it. */
+  hit: string | null;
+}
+
+/** A review about to run: every part, and which of them the cache already has. */
+export interface ReviewPlan {
+  parts: PlanEntry[];
+}
+
 /** Overall first, then batches of files, in order. */
 function planParts(input: SummarizeInput): PlannedPart[] {
   const parts: PlannedPart[] = [];
@@ -159,116 +185,263 @@ function planParts(input: SummarizeInput): PlannedPart[] {
   return parts;
 }
 
-/**
- * True when every part of this review is cached, so writing it now would cost
- * nothing. Cache reads only, for a caller out of model budget.
- */
-export async function allReviewed(input: SummarizeInput) {
-  const hits = await Promise.all(
-    planParts(input).map(async (p) => Boolean(await cacheGet<string>(p.key))),
+/** Plan a review: its parts, and a cache read for each. */
+export async function planReview(input: SummarizeInput): Promise<ReviewPlan> {
+  const parts = await Promise.all(
+    planParts(input).map(async (p) => ({
+      ...p,
+      hit: (await cacheGet<string>(p.key)) || null,
+    })),
   );
-  return hits.every(Boolean);
+  return { parts };
+}
+
+/** What one attempt at a part is reserved at, and charged when it never reports. */
+function attemptEstimateUsd(p: PlannedPart, ceiling: number): number {
+  return lunaPartEstimateUsd(
+    p.message.length + REVIEWER_INSTRUCTIONS.length,
+    ceiling,
+  );
+}
+
+/**
+ * What running this plan is reserved at: one attempt at each part the cache
+ * does not have, at its full ceiling. Zero when the whole review is cached.
+ */
+export function reviewEstimateUsd(plan: ReviewPlan): number {
+  return plan.parts
+    .filter((p) => p.hit === null)
+    .reduce(
+      (total, p) =>
+        total + attemptEstimateUsd(p, MAX_OUTPUT_TOKENS[p.part.role]),
+      0,
+    );
 }
 
 export interface ReviewUsage {
   inputTokens: number;
   outputTokens: number;
+  /** What the parts that reported cost, by the gateway or, failing that, by their tokens. */
   costUsd: number;
+  /** The estimate for every attempt that ran and never reported: failed, cancelled or timed out. */
+  unreportedUsd: number;
   /** True when every part came from the cache. */
   cached: boolean;
 }
 
-/**
- * Run the review. `emit` receives text in order; the returned promise settles
- * with the full text and the usage once every part is done.
- */
-export async function runReview(
-  input: SummarizeInput,
-  emit: (delta: string) => void,
-  signal?: AbortSignal,
-): Promise<{ text: string; usage: ReviewUsage }> {
-  const planned = planParts(input);
-  const usage: ReviewUsage = {
+export function emptyReviewUsage(): ReviewUsage {
+  return {
     cached: true,
     costUsd: 0,
     inputTokens: 0,
     outputTokens: 0,
+    unreportedUsd: 0,
   };
+}
 
-  // Start every uncached part now; each one buffers until it is its turn to stream.
-  const runs = await Promise.all(
-    planned.map(async (p) => {
-      const hit = await cacheGet<string>(p.key);
-      if (hit) {
-        return { kind: 'hit' as const, p, text: hit };
-      }
-      usage.cached = false;
-      const buffer: string[] = [];
-      const sink: { listener: ((delta: string) => void) | null } = {
-        listener: null,
-      };
-      const stream = streamText({
-        abortSignal: signal,
-        maxOutputTokens: MAX_OUTPUT_TOKENS[p.part.role],
-        model: REVIEWER_MODEL,
-        prompt: p.message,
-        system: REVIEWER_INSTRUCTIONS,
-      });
-      const done = (async () => {
-        for await (const delta of stream.textStream) {
-          if (sink.listener) {
-            sink.listener(delta);
-          } else {
-            buffer.push(delta);
-          }
-        }
-        const u = await stream.usage;
-        const meta = await stream.providerMetadata;
-        usage.inputTokens += u?.inputTokens ?? 0;
-        usage.outputTokens += u?.outputTokens ?? 0;
-        usage.costUsd += Number(
-          (meta?.gateway as { cost?: string } | undefined)?.cost ?? 0,
-        );
-      })();
-      // Awaited in order below. When an earlier part fails, the loop stops
-      // and never reaches this one, and its rejection must not go unobserved:
-      // Node ends a process on an unhandled rejection.
-      done.catch(() => {
-        /* The loop below is where a failure is heard. */
-      });
-      return {
-        attach(fn: (delta: string) => void) {
-          for (const d of buffer.splice(0)) {
-            fn(d);
-          }
-          sink.listener = fn;
-        },
-        done,
-        kind: 'run' as const,
-        p,
-      };
-    }),
+/** What a review is settled at: what reported, and the estimate for what could not. */
+export function reviewChargeUsd(usage: ReviewUsage): number {
+  return usage.costUsd + usage.unreportedUsd;
+}
+
+/**
+ * One attempt at a part: stream its text to `push`, then add what it cost to
+ * `usage`. Resolves with why it stopped. An attempt that fails or is
+ * cancelled, which the SDK reports by throwing from its usage rather than
+ * from its text, adds its estimate and throws.
+ */
+async function attempt(
+  p: PlannedPart,
+  ceiling: number,
+  push: (delta: string) => void,
+  usage: ReviewUsage,
+  signal: AbortSignal,
+): Promise<string> {
+  const stream = streamText({
+    abortSignal: signal,
+    maxOutputTokens: ceiling,
+    model: REVIEWER_MODEL,
+    prompt: p.message,
+    system: REVIEWER_INSTRUCTIONS,
+  });
+  try {
+    for await (const delta of stream.textStream) {
+      push(delta);
+    }
+    const [finishReason, u, meta] = await Promise.all([
+      stream.finishReason,
+      stream.usage,
+      stream.providerMetadata,
+    ]);
+    const input = u?.inputTokens ?? 0;
+    const output = u?.outputTokens ?? 0;
+    usage.inputTokens += input;
+    usage.outputTokens += output;
+    usage.costUsd += lunaCostUsd(
+      (meta?.gateway as { cost?: unknown } | undefined)?.cost,
+      input,
+      output,
+    );
+    return finishReason;
+  } catch (err) {
+    usage.unreportedUsd += attemptEstimateUsd(p, ceiling);
+    throw err;
+  }
+}
+
+/** The section a part's own text stopped in: its last heading, or null when it wrote none. */
+function lastSection(text: string): string | null {
+  const parsed = parseSummaryText(text);
+  return parsed.files.at(-1)?.path ?? (parsed.overall ? OVERALL_SECTION : null);
+}
+
+/**
+ * Write one part: one attempt, and one more with twice the room if the first
+ * ran into its ceiling. Resolves true when the part finished on its own and
+ * may be cached. A part cut off twice is left as far as it got, followed by a
+ * `cutOffLine` for the section it stopped in and each one it never reached.
+ */
+async function writePart(
+  p: PlannedPart,
+  push: (delta: string) => void,
+  usage: ReviewUsage,
+  signal: AbortSignal,
+): Promise<boolean> {
+  const ceiling = MAX_OUTPUT_TOKENS[p.part.role];
+  let finish = await attempt(p, ceiling, push, usage, signal);
+  if (finish !== 'length') {
+    return finish === 'stop';
+  }
+  // Ends whatever line the cut left open. The overall part's first try is
+  // dropped outright; a file section written again replaces its first try.
+  push(p.part.role === 'overall' ? `\n${OVERALL_REWRITE_LINE}\n` : '\n');
+  let own = '';
+  finish = await attempt(
+    p,
+    ceiling * RETRY_CEILING_FACTOR,
+    (delta) => {
+      own += delta;
+      push(delta);
+    },
+    usage,
+    signal,
   );
+  if (finish !== 'length') {
+    return finish === 'stop';
+  }
+  const stopped = lastSection(own);
+  const written = new Set(parseSummaryText(own).files.map((f) => f.path));
+  const unreached =
+    p.part.role === 'files'
+      ? p.part.paths.filter((path) => !written.has(path))
+      : [];
+  const cut = [
+    ...(stopped === null ? [] : [stopped]),
+    ...unreached,
+    // An overall part that wrote nothing at all is still the overall that is missing.
+    ...(p.part.role === 'overall' && stopped === null ? [OVERALL_SECTION] : []),
+  ];
+  push(`\n${cut.map(cutOffLine).join('\n')}\n`);
+  return false;
+}
+
+interface StartedPart {
+  kind: 'run';
+  p: PlanEntry;
+  /** Settles when the part has stopped, with whether it may be cached. */
+  done: Promise<boolean>;
+  attach(fn: (delta: string) => void): void;
+}
+
+/** Start one uncached part now; it buffers until it is its turn to stream. */
+function startPart(
+  p: PlanEntry,
+  usage: ReviewUsage,
+  signal: AbortSignal,
+  onFailure: () => void,
+): StartedPart {
+  const buffer: string[] = [];
+  const sink: { listener: ((delta: string) => void) | null } = {
+    listener: null,
+  };
+  const push = (delta: string) => {
+    if (sink.listener) {
+      sink.listener(delta);
+    } else {
+      buffer.push(delta);
+    }
+  };
+  const done = writePart(p, push, usage, signal);
+  // One part failing fails the review, so the others are stopped rather than
+  // paid for. Awaited in order below, and heard there; this handler is also
+  // what keeps a rejection nobody reached from ending the process.
+  done.catch(onFailure);
+  return {
+    attach(fn) {
+      for (const d of buffer.splice(0)) {
+        fn(d);
+      }
+      sink.listener = fn;
+    },
+    done,
+    kind: 'run',
+    p,
+  };
+}
+
+/**
+ * Run a planned review. `emit` receives text in order. `usage` is filled in
+ * place, so a caller whose run throws still knows what it cost; the promise
+ * only settles once every part has stopped, so by then that figure is final.
+ */
+export async function runReview(
+  plan: ReviewPlan,
+  emit: (delta: string) => void,
+  signal?: AbortSignal,
+  usage: ReviewUsage = emptyReviewUsage(),
+): Promise<{ text: string; usage: ReviewUsage }> {
+  const stop = new AbortController();
+  const combined = signal
+    ? AbortSignal.any([signal, stop.signal])
+    : stop.signal;
+  const runs = plan.parts.map((p) => {
+    if (p.hit !== null) {
+      return { kind: 'hit' as const, p, text: p.hit };
+    }
+    usage.cached = false;
+    return startPart(p, usage, combined, () => stop.abort());
+  });
+  const everyPart = () =>
+    Promise.allSettled(runs.map((r) => (r.kind === 'run' ? r.done : null)));
 
   const chunks: string[] = [];
-  for (const run of runs) {
-    const write = (delta: string) => {
-      chunks.push(delta);
-      emit(delta);
-    };
-    if (run.kind === 'hit') {
-      write(ensureTrailingNewline(run.text));
-      continue;
+  const write = (delta: string) => {
+    chunks.push(delta);
+    emit(delta);
+  };
+  try {
+    for (const run of runs) {
+      if (run.kind === 'hit') {
+        write(ensureTrailingNewline(run.text));
+        continue;
+      }
+      const from = chunks.length;
+      run.attach(write);
+      const complete = await run.done;
+      write('\n');
+      // Cache this part on its own, from its own text: everything written
+      // since it started. Never a part that was cut off.
+      const own = complete
+        ? partText(chunks.slice(from).join(''), run.p.part)
+        : null;
+      if (own) {
+        await cacheSet(run.p.key, own, 'luna-review-part');
+      }
     }
-    run.attach(write);
-    await run.done;
-    write('\n');
-    const text = chunks.join('');
-    // Cache this part on its own: its text is everything written since it started.
-    const own = partText(text, run.p.part);
-    if (own) {
-      await cacheSet(run.p.key, own, 'luna-review-part');
-    }
+  } catch (err) {
+    stop.abort();
+    await everyPart();
+    throw err;
   }
   return { text: chunks.join(''), usage };
 }
@@ -277,9 +450,9 @@ function ensureTrailingNewline(s: string): string {
   return s.endsWith('\n') ? s : `${s}\n`;
 }
 
-/** The slice of the combined text that belongs to one part, re-serialised. */
-function partText(all: string, part: ReviewPart): string | null {
-  const parsed = parseSummaryText(all);
+/** A part's own text, re-serialised for the cache. */
+function partText(own: string, part: ReviewPart): string | null {
+  const parsed = parseSummaryText(own);
   if (part.role === 'overall') {
     return parsed.overall
       ? `Decision: ${parsed.decision}\n## Overall\n${parsed.overall}\n`

@@ -2,10 +2,10 @@
 
 import { useLayoutEffect, useState } from 'react';
 
-import type { PausedReply } from '@/agent/lib/budgets';
 import { isProsePath } from '@/agent/lib/review';
 import { isWriting, overallSummaryStatus } from '@/lib/display';
 import { cappedText, skippedText } from '@/lib/open-review';
+import type { LocalPause } from '@/lib/useReview';
 
 import { cardId, FileCard } from './FileCard';
 import { FileList } from './FileList';
@@ -110,6 +110,7 @@ export function ReviewBody() {
           <ReviewNote
             decision={judge.summary.decision}
             error={judge.summary.error}
+            incomplete={judge.summary.incomplete.overall === true}
             model={judge.summary.model}
             pills={<ReviewPills judgeable={judgeable} review={judge} />}
             status={overallSummaryStatus(judge.summary)}
@@ -160,7 +161,7 @@ export function ReviewBody() {
                   ),
             )
           }
-          paused={judge.paused !== null}
+          paused={judge.pausedFiles}
         />
         <div className="flex min-w-0 flex-col gap-4">
           {review.files.map((file) => (
@@ -183,7 +184,8 @@ export function ReviewBody() {
                 })
               }
               paused={
-                judge.paused !== null && judge.pending[file.path] !== true
+                judge.pausedFiles[file.path] === true &&
+                judge.pending[file.path] !== true
               }
               pending={judge.pending[file.path] === true}
               summary={judge.summary}
@@ -226,26 +228,44 @@ function BudgetSpent() {
   );
 }
 
+const MS_PER_MINUTE = 60_000;
 /** `15:00`, the UTC clock time in an ISO timestamp. */
 const CLOCK_FROM = 11;
 const CLOCK_TO = 16;
 
+/** A time as `15:00 UTC`, rounded up to the minute so it is never earlier than the time itself. */
+function clock(ms: number): string {
+  const minute = Math.ceil(ms / MS_PER_MINUTE) * MS_PER_MINUTE;
+  return `${new Date(minute).toISOString().slice(CLOCK_FROM, CLOCK_TO)} UTC`;
+}
+
 /**
  * The site's own model budget, shared by every tab, is spent for this hour or
- * this UTC day, and the agent refused the turn before any model ran. Unlike
- * the session's cap this passes on its own, so it says when.
+ * this UTC day, or cannot be read, and the agent refused the turn before any
+ * model ran. Unlike the session's cap this passes on its own, so it says when,
+ * and the page asks again by itself at that time, which is also when this
+ * notice goes.
  */
-function ReviewsPaused({ paused }: { paused: PausedReply }) {
+function ReviewsPaused({ paused }: { paused: LocalPause }) {
+  if (paused.window === 'unavailable') {
+    return (
+      <Notice data-budget="paused" data-window={paused.window}>
+        <strong className="font-semibold">Reviews are paused for now.</strong>{' '}
+        The review budget cannot be checked, so no new work starts. The page
+        asks again at {clock(paused.resumeAt)}. The answers on screen stay as
+        they are.
+      </Notice>
+    );
+  }
   const day = paused.window === 'day';
-  const at = day
-    ? 'midnight UTC'
-    : `${paused.resetsAt.slice(CLOCK_FROM, CLOCK_TO)} UTC`;
+  const at = day ? 'midnight UTC' : clock(Date.parse(paused.resetsAt));
   return (
     <Notice data-budget="paused" data-window={paused.window}>
       <strong className="font-semibold">
         {day ? "Today's" : "This hour's"} review budget is spent.
       </strong>{' '}
-      Reviews come back at {at}. The answers on screen stay as they are.
+      Reviews come back at {at}, without a reload. The answers on screen stay as
+      they are.
     </Notice>
   );
 }

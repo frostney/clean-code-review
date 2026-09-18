@@ -17,13 +17,14 @@
  *
  * Both kinds of turn answer to the page's model budget (`./budgets.ts`), every
  * tab together. This is the one place every page turn passes through, and the
- * only place that knows both whether a turn will need a model and what it
- * cost, which is why the brake sits here rather than in a channel or a route:
- * checked before a turn starts uncached work, and charged with the cost the
- * turn reports. A refused turn is not a failure: its whole reply is a
- * `pausedReply`, which the page shows as a notice. The MCP endpoint calls the
- * same judge and reviewer without this adapter, and counts against a budget of
- * its own.
+ * only place that knows both what a turn is about to run and what it cost,
+ * which is why the brake sits here rather than in a channel or a route: a
+ * turn reserves an estimate for the work the cache cannot answer before it
+ * starts, and settles to what it cost once it stops, whether it finished,
+ * failed or was cancelled (`./spend.ts`). A refused turn is not a failure: its
+ * whole reply is a `pausedReply`, which the page shows as a notice. The MCP
+ * endpoint calls the same judge and reviewer without this adapter, and counts
+ * against a budget of its own.
  */
 import type {
   LanguageModelV4,
@@ -38,10 +39,17 @@ import {
   PAGE_HOURLY_BUDGET_USD,
   pausedReply,
 } from './budgets';
-import { allJudged, JEV, judgeReview } from './judge';
-import { parseMessage } from './prompt';
-import { allReviewed, type ReviewUsage, runReview } from './reviewer';
-import { createSpendBrake } from './spend';
+import { JEV, judgeChargeUsd, judgeEstimateUsd, judgeReview } from './judge';
+import { parseMessage, type SummarizeInput } from './prompt';
+import {
+  emptyReviewUsage,
+  planReview,
+  type ReviewUsage,
+  reviewChargeUsd,
+  reviewEstimateUsd,
+  runReview,
+} from './reviewer';
+import { createSpendBrake, type Hold } from './spend';
 import { REVIEWER_MODEL } from './summary';
 
 /** Every page turn, in every tab and every instance, counted together. */
@@ -51,16 +59,41 @@ const pageSpend = createSpendBrake('page', {
 });
 
 /**
- * The reply for a turn the budget refuses, or null when the turn may run. A
- * turn whose work is all in the cache runs even then: `free` finds that out
- * with cache reads alone, and is only asked once the budget has said no.
+ * Reserve `estimateUsd` for a turn about to start, or the reply for a turn the
+ * budget refuses. A turn whose work is all in the cache estimates nothing and
+ * is never refused.
  */
-async function refusal(free: () => Promise<boolean>): Promise<string | null> {
-  const check = await pageSpend.check();
-  if (check.ok || (await free())) {
-    return null;
+async function admit(
+  estimateUsd: number,
+): Promise<{ hold: Hold } | { paused: string }> {
+  const admission = await pageSpend.reserve(estimateUsd);
+  return admission.ok
+    ? { hold: admission.hold }
+    : { paused: pausedReply(admission.window, admission.resetsAt) };
+}
+
+/**
+ * Run a planned review against its reservation, and settle it with whatever
+ * the run cost, finished, failed or cancelled.
+ */
+async function reviewWithin(
+  hold: Hold,
+  plan: Awaited<ReturnType<typeof planReview>>,
+  emit: (delta: string) => void,
+  signal: AbortSignal | undefined,
+) {
+  const usage = emptyReviewUsage();
+  try {
+    return await runReview(plan, emit, signal, usage);
+  } finally {
+    await hold.settle(reviewChargeUsd(usage));
   }
-  return pausedReply(check.window, check.resetsAt);
+}
+
+/** Plan a review and reserve for its uncached parts. */
+async function admitReview(input: SummarizeInput) {
+  const plan = await planReview(input);
+  return { plan, ...(await admit(reviewEstimateUsd(plan))) };
 }
 
 function lastUserText(options: LanguageModelV4CallOptions): string {
@@ -108,15 +141,15 @@ async function judge(
   options: LanguageModelV4CallOptions,
   input: Parameters<typeof judgeReview>[0],
 ): Promise<LanguageModelV4GenerateResult> {
-  const paused = await refusal(() => allJudged(input.files));
-  if (paused) {
-    return textResult(paused);
+  const admitted = await admit(await judgeEstimateUsd(input.files));
+  if ('paused' in admitted) {
+    return textResult(admitted.paused);
   }
-  const { result, cost, warnings, errors } = await judgeReview(
-    input,
-    options.abortSignal,
-  );
-  await pageSpend.record(cost);
+  // A turn that throws, every file failed or cancelled, keeps its whole
+  // reservation: those calls may have been paid for, and none said how much.
+  const judged = await judgeReview(input, options.abortSignal);
+  await admitted.hold.settle(judgeChargeUsd(judged));
+  const { result, cost, warnings, errors } = judged;
   return textResult(JSON.stringify({ kind: 'judged', ...result }), {
     // eve's per-session cost limit and the page footer read the gateway's cost from here.
     providerMetadata: {
@@ -144,18 +177,18 @@ async function generate(
   if (parsed.kind === 'judge') {
     return judge(options, parsed.input);
   }
-  const paused = await refusal(() => allReviewed(parsed.input));
-  if (paused) {
-    return textResult(paused);
+  const admitted = await admitReview(parsed.input);
+  if ('paused' in admitted) {
+    return textResult(admitted.paused);
   }
-  const { text, usage } = await runReview(
-    parsed.input,
+  const { text, usage } = await reviewWithin(
+    admitted.hold,
+    admitted.plan,
     () => {
       /* A generate call has nobody to stream to; the whole text is the result. */
     },
     options.abortSignal,
   );
-  await pageSpend.record(usage.costUsd);
   return textResult(text, {
     providerMetadata: reviewMetadata(usage),
     response: { modelId: REVIEWER_MODEL, timestamp: new Date() },
@@ -197,26 +230,41 @@ export function jev(): LanguageModelV4 {
         };
       }
       // A review streams as it is written.
-      const input = parsed.input;
-      const paused = await refusal(() => allReviewed(input));
+      const admitted = await admitReview(parsed.input);
+      /** Stops the review when the reader goes away without a cancel reaching the signal. */
+      const dropped = new AbortController();
+      const signal = options.abortSignal
+        ? AbortSignal.any([options.abortSignal, dropped.signal])
+        : dropped.signal;
       return {
         stream: new ReadableStream<LanguageModelV4StreamPart>({
+          cancel() {
+            dropped.abort();
+          },
           async start(controller) {
-            controller.enqueue({ type: 'stream-start', warnings: [] });
-            controller.enqueue({
+            /** Enqueue unless the reader has gone: a closed stream must not fail the review, which still has to settle. */
+            const send = (part: LanguageModelV4StreamPart) => {
+              try {
+                controller.enqueue(part);
+              } catch {
+                dropped.abort();
+              }
+            };
+            send({ type: 'stream-start', warnings: [] });
+            send({
               modelId: REVIEWER_MODEL,
               timestamp: new Date(),
               type: 'response-metadata',
             });
-            controller.enqueue({ id: 'review', type: 'text-start' });
-            if (paused) {
-              controller.enqueue({
-                delta: paused,
+            send({ id: 'review', type: 'text-start' });
+            if ('paused' in admitted) {
+              send({
+                delta: admitted.paused,
                 id: 'review',
                 type: 'text-delta',
               });
-              controller.enqueue({ id: 'review', type: 'text-end' });
-              controller.enqueue({
+              send({ id: 'review', type: 'text-end' });
+              send({
                 finishReason: finished,
                 type: 'finish',
                 usage: usageOf(0, 0),
@@ -225,31 +273,29 @@ export function jev(): LanguageModelV4 {
               return;
             }
             try {
-              // A part cut off by a cancel is paid for and never reported, so
-              // it is not counted here; the output ceiling in `./reviewer.ts`
-              // is what bounds that gap per part.
-              const { usage } = await runReview(
-                input,
-                (delta) =>
-                  controller.enqueue({
-                    delta,
-                    id: 'review',
-                    type: 'text-delta',
-                  }),
-                options.abortSignal,
+              // Every part is charged, finished or not: `reviewWithin`
+              // settles with what reported and the estimate for what did not.
+              const { usage } = await reviewWithin(
+                admitted.hold,
+                admitted.plan,
+                (delta) => send({ delta, id: 'review', type: 'text-delta' }),
+                signal,
               );
-              await pageSpend.record(usage.costUsd);
-              controller.enqueue({ id: 'review', type: 'text-end' });
-              controller.enqueue({
+              send({ id: 'review', type: 'text-end' });
+              send({
                 finishReason: finished,
                 providerMetadata: reviewMetadata(usage),
                 type: 'finish',
                 usage: usageOf(usage.inputTokens, usage.outputTokens),
               });
             } catch (err) {
-              controller.enqueue({ error: err, type: 'error' });
+              send({ error: err, type: 'error' });
             }
-            controller.close();
+            try {
+              controller.close();
+            } catch {
+              /* Already closed by the reader. */
+            }
           },
         }),
       };

@@ -79,11 +79,14 @@ export interface ReviewState {
   /** The session hit the agent's per-session cost cap and will not answer again. */
   budgetSpent: boolean;
   /**
-   * The site's model budget for this hour or this UTC day is spent, and the
-   * last turn was refused with no model run. Unlike `budgetSpent` this passes:
-   * the next turn that gets through clears it.
+   * The site's model budget for this hour or this UTC day is spent, and a
+   * turn was refused with no model run: the last refusal, for the notice, set
+   * while any file or the review is still waiting on it. Unlike `budgetSpent`
+   * this passes: when the window resets the page asks again by itself.
    */
-  paused: PausedReply | null;
+  paused: LocalPause | null;
+  /** Paths a refused judge turn carried, waiting for the budget to reset. */
+  pausedFiles: Record<string, true>;
   /** Every file of the last judge turn came back from the agent's one-hour cache. */
   cached: boolean;
   /** Luna's prose review of the whole change and of each file. */
@@ -99,13 +102,56 @@ const IDLE: ReviewState = {
   judgments: {},
   ms: null,
   paused: null,
+  pausedFiles: {},
   pending: {},
   spentUsd: 0,
   summary: NO_SUMMARY,
 };
 
+/** A refusal as this tab holds it: with when, by this tab's own clock, to ask again. */
+export interface LocalPause extends PausedReply {
+  /** `Date.now()` at which the window has reset by the server's clock. */
+  resumeAt: number;
+}
+
+/**
+ * The refusal, and when to ask again: the server's wait counted from when the
+ * reply arrived, so a browser clock running ahead cannot read a reset still to
+ * come as one already past.
+ */
+function localPause(reply: PausedReply): LocalPause {
+  return { ...reply, resumeAt: Date.now() + reply.waitMs };
+}
+
+/** A turn's reply read as a refusal, as this tab holds one, or null when it is anything else. */
+function pausedIn(text: string | null | undefined): LocalPause | null {
+  const reply = parsePaused(text);
+  return reply ? localPause(reply) : null;
+}
+
+/**
+ * The shortest wait before asking again, whatever the reply said: a refusal
+ * that came back with no wait at all, right on a window's edge, must not
+ * become a turn per tick. Short, so the notice does not outlive its time.
+ */
+const MIN_RESUME_MS = 1000;
+
 /** What a review that was refused for the site's budget says where its text would be. */
 const PAUSED_SUMMARY_ERROR = 'the review budget is spent';
+
+/** The review itself, rather than a file, is waiting on the budget. */
+const summaryPaused = (s: ReviewState) =>
+  s.summary.error === PAUSED_SUMMARY_ERROR;
+
+/**
+ * The notice stays while anything still waits on the budget, and goes with
+ * the last thing that did: a turn that got through only clears what it carried.
+ */
+function withPauseReconciled(s: ReviewState): ReviewState {
+  return s.paused && !Object.keys(s.pausedFiles).length && !summaryPaused(s)
+    ? { ...s, paused: null }
+    : s;
+}
 
 /** The pull request a review came from, when it came from one. */
 export interface PullRequestContext {
@@ -312,10 +358,17 @@ function withStreamedSummary(
   decisionSeen: boolean,
 ): ReviewState {
   const files = { ...s.summary.files };
+  const incomplete = { ...s.summary.incomplete };
   for (const file of parsed.files) {
     if (asked.has(file.path)) {
       files[file.path] = file.summary;
+      if (file.incomplete) {
+        incomplete[file.path] = true;
+      }
     }
+  }
+  if (parsed.overallIncomplete) {
+    incomplete[OVERALL_BLOCK] = true;
   }
   // Only the last section is still being written; the ones before it are done,
   // so their cards stop waiting for a rewrite.
@@ -330,6 +383,7 @@ function withStreamedSummary(
       cached: false,
       decision: decisionSeen ? parsed.decision : s.summary.decision,
       files,
+      incomplete,
       model: REVIEWER_MODEL,
       overall: parsed.overall || s.summary.overall,
       replacing: done.length
@@ -349,9 +403,8 @@ function withSettledSummary(
   run: SummaryRun,
   cached: boolean,
 ): ReviewState {
-  return {
+  return withPauseReconciled({
     ...s,
-    paused: null,
     spentUsd: s.spentUsd + run.costUsd,
     summary: {
       ...s.summary,
@@ -368,6 +421,7 @@ function withSettledSummary(
             .map((f) => [f.path, f.summary]),
         ),
       },
+      incomplete: settledIncomplete(s.summary.incomplete, next, asked),
       model: REVIEWER_MODEL,
       overall: next.overall || s.summary.overall,
       replacing: {},
@@ -376,6 +430,36 @@ function withSettledSummary(
       streaming: false,
       writing: null,
     },
+  });
+}
+
+/** How the overall block is named among `SummaryView['incomplete']`, as in `writing`. */
+const OVERALL_BLOCK = 'overall';
+
+/**
+ * Which blocks are cut off once a turn settles: whatever this turn rewrote
+ * says so for itself, and the rest keep what they had.
+ */
+function settledIncomplete(
+  before: Record<string, true>,
+  next: Summary,
+  asked: ReadonlySet<string>,
+): Record<string, true> {
+  const rewritten = next.files
+    .filter((f) => asked.has(f.path))
+    .map((f) => f.path);
+  const kept = without(
+    before,
+    next.overall ? [...rewritten, OVERALL_BLOCK] : rewritten,
+  );
+  return {
+    ...kept,
+    ...Object.fromEntries(
+      next.files
+        .filter((f) => f.incomplete && asked.has(f.path))
+        .map((f) => [f.path, true as const]),
+    ),
+    ...(next.overallIncomplete ? { [OVERALL_BLOCK]: true as const } : {}),
   };
 }
 
@@ -390,7 +474,7 @@ function withAbandonedSummary(
   error: string | null,
   retrying: boolean,
 ): ReviewState {
-  return {
+  return withPauseReconciled({
     ...s,
     spentUsd: s.spentUsd + run.costUsd,
     summary: {
@@ -402,7 +486,7 @@ function withAbandonedSummary(
       streaming: false,
       writing: null,
     },
-  };
+  });
 }
 
 /**
@@ -412,7 +496,7 @@ function withAbandonedSummary(
 function withPausedSummary(
   s: ReviewState,
   run: SummaryRun,
-  paused: PausedReply,
+  paused: LocalPause,
 ): ReviewState {
   return {
     ...s,
@@ -500,20 +584,36 @@ function withBudgetSpentTurn(
 
 /**
  * A judge turn the site's budget refused: nothing was judged and nothing was
- * spent, the paths it carried are free again, and the answers already on
- * screen stay put.
+ * spent, the paths it carried wait for the budget to reset, and the answers
+ * already on screen stay put.
  */
 function withPausedTurn(
   s: ReviewState,
   paths: readonly string[],
-  paused: PausedReply,
+  paused: LocalPause,
 ): ReviewState {
   return {
     ...s,
     asking: false,
     paused,
+    pausedFiles: {
+      ...s.pausedFiles,
+      ...Object.fromEntries(paths.map((p) => [p, true as const])),
+    },
     pending: without(s.pending, paths),
   };
+}
+
+/** A judge turn that judged nothing: refused for the budget, or not answered at all. */
+function withUnansweredTurn(
+  s: ReviewState,
+  paths: readonly string[],
+  paused: LocalPause | null,
+  costUsd: number,
+): ReviewState {
+  return paused
+    ? withPausedTurn(s, paths, paused)
+    : withFailedTurn(s, paths, costUsd);
 }
 
 /** A turn the agent could not answer at all. */
@@ -522,18 +622,19 @@ function withFailedTurn(
   paths: readonly string[],
   costUsd: number,
 ): ReviewState {
-  return {
+  return withPauseReconciled({
     ...s,
     asking: false,
     error: 'the agent could not answer',
+    pausedFiles: without(s.pausedFiles, paths),
     pending: without(s.pending, paths),
     spentUsd: s.spentUsd + costUsd,
-  };
+  });
 }
 
 /** One settled judge turn: its answers merged in, its paths no longer pending. */
 function withJudgeTurn(s: ReviewState, turn: JudgeTurn): ReviewState {
-  return {
+  return withPauseReconciled({
     ...s,
     asking: false,
     cached: turn.cached,
@@ -544,10 +645,10 @@ function withJudgeTurn(s: ReviewState, turn: JudgeTurn): ReviewState {
     },
     judgments: { ...s.judgments, ...turn.fresh },
     ms: turn.ms,
-    paused: null,
+    pausedFiles: without(s.pausedFiles, turn.paths),
     pending: without(s.pending, turn.paths),
     spentUsd: s.spentUsd + turn.costUsd,
-  };
+  });
 }
 
 /** Drop every key of `map` whose path no longer belongs to the review. */
@@ -571,7 +672,14 @@ function withoutStalePaths(
   const orphaned = Object.keys(s.pending).filter(stale);
   const cleared = Object.keys(s.failed).filter(stale);
   const notes = Object.keys(s.summary.files).filter(stale);
-  if (!gone.length && !orphaned.length && !cleared.length && !notes.length) {
+  const waiting = Object.keys(s.pausedFiles).filter(stale);
+  if (
+    !gone.length &&
+    !orphaned.length &&
+    !cleared.length &&
+    !notes.length &&
+    !waiting.length
+  ) {
     return s;
   }
   const judgments = { ...s.judgments };
@@ -582,13 +690,18 @@ function withoutStalePaths(
   for (const path of notes) {
     delete summaryFiles[path];
   }
-  return {
+  return withPauseReconciled({
     ...s,
     failed: without(s.failed, cleared),
     judgments,
+    pausedFiles: without(s.pausedFiles, waiting),
     pending: without(s.pending, orphaned),
-    summary: { ...s.summary, files: summaryFiles },
-  };
+    summary: {
+      ...s.summary,
+      files: summaryFiles,
+      incomplete: without(s.summary.incomplete, notes),
+    },
+  });
 }
 
 /**
@@ -645,6 +758,10 @@ export function useReview(
       failed: {},
       judgments: {},
       ms: null,
+      // What waited on the budget belonged to the last review. This one's
+      // first turn finds out afresh, and is served if it is all cached.
+      paused: null,
+      pausedFiles: {},
       pending: {},
       summary: NO_SUMMARY,
     }));
@@ -691,6 +808,9 @@ export function useReview(
   const cancelRequestedRef = useRef(false);
   const prRef = useRef<PullRequestContext | undefined>(pr);
   prRef.current = pr;
+  /** The state as last rendered, for the resume timer, which runs outside any render. */
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   const client = useCallback((): Client => {
     // Same origin: `withEve` mounts the agent at /eve/v1 on this very host.
@@ -858,8 +978,11 @@ export function useReview(
     ) => {
       const next = settledText(run);
       if (next) {
-        // A file the review said nothing about is asked about again next time.
-        const written = new Set(next.files.map((f) => f.path));
+        // A file the review said nothing about, or was cut off in, is asked
+        // about again next time.
+        const written = new Set(
+          next.files.filter((f) => !f.incomplete).map((f) => f.path),
+        );
         forgetSummarized(paths.filter((path) => !written.has(path)));
         // "from cache": a summarize step that cost nothing made no Luna call —
         // every part of this review was already written down inside the agent.
@@ -1026,9 +1149,9 @@ export function useReview(
 
       const paused = run.cancelled
         ? null
-        : parsePaused(run.complete || run.buffer);
+        : pausedIn(run.complete || run.buffer);
       if (paused) {
-        // Asked about again once the budget has turned and something moves.
+        // Asked about again once the budget has turned: see `resume`.
         forgetSummarized(paths);
         setState((s) => withPausedSummary(s, run, paused));
       } else {
@@ -1161,17 +1284,13 @@ export function useReview(
         return;
       }
       const paused =
-        result.status === 'failed' ? null : parsePaused(result.message);
+        result.status === 'failed' ? null : pausedIn(result.message);
       if (result.status === 'failed' || paused) {
         // Nothing was judged. Forget what was sent so the same files can be
-        // retried (for a refusal, by the next edit once the budget has
-        // turned), and count what a failed attempt cost all the same.
+        // retried (for a refusal, by `resume` once the budget has turned, or
+        // by the next edit), and count what a failed attempt cost all the same.
         pruneKeys(sentRef.current, (path) => paths.includes(path));
-        setState((s) =>
-          paused
-            ? withPausedTurn(s, paths, paused)
-            : withFailedTurn(s, paths, costUsd),
-        );
+        setState((s) => withUnansweredTurn(s, paths, paused, costUsd));
         return;
       }
       const review = parseReview(result.message);
@@ -1324,6 +1443,51 @@ export function useReview(
     summaryWantedRef.current = false;
     startSummary();
   };
+
+  /**
+   * The budget's window has reset: put every file that was refused back in
+   * the queue with the code now on screen, ask for the review again if that
+   * was refused, and let the ordinary turn machinery send them. A refusal
+   * that comes back sets a new reset time, and so a new timer, never a loop.
+   */
+  const resumeRef = useRef<() => void>(() => {
+    /* Replaced below, before any timer can fire. */
+  });
+  resumeRef.current = () => {
+    const s = stateRef.current;
+    const live = new Map(filesRef.current.map((f) => [f.path, f]));
+    for (const path of Object.keys(s.pausedFiles)) {
+      const file = live.get(path);
+      sentRef.current.delete(path);
+      if (file?.content.trim()) {
+        queuedRef.current.set(path, file);
+      }
+    }
+    if (summaryPaused(s)) {
+      summaryWantedRef.current = true;
+    }
+    setState((current) => ({
+      ...current,
+      paused: null,
+      pausedFiles: {},
+      summary: summaryPaused(current)
+        ? { ...current.summary, error: null, failed: false }
+        : current.summary,
+    }));
+    drainRef.current();
+  };
+
+  const resumeAt = state.paused?.resumeAt;
+  useEffect(() => {
+    if (resumeAt === undefined) {
+      return;
+    }
+    const timer = setTimeout(
+      () => resumeRef.current(),
+      Math.max(resumeAt - Date.now(), MIN_RESUME_MS),
+    );
+    return () => clearTimeout(timer);
+  }, [resumeAt]);
 
   // A new review — another example, another paste — is a clean slate: nothing
   // from the last one has a path in this one, and its judgments would linger.
