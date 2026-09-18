@@ -11,6 +11,7 @@ import type {
   ReviewResult,
 } from './review';
 import type { Answer, Answers } from './schema';
+import { JEV_FILE_ESTIMATE_USD, jevCostUsd } from './spend';
 
 /** Jev, TypeSafe AI's System One model, as the AI Gateway lists it. */
 export const JEV = 'typesafe-ai/jev';
@@ -83,15 +84,24 @@ function judgeKey(file: ReviewFile): string {
 }
 
 /**
- * True when every one of these files has a cached judgment, so judging them
- * now would cost nothing. Cache reads only: a caller out of model budget asks
- * this before deciding a review is still free to serve.
+ * What judging these files would be reserved at: the estimate for every file
+ * the cache has no judgment for, and nothing for the rest. Cache reads only.
+ * A read that fails counts as a miss, which errs towards reserving.
  */
-export async function allJudged(files: readonly ReviewFile[]) {
-  const hits = await Promise.all(
-    files.map(async (f) => (await cacheGet(judgeKey(f))) !== undefined),
+export async function judgeEstimateUsd(files: readonly ReviewFile[]) {
+  const misses = await Promise.all(
+    files.map(async (f) => (await cacheGet(judgeKey(f))) === undefined),
   );
-  return hits.every(Boolean);
+  return misses.filter(Boolean).length * JEV_FILE_ESTIMATE_USD;
+}
+
+/**
+ * What a judged turn is settled at: the cost every judged file reported, and
+ * the estimate for every file that failed, since a call that failed may still
+ * have been paid for and never says so.
+ */
+export function judgeChargeUsd(judged: { cost: number; errors: string[] }) {
+  return judged.cost + judged.errors.length * JEV_FILE_ESTIMATE_USD;
 }
 
 export async function judgeFile(file: ReviewFile, signal?: AbortSignal) {
@@ -170,9 +180,9 @@ function toJudgment(result: Awaited<ReturnType<typeof evaluateFile>>) {
       output_tokens: result.usage.outputTokens ?? 0,
     },
   };
-  const cost = Number(
-    (result.providerMetadata?.gateway as { cost?: string } | undefined)?.cost ??
-      0,
+  const cost = jevCostUsd(
+    (result.providerMetadata?.gateway as { cost?: unknown } | undefined)?.cost,
+    result.usage.inputTokens ?? 0,
   );
   return {
     cost,

@@ -173,9 +173,9 @@ deployment carries these brakes, outside in:
 | In-agent per-address limit on new sessions | `agent/channels/eve.ts`, best effort, one instance's memory |
 | MCP per-address limit on tool calls | 10 calls per 10 minutes, `lib/mcp-server.ts`, best effort, one instance's memory, an IPv6 address counted by its /64 and requests with no address in one shared bucket; `maxDuration` 120 s, the written review cut off at 60 s |
 | Page model budget, all tabs together | $0.40 per hour and $1.00 per UTC day, `agent/lib/budgets.ts`, counted in the Runtime Cache by `agent/lib/spend.ts` from `agent/lib/jev-model.ts`; a refused turn shows "review budget is spent" with the reset time, answers on screen stay, a wholly cached turn still served |
-| MCP model budget, all callers together | $0.25 per hour and $1.00 per UTC day, `agent/lib/budgets.ts`, counted in the Runtime Cache by `agent/lib/spend.ts`; checked before Jev and again before Luna, a wholly cached review still served |
+| MCP model budget, all callers together | $0.25 per hour and $1.00 per UTC day, `agent/lib/budgets.ts`, counted in the Runtime Cache by `agent/lib/spend.ts`; reserved before Jev and again before Luna, a wholly cached review still served |
 | MCP JSON-RPC batches | Refused with HTTP 400 before any tool runs, `app/api/mcp/route.ts` |
-| Luna's output per review part | At most 3,300 tokens for a batch of files and 750 for the overall part, about four times the most measured, `agent/lib/reviewer.ts`; a safety net, not a length rule |
+| Luna's output per review part | At most 4,000 tokens for a batch of files and 2,000 for the overall part, five and ten times the most measured, `agent/lib/reviewer.ts`; a safety net, not a length rule: a part that reaches it is written once more with twice the room, and one cut off even then is shown marked incomplete and never cached |
 
 ## Limits
 

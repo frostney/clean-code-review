@@ -70,6 +70,11 @@ const judgedFile = z.object({
     .string()
     .nullable()
     .describe("Luna's paragraph on this file, or null when none was written."),
+  reviewIncomplete: z
+    .boolean()
+    .describe(
+      "True when Luna's paragraph on this file was cut off: its part ran into its output ceiling twice, so `review` is as far as it got, or null when it got no further than the file before.",
+    ),
   truncated: z
     .boolean()
     .describe(
@@ -186,6 +191,11 @@ export const reviewOutputSchema = z.object({
     .describe(
       "Luna's overall paragraph, or null when the review was not written.",
     ),
+  overallIncomplete: z
+    .boolean()
+    .describe(
+      'True when the overall paragraph was cut off at its output ceiling twice, so `overall` is as far as it got.',
+    ),
   prose: z
     .array(z.object({ path: z.string(), truncated: z.boolean() }))
     .describe(
@@ -244,6 +254,7 @@ function fileText(file: JudgedFile): string {
     file.kind,
     file.cached ? 'answers from cache' : null,
     file.truncated ? 'truncated' : null,
+    file.reviewIncomplete ? 'review cut off' : null,
   ].filter(Boolean);
   return [
     `### ${file.path} (${flags.join(', ')})`,
@@ -305,6 +316,9 @@ export function renderReviewText(result: ReviewOutput): string {
     '',
     '## Overall',
     result.overall ?? '(The overall paragraph was not written.)',
+    ...(result.overallIncomplete
+      ? ['(Cut off: this paragraph is as far as Luna got.)']
+      : []),
     '',
     ...result.notices.map((n) => `Note: ${n}`),
     '## Files',

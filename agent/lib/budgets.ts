@@ -32,8 +32,13 @@ export const MCP_DAILY_BUDGET_USD = 1;
 /** A budget as the docs and the refusals print it: `$0.25`. */
 export const dollars = (usd: number) => `$${usd.toFixed(2)}`;
 
-/** Which window of a budget ran out. */
-export type BudgetWindow = 'hour' | 'day';
+/**
+ * Which window of a budget ran out, or `unavailable` when the count could not
+ * be read and uncached work is refused until it can be.
+ */
+export type BudgetWindow = 'hour' | 'day' | 'unavailable';
+
+const WINDOWS: readonly BudgetWindow[] = ['hour', 'day', 'unavailable'];
 
 /** A page turn's whole reply when the page's budget is spent: no model ran. */
 export interface PausedReply {
@@ -41,16 +46,27 @@ export interface PausedReply {
   window: BudgetWindow;
   /** ISO time the window turns, and reviews come back. */
   resetsAt: string;
+  /**
+   * Milliseconds from the reply to `resetsAt`, by the server's clock. A
+   * browser whose clock runs ahead would otherwise read a reset that is still
+   * to come as one already past, and ask again straight away.
+   */
+  waitMs: number;
 }
 
 /** Every paused reply starts with this, and no review or judgment does. */
 const PAUSED_PREFIX = '{"kind":"paused"';
 
 /** The reply the agent sends in place of a turn it refused. */
-export function pausedReply(window: BudgetWindow, resetsAt: Date): string {
+export function pausedReply(
+  window: BudgetWindow,
+  resetsAt: Date,
+  now = new Date(),
+): string {
   const reply: PausedReply = {
     kind: 'paused',
     resetsAt: resetsAt.toISOString(),
+    waitMs: Math.max(0, resetsAt.getTime() - now.getTime()),
     window,
   };
   // Written in key order `kind` first, so `PAUSED_PREFIX` recognises it.
@@ -67,11 +83,23 @@ export function parsePaused(
   }
   try {
     const reply = JSON.parse(trimmed) as Partial<PausedReply>;
-    return (reply.window === 'hour' || reply.window === 'day') &&
-      typeof reply.resetsAt === 'string' &&
-      !Number.isNaN(Date.parse(reply.resetsAt))
-      ? { kind: 'paused', resetsAt: reply.resetsAt, window: reply.window }
-      : null;
+    if (
+      !(reply.window && WINDOWS.includes(reply.window)) ||
+      typeof reply.resetsAt !== 'string' ||
+      Number.isNaN(Date.parse(reply.resetsAt))
+    ) {
+      return null;
+    }
+    const waitMs =
+      typeof reply.waitMs === 'number' && Number.isFinite(reply.waitMs)
+        ? Math.max(0, reply.waitMs)
+        : Math.max(0, Date.parse(reply.resetsAt) - Date.now());
+    return {
+      kind: 'paused',
+      resetsAt: reply.resetsAt,
+      waitMs,
+      window: reply.window,
+    };
   } catch {
     return null;
   }
