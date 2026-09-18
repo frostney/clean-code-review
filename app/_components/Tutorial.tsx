@@ -42,13 +42,14 @@ const pixel = Press_Start_2P({
  * the sequence is over in two clicks and never asks to be dismissed.
  *
  * No count of questions: how many there are is a fact the FAQ answers when
- * asked, not something to sell with. "Every code file" and never "every file",
- * because prose in a change is shown and never judged. The copy is plain ASCII
+ * asked, not something to sell with. Nor "every file" or "every code file":
+ * prose in a change is shown and never judged, and a pull request can hold
+ * more code files than one review takes. "File by file" is true of all of it. The copy is plain ASCII
  * on purpose, since the pixel face below carries Latin and nothing more.
  */
 const LINES: readonly string[] = [
   "Hello. This page reviews code against Robert C. Martin's Clean Code.",
-  'Every code file is judged against the book, then reviewed in plain words.',
+  'The code is judged file by file against the book, then reviewed in plain words.',
   'Try one of the examples below, or paste a pull request address into the field.',
 ];
 
@@ -278,7 +279,10 @@ function afterFirstPaint(then: () => void): () => void {
     return () => undefined;
   }
 
-  if (!PerformanceObserver.supportedEntryTypes?.includes('paint')) {
+  if (
+    typeof PerformanceObserver === 'undefined' ||
+    !PerformanceObserver.supportedEntryTypes?.includes('paint')
+  ) {
     let frame = requestAnimationFrame(() => {
       frame = requestAnimationFrame(then);
     });
@@ -308,8 +312,11 @@ function afterFirstPaint(then: () => void): () => void {
  * keeps an animated image's first frame and drops the rest.
  */
 export function TutorialDuckPicture() {
-  const { step } = useTutorial();
-  const tapping = useFootTaps() && step === LAST;
+  // Nothing left to say: the last line is showing, or the greeting is over
+  // because a review opened. A reader who skipped straight to an example
+  // comes home to a duck that has finished talking, and it taps its feet.
+  const { more } = useTutorial();
+  const tapping = useFootTaps() && !more;
 
   return (
     <picture>
@@ -419,7 +426,7 @@ export function TutorialBubble() {
           face's own `>`, not an icon, so it sits on the same grid. */}
       {more ? (
         <button
-          className={`${pixel.className} -mb-1 mt-1 inline-flex min-h-8 cursor-pointer items-center rounded-sm text-[16px] text-white [font-variant-ligatures:none] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2`}
+          className={`${pixel.className} -mb-1 mt-1 inline-flex min-h-8 cursor-pointer items-center rounded-sm text-[16px]! text-white [font-variant-ligatures:none]! underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2`}
           data-tutorial="next"
           onClick={advance}
           type="button"

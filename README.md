@@ -5,8 +5,8 @@
 # Clean Code Review
 
 **Clean Code, judged by a model that does not write prose.**
-Point it at a GitHub pull request, a diff or a codebase. Every code file
-is judged against Robert C. Martin's *Clean Code* by
+Point it at a GitHub pull request, a diff or a codebase. The code is
+judged file by file against Robert C. Martin's *Clean Code* by
 [Jev](https://vercel.com/ai-gateway/models/jev), TypeSafe's evaluation
 model, and a short review is written from those findings. It runs on
 [eve](https://eve.dev), Vercel's agent framework, and deploys as one
@@ -120,7 +120,8 @@ browser ──── summarize turn ─▶ eve session ──▶ Luna, one call 
   and the meters change together. Rows are conditional: the test row
   only on test paths, the Boy Scout row only on diffs.
 - Per-file review parts read the file first, then apply Jev's findings
-  on top; the overall part sees only the findings for every file.
+  on top; the overall part sees the findings for every judged file and
+  the pull request's title and description.
 
 | Layer | Where |
 |---|---|
