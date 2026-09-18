@@ -107,28 +107,32 @@ export async function fetchPullRequest(
       headers: { ...headers, accept: 'application/vnd.github.diff' },
     }),
   ]);
-  const fail = async (message: string): Promise<never> => {
-    // Release both sockets before giving up.
-    await Promise.allSettled([meta.body?.cancel(), diff.body?.cancel()]);
+  const fail = (message: string): never => {
+    // Release both sockets before giving up — without waiting for it. Under
+    // Next's patched fetch, cancelling a body nobody has read never settles,
+    // and a request that awaited it hung until the function timed out.
+    for (const response of [meta, diff]) {
+      response.body?.cancel().catch(() => {
+        /* The socket is being dropped either way. */
+      });
+    }
     throw new Error(message);
   };
   if (meta.status === HTTP_NOT_FOUND) {
-    await fail(
-      'Pull request not found. Private repositories are not supported.',
-    );
+    fail('Pull request not found. Private repositories are not supported.');
   }
   if (meta.status === HTTP_FORBIDDEN || meta.status === HTTP_TOO_MANY) {
-    await fail('GitHub rate limit reached. Try again in a few minutes.');
+    fail('GitHub rate limit reached. Try again in a few minutes.');
   }
   if (!meta.ok) {
-    await fail(`GitHub returned ${meta.status} for the pull request.`);
+    fail(`GitHub returned ${meta.status} for the pull request.`);
   }
   if (!diff.ok) {
-    await fail(`GitHub returned ${diff.status} for the diff.`);
+    fail(`GitHub returned ${diff.status} for the diff.`);
   }
   const length = Number(diff.headers.get('content-length') ?? 0);
   if (length > MAX_DIFF_BYTES) {
-    await fail("That pull request's diff is too large to judge here.");
+    fail("That pull request's diff is too large to judge here.");
   }
   const json = (await meta.json()) as {
     title?: string;
