@@ -5,6 +5,15 @@
  * drift apart.
  */
 export const SITE = {
+  /** Robert C. Martin's own site. */
+  author: 'https://cleancoder.com',
+  /**
+   * The book the questions are drawn from, on its publisher's page. The first
+   * edition, because that is the one whose chapters the question set follows,
+   * its smells chapter included; the 2025 second edition is a rewrite.
+   */
+  // biome-ignore lint/security/noSecrets: a public book page, not a credential
+  book: 'https://www.informit.com/store/clean-code-a-handbook-of-agile-software-craftsmanship-9780132350884',
   /** ~150 characters: what a search result or a chat answer quotes. */
   description:
     "Paste a GitHub pull request, a diff or a codebase. Jev, TypeSafe's evaluation model, judges the code file by file against Clean Code and Luna writes the review.",

@@ -52,8 +52,12 @@ export const FAQ: readonly { q: string; a: string }[] = [
  */
 const LINKS: readonly { href: string; text: string }[] = [
   {
-    href: 'https://en.wikipedia.org/wiki/Robert_C._Martin',
+    href: SITE.author,
     text: 'Robert C. Martin',
+  },
+  {
+    href: SITE.book,
+    text: 'Clean Code',
   },
   { href: SITE.jev, text: "Jev, TypeSafe's evaluation model" },
 ];
