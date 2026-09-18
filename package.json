@@ -56,6 +56,7 @@
     "review": "bun scripts/summary-once.ts",
     "start": "next start",
     "start:eve": "eve start",
+    "test": "bun test",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "type": "module",

@@ -17,7 +17,7 @@ const LINK_CLASS =
  */
 export function Footer() {
   return (
-    <footer className="mt-6 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted">
+    <footer className="mt-6 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[12px] text-muted">
       <Link className={LINK_CLASS} href="/faq">
         how does this work?
       </Link>
@@ -53,7 +53,6 @@ export function Footer() {
       >
         view source
       </a>
-      <span className="ml-auto" />
     </footer>
   );
 }

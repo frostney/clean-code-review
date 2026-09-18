@@ -23,13 +23,12 @@ export type Lang = BundledLanguage | 'text';
  * which only needs to know that `.ts` is "TypeScript". The grammars
  * themselves are still shiki's, fetched by the highlighting worker.
  *
- * Keyed by shiki's ids, so a language shiki renames is a type error here. A
- * language added to the tables below needs its row here too, or its chip
- * reads "Text".
+ * Keyed by shiki's ids, so a language shiki drops is a type error here, and
+ * the tables below may only name a language that has a row, so a language
+ * added there without one is a type error too. Names and aliases are checked
+ * against shiki's own registry by `language.test.ts` (`bun test`).
  */
-const SHIKI_NAMES: Partial<
-  Record<BundledLanguage, { aliases: readonly string[]; name: string }>
-> = {
+export const SHIKI_NAMES = {
   astro: {
     aliases: [],
     name: 'Astro',
@@ -290,13 +289,21 @@ const SHIKI_NAMES: Partial<
     aliases: [],
     name: 'Zig',
   },
-};
+} as const satisfies Partial<
+  Record<BundledLanguage, { aliases: readonly string[]; name: string }>
+>;
+
+/** A language this page can place a file in: one with a name above. */
+type Named = keyof typeof SHIKI_NAMES;
 
 /** Every id and alias above, pointing at the name shiki prints for itself. */
 const NAME_BY_ID = new Map<string, string>(
   Object.entries(SHIKI_NAMES).flatMap(([id, info]) => [
     [id, info.name] as [string, string],
-    ...info.aliases.map((alias): [string, string] => [alias, info.name]),
+    ...info.aliases.map((alias: string): [string, string] => [
+      alias,
+      info.name,
+    ]),
   ]),
 );
 
@@ -310,7 +317,7 @@ const ALIASES_BY_ID = new Map<string, readonly string[]>(
  * rather than everything shiki can colour: a grammar nothing here points at is
  * still in the registry, it just needs a file named for it to be reached.
  */
-const BY_EXTENSION: Record<string, Lang> = {
+const BY_EXTENSION: Record<string, Named> = {
   astro: 'astro',
   bash: 'shellscript',
   bat: 'bat',
@@ -412,7 +419,7 @@ const BY_EXTENSION: Record<string, Lang> = {
  * `Makefile` carry no extension at all, and both turn up in almost every
  * change that touches how a project is built.
  */
-const BY_FILENAME: Record<string, Lang> = {
+const BY_FILENAME: Record<string, Named> = {
   dockerfile: 'docker',
   gnumakefile: 'make',
   makefile: 'make',

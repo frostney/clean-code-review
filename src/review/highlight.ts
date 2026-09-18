@@ -43,17 +43,22 @@ export interface HighlightRequest {
   theme: ShikiTheme;
 }
 
-/** What comes back: the file's lines, or null when its grammar would not load. */
-export interface HighlightReply {
-  id: number;
-  lines: Token[][] | null;
-}
+/**
+ * What comes back: first word that the file is being tokenised — everything
+ * it needed has been fetched — then its lines, or null when its grammar would
+ * not load.
+ */
+export type HighlightReply =
+  | { id: number; tokenising: true }
+  | { id: number; lines: Token[][] | null };
 
 interface Job {
   request: HighlightRequest;
   /** On screen, so it goes before anything that is only rendered. */
   urgent: () => boolean;
   done: (lines: Token[][] | null) => void;
+  /** The card no longer wants it. */
+  cancelled: boolean;
 }
 
 /**
@@ -72,42 +77,152 @@ const queue: Job[] = [];
 /** The job the worker is on, which cannot be recalled. */
 let running: Job | null = null;
 let nextId = 1;
-/** The worker would not start or has died: every card stays plain text. */
-let broken = false;
+
+/**
+ * How long one file may take to tokenise, counted from the worker saying it
+ * has started — after the engine, the themes and the file's grammar have
+ * arrived, so a slow connection is never mistaken for a slow file. The
+ * slowest real file measured, at a phone's CPU, took a tenth of a second; a
+ * file still going after five has hit a grammar's pathological case and would
+ * hold every card behind it forever.
+ */
+const FILE_TIMEOUT_MS = 5_000;
+/**
+ * How long the worker may take to get a file started: to load itself, shiki
+ * and the file's grammar. A connection that has not managed that in a minute
+ * has stalled, and the worker is started again after the usual pause; it is
+ * never the file's fault, so the file is tried again too.
+ */
+const LOAD_TIMEOUT_MS = 60_000;
+let watchdog: ReturnType<typeof setTimeout> | null = null;
+
+function stopWatchdog() {
+  if (watchdog) {
+    clearTimeout(watchdog);
+    watchdog = null;
+  }
+}
+
+/**
+ * Files that ran out of time, so an edit or a theme switch does not hand the
+ * same file back to a fresh worker to hang it again. Kept short: it only has
+ * to outlive the review they were in.
+ */
+const HUNG_KEEP = 20;
+const hung: string[] = [];
+
+function hungKey({ code, lang }: HighlightRequest): string {
+  return `${lang}\u0000${code}`;
+}
+
+/**
+ * The worker would not start: the chunk failed to arrive, or the browser
+ * refused it. Every card stays plain meanwhile, which is what a card shows
+ * before its colours arrive anyway, and the worker is tried again after a
+ * pause that doubles each time, up to a minute, while there is anything to
+ * colour. A worker that answers resets the count.
+ */
+const RETRY_FIRST_MS = 2_000;
+const RETRY_MOST_MS = 60_000;
+let failures = 0;
+let retryAt = 0;
+/** A retry is already scheduled, so a second wait does not stack another. */
+let retryPending = false;
+
+function drop(w: Worker) {
+  w.terminate();
+  if (worker === w) {
+    worker = null;
+  }
+}
+
+/**
+ * The worker failed to start or died: wait, then try a new one. The file it
+ * had goes back to the front of the queue, since the worker never got to it.
+ */
+function failed(w: Worker) {
+  drop(w);
+  if (running && !running.cancelled) {
+    queue.unshift(running);
+  }
+  running = null;
+  stopWatchdog();
+  failures += 1;
+  retryAt =
+    Date.now() + Math.min(RETRY_MOST_MS, RETRY_FIRST_MS * 2 ** (failures - 1));
+  pump();
+}
 
 function spawn(): Worker | null {
-  if (worker || broken) {
+  if (worker) {
     return worker;
   }
+  const wait = retryAt - Date.now();
+  if (wait > 0) {
+    if (!retryPending) {
+      retryPending = true;
+      setTimeout(() => {
+        retryPending = false;
+        pump();
+      }, wait);
+    }
+    return null;
+  }
+  let w: Worker;
   try {
-    worker = new Worker(new URL('./highlight.worker.ts', import.meta.url), {
+    w = new Worker(new URL('./highlight.worker.ts', import.meta.url), {
       type: 'module',
     });
   } catch {
-    broken = true;
-    return null;
+    failures += 1;
+    retryAt =
+      Date.now() +
+      Math.min(RETRY_MOST_MS, RETRY_FIRST_MS * 2 ** (failures - 1));
+    return spawn();
   }
-  worker.addEventListener('message', (event: MessageEvent<HighlightReply>) => {
+  worker = w;
+  w.addEventListener('message', (event: MessageEvent<HighlightReply>) => {
+    const reply = event.data;
+    if (worker !== w || running?.request.id !== reply.id) {
+      return;
+    }
+    failures = 0;
+    stopWatchdog();
+    if ('tokenising' in reply) {
+      watchdog = setTimeout(() => timedOut(w), FILE_TIMEOUT_MS);
+      return;
+    }
     const job = running;
     running = null;
-    if (job && job.request.id === event.data.id) {
-      job.done(event.data.lines);
-    }
+    job.done(reply.lines);
     pump();
   });
-  worker.addEventListener('error', () => {
-    // Nothing more will come back. What is on screen stays plain, which is
-    // what a card showed before its colours arrived anyway.
-    broken = true;
-    worker = null;
-    const orphans = running ? [running, ...queue] : [...queue];
-    running = null;
-    queue.length = 0;
-    for (const job of orphans) {
-      job.done(null);
+  w.addEventListener('error', () => {
+    if (worker === w) {
+      failed(w);
     }
   });
-  return worker;
+  return w;
+}
+
+/**
+ * The file in the worker ran out of time. The worker cannot be interrupted
+ * mid-file, so it is thrown away with the grammars it had loaded; the file
+ * stays plain, and the next one goes to a new worker.
+ */
+function timedOut(w: Worker) {
+  watchdog = null;
+  const job = running;
+  running = null;
+  drop(w);
+  if (job) {
+    hung.push(hungKey(job.request));
+    if (hung.length > HUNG_KEEP) {
+      hung.shift();
+    }
+    job.done(null);
+  }
+  pump();
 }
 
 /** Hand the worker its next file: the first one on screen, else the oldest. */
@@ -125,6 +240,7 @@ function pump() {
   );
   const [job] = queue.splice(at, 1);
   running = job;
+  watchdog = setTimeout(() => failed(w), LOAD_TIMEOUT_MS);
   w.postMessage(job.request);
 }
 
@@ -141,11 +257,12 @@ function highlight(
   done: (lines: Token[][] | null) => void,
 ): Ticket {
   const job: Job = {
+    cancelled: false,
     done,
     request: { code, id: nextId++, lang, theme },
     urgent,
   };
-  if (broken) {
+  if (hung.includes(hungKey(job.request))) {
     done(null);
     return { cancel: () => undefined };
   }
@@ -158,6 +275,7 @@ function highlight(
         queue.splice(at, 1);
       }
       // Already with the worker: let it finish, and drop what it says.
+      job.cancelled = true;
       job.done = () => undefined;
     },
   };

@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { flushSync } from 'react-dom';
 
 /**
  * How many cards a review draws in full straight away — on the server, and so
@@ -46,8 +47,13 @@ export type WatchCard = (element: Element, path: string) => () => void;
  * mid-flight they would change height above the card being scrolled to and
  * move it out from under the scroll. Once it has settled, whatever is near is
  * drawn as usual, and `KeepPlace` holds the card where the scroll left it.
+ *
+ * Cmd/Ctrl+F draws every card that is left, before the browser's find bar
+ * opens: find-in-page searches the document, and a card that is only a header
+ * and a space has no code in it to find. The keystroke itself is left alone,
+ * so the find bar opens as it always does.
  */
-export function useCardWindow(reviewId: string) {
+export function useCardWindow(reviewId: string, paths: readonly string[]) {
   const [drawn, setDrawn] = useState<Readonly<Record<string, true>>>({});
   // Another review is another set of cards; reset in the render that carries
   // it rather than an effect a frame later.
@@ -150,6 +156,34 @@ export function useCardWindow(reviewId: string) {
     },
     [drawNear],
   );
+
+  // Drawn synchronously, inside the keystroke: the find bar opens as soon as
+  // the key is handled, and a search typed into it must already see the code.
+  const pathsNowRef = useRef(paths);
+  pathsNowRef.current = paths;
+  useEffect(() => {
+    // The physical F key, whatever the layout calls it, with the platform's
+    // own modifier: Cmd on a Mac, where Ctrl+F moves the caret in an editor,
+    // and Ctrl everywhere else.
+    const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+    function onKeyDown(event: KeyboardEvent) {
+      const modifier = mac ? event.metaKey : event.ctrlKey;
+      if (!modifier || event.altKey || event.code !== 'KeyF') {
+        return;
+      }
+      const all = pathsNowRef.current;
+      flushSync(() => {
+        setDrawn((current) =>
+          all.every((path) => current[path])
+            ? current
+            : Object.fromEntries(all.map((path) => [path, true as const])),
+        );
+      });
+    }
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () =>
+      window.removeEventListener('keydown', onKeyDown, { capture: true });
+  }, []);
 
   const isDrawn = useCallback(
     (index: number, path: string) =>

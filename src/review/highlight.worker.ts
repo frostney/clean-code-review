@@ -73,11 +73,16 @@ function loadLanguage(shiki: HighlighterCore, lang: string): Promise<void> {
  */
 async function tokenise({
   code,
+  id,
   lang,
   theme,
 }: HighlightRequest): Promise<Token[][]> {
   const shiki = await highlighter();
   await loadLanguage(shiki, lang);
+  // Everything this file needed has arrived; what follows is the one part
+  // that can run away with a pathological grammar, and the page times it.
+  const started: HighlightReply = { id, tokenising: true };
+  self.postMessage(started);
   const { tokens } = shiki.codeToTokens(code, { lang, theme });
   return tokens.map((line) =>
     line.map((token) =>

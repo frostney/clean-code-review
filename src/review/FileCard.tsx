@@ -369,10 +369,25 @@ const CODE_PAD_PX = 16;
  * them all out before the first paint was most of the first frame. The
  * browser holds the space at the height the rows will take — exact, since
  * every row is one line of the same height — so nothing moves when it is.
- * The text stays in the document, where find-in-page and a screen reader
- * still reach it.
+ *
+ * Only for an editable file. Its sideways scrollbar belongs to the textarea
+ * laid over the rows, so on a system that draws scrollbars it sits inside the
+ * rows' height rather than under them. A prose file's code scrolls itself,
+ * and there a long line adds a scrollbar's height the rows cannot predict, so
+ * a prose card is laid out in full, at the height it really has.
+ * The text of a drawn card stays in the document, where find-in-page and a
+ * screen reader still reach it. A card not drawn yet has no code in the
+ * document at all; Cmd/Ctrl+F draws every one of those first
+ * (`useCardWindow`), but a search started any other way — the browser's
+ * menu, say — only finds what is drawn.
  */
-function codeSpace(lines: number): CSSProperties {
+function codeSpace(
+  lines: number,
+  editable: boolean,
+): CSSProperties | undefined {
+  if (!editable) {
+    return;
+  }
   return {
     containIntrinsicBlockSize: `auto ${lines * CODE_ROW_PX + CODE_PAD_PX}px`,
     contentVisibility: 'auto',
@@ -547,7 +562,7 @@ export function FileCard({
       ) : null}
       {!collapsed && !deferred && (
         <>
-          <div className="min-w-0" style={codeSpace(lineCount)}>
+          <div className="min-w-0" style={codeSpace(lineCount, !prose)}>
             {file.patch ? (
               <PatchEditor
                 content={file.content}

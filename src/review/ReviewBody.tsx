@@ -1,6 +1,6 @@
 'use client';
 
-import { useLayoutEffect, useState } from 'react';
+import { useLayoutEffect, useMemo, useState } from 'react';
 
 import { isProsePath } from '@/agent/lib/review/review';
 import { Paste } from '@/src/landing/Paste';
@@ -36,7 +36,8 @@ export function ReviewBody() {
     at: number;
   } | null>(null);
 
-  const cards = useCardWindow(review.id);
+  const paths = useMemo(() => review.files.map((f) => f.path), [review.files]);
+  const cards = useCardWindow(review.id, paths);
 
   const allCollapsed =
     review.files.length > 0 &&
