@@ -112,6 +112,9 @@ function Overlay({
           aria-hidden={onChange ? 'true' : undefined}
           className={`code-line ${onChange ? 'overflow-hidden' : 'overflow-auto'}`}
           ref={preRef}
+          // Read-only code scrolls sideways on its own, so it has to be
+          // reachable by keyboard the way the textarea is when it is editable.
+          tabIndex={onChange ? undefined : 0}
         >
           {children}
         </pre>

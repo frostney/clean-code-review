@@ -26,9 +26,8 @@ export function filesFromPaste(text: string): ReviewFile[] {
   const extension =
     extensionFromHint(text.split('\n', 1)[0] ?? '') ??
     extensionFromContent(body);
-  // No extension rather than `.txt` when nothing places it: `.txt` is on the
-  // generated-and-not-code list, so a snippet named that way would be skipped
-  // on both sides and the paste would render no cards at all.
+  // No extension rather than `.txt` when nothing places it: `.txt` is a prose
+  // name, and a snippet named that way would be shown and never judged.
   return [
     { content: body, path: extension ? `snippet.${extension}` : 'snippet' },
   ];

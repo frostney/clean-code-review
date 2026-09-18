@@ -1,5 +1,7 @@
 import { type BundledLanguage, bundledLanguagesInfo } from 'shiki/langs';
 
+import { isProsePath } from '@/agent/lib/review';
+
 /**
  * What language a file is written in, named the way shiki names it.
  *
@@ -227,9 +229,14 @@ export function extensionFromHint(firstLine: string): string | null {
     return 'sh';
   }
   // A first-line comment that names a file: `// src/thing.ts`, `# thing.py`.
+  // Never a prose name: `// README.md — usage` above code is a comment about
+  // the README, and taking it as the file's name would make the paste unjudged.
   const named = /^(?:\/\/|#|\/\*)\s*\S*?\.([A-Za-z0-9]+)\b/.exec(line);
-  if (named && BY_EXTENSION[named[1].toLowerCase()]) {
-    return named[1].toLowerCase();
+  if (named) {
+    const extension = named[1].toLowerCase();
+    if (BY_EXTENSION[extension] && !isProsePath(`x.${extension}`)) {
+      return extension;
+    }
   }
   return null;
 }

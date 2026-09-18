@@ -53,8 +53,6 @@ export interface OpenReview {
    * pure deletions. Counted against what GitHub said the PR touches.
    */
   skippedCount: number;
-  /** Files a pull request had beyond the per-turn cap, for the notice. */
-  dropped: number;
 }
 
 /**
@@ -76,7 +74,7 @@ export interface OpenReview {
  */
 function opened(
   files: readonly ReviewFile[],
-): Omit<OpenReview, 'id' | 'preset' | 'pr' | 'dropped' | 'skippedCount'> {
+): Omit<OpenReview, 'id' | 'preset' | 'pr' | 'skippedCount'> {
   const { skipped } = partitionJudgeable(files);
   // Code and prose in the order they came: a README pasted first stays first.
   const unique = uniquePaths(files.filter((f) => skipReason(f) === null));
@@ -139,7 +137,6 @@ function withinCaps(files: readonly ReviewFile[]): ReviewFile[] {
 
 export function fromPreset(preset: Preset, id: string): OpenReview {
   return {
-    dropped: 0,
     id,
     pr: null,
     preset: preset.label,
@@ -155,7 +152,6 @@ export function fromPaste(text: string, id: string): OpenReview | null {
     return null;
   }
   return {
-    dropped: 0,
     id,
     pr: null,
     preset: null,
@@ -175,13 +171,12 @@ export function fromPullRequest(
   id: string,
 ): OpenReview | null {
   const judgeable = filesFromPatch(payload.diff);
-  const { kept, skipped, dropped } = selectReviewFiles(judgeable);
+  const { kept, skipped } = selectReviewFiles(judgeable);
   if (!kept.length) {
     return null;
   }
   const review = opened(kept);
   return {
-    dropped: dropped.length,
     id,
     pr: {
       body: payload.body,
@@ -202,6 +197,10 @@ export function fromPullRequest(
         .filter((path) => !review.skipped.some((s) => s.path === path))
         .map((path) => ({ path, reason: 'generated' as const })),
     ],
+    // The caps were applied before `opened` saw the list, so the totals it
+    // counted are the shown files; count the whole pull request instead, so
+    // the notice can say how many of each kind were left out.
+    total: countKinds(judgeable.filter((f) => skipReason(f) === null)),
   };
 }
 

@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useState } from 'react';
 
-import { isProsePath, REVIEW_LIMITS } from '@/agent/lib/review';
+import { isProsePath } from '@/agent/lib/review';
 import { isWriting, overallSummaryStatus } from '@/lib/display';
 import { cappedText, skippedText } from '@/lib/open-review';
 
@@ -43,9 +43,16 @@ export function ReviewBody() {
   // code file in it, so no judging turn is ever started and nothing will ever
   // arrive: the review has to say so rather than pulse "Judging…" for the life
   // of the tab.
-  const judgeable = review.files.some(
-    (file) => !isProsePath(file.path) && file.content.trim(),
-  );
+  const codePaths = review.files
+    .filter((file) => !isProsePath(file.path) && file.content.trim())
+    .map((file) => file.path);
+  // Nor will anything arrive once the session's budget went before the first
+  // answer did, or when Jev was asked about every code file twice and answered
+  // for none: the pill has to settle rather than wait.
+  const judgeable =
+    codePaths.length > 0 &&
+    !(judge.budgetSpent && !judged) &&
+    !codePaths.every((path) => judge.failed[path] === true);
 
   /** Every file here is writing: a docs-only pull request, or a paste of one. */
   const proseOnly =
@@ -89,12 +96,6 @@ export function ReviewBody() {
       review.skipped,
       Math.max(review.skipped.length, review.skippedCount),
     ),
-    // Two caps, so two reasons a file is missing: code past the per-turn limit
-    // and prose past its own smaller one. The notice names both rather than
-    // implying every dropped file was code that lost on size.
-    review.dropped
-      ? `${review.dropped} more ${review.dropped === 1 ? 'file' : 'files'} not shown: the largest ${REVIEW_LIMITS.maxFiles} code files are judged and the first ${REVIEW_LIMITS.maxProseFiles} prose files are kept for context`
-      : null,
   ]
     .filter(Boolean)
     .join(' · ');

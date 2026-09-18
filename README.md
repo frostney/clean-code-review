@@ -23,8 +23,8 @@ Next.js project.
   split per file, generated and binary files are skipped, the largest
   24 code files are judged, the PR description is rendered as markdown.
 - **Everything is editable** — whole files and diff hunks alike, and only
-  the file you touched is re-judged. Every grammar shiki ships is
-  available, fetched the first time a review contains that language.
+  the file you touched is re-judged. Around sixty file types are
+  highlighted, each grammar fetched the first time a review needs it.
 - **Documentation is read, not judged** — a README or a changelog in the
   change gets a card with its own highlighting and no verdict, because
   none of the 34 questions is a question about prose.

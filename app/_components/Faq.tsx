@@ -15,7 +15,7 @@ export const FAQ: readonly { q: string; a: string }[] = [
     q: 'What does it judge?',
   },
   {
-    a: `Jev, TypeSafe's evaluation model, reached through the Vercel AI Gateway. It answers the whole question set for one file in one call, as probabilities and scores, and writes no prose at all. The review you read is Luna (${REVIEWER_MODEL}), a second model: the section about each file is written from Jev's findings, that file's code and the pull request description, and the decision at the top is written from the findings for every file and nothing else.`,
+    a: `Jev, TypeSafe's evaluation model, reached through the Vercel AI Gateway. It answers the whole question set for one file in one call, as probabilities and scores, and writes no prose at all. The review you read is Luna (${REVIEWER_MODEL}), a second model: the section about each file is written from Jev's findings and that file's code, and the decision at the top from the findings for every file and the pull request's description.`,
     q: 'Which models do the work?',
   },
   {
