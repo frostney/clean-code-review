@@ -5,6 +5,11 @@ import type { ReactNode } from 'react';
 import { QUESTION_COUNT } from '@/agent/lib/questions';
 import { REVIEW_LIMITS } from '@/agent/lib/review';
 import { REVIEWER_MODEL } from '@/agent/lib/summary';
+import {
+  MCP_CALLS_PER_WINDOW,
+  MCP_PATH,
+  MCP_WINDOW_MINUTES,
+} from '@/lib/mcp-limits';
 import { SITE } from '@/lib/site';
 import { REQUESTS_PER_WINDOW, WINDOW_MS } from '@/lib/throttle';
 
@@ -101,6 +106,16 @@ export default function PrivacyPage() {
             {REVIEW_LIMITS.maxCharsPerFile.toLocaleString('en-US')} characters,
             with up to {REVIEW_LIMITS.maxProseFiles} prose files shown beside
             them and never sent to be judged.
+          </p>
+          <p>
+            Code can also arrive from an agent rather than from a browser tab,
+            through the MCP server at <code>{`${SITE.url}${MCP_PATH}`}</code>.
+            That path sends the code on the same route to the same two models,
+            in one request, with no session and no tab. It keeps what the page
+            keeps and nothing more: the same one-hour cache of answers and
+            reviews, and a count of calls per network address,{' '}
+            {MCP_CALLS_PER_WINDOW} per {MCP_WINDOW_MINUTES} minutes, held in one
+            server instance&rsquo;s memory for that window.
           </p>
         </Section>
 

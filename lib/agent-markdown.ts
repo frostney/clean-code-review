@@ -22,6 +22,13 @@ import { REVIEW_LIMITS } from '@/agent/lib/review';
 import { REVIEWER_MODEL } from '@/agent/lib/summary';
 
 import { pullRequestUrl } from './address';
+import {
+  MAX_PASTE_CHARS,
+  MCP_CALLS_PER_WINDOW,
+  MCP_PATH,
+  MCP_TOOLS,
+  MCP_WINDOW_MINUTES,
+} from './mcp-limits';
 import { SITE } from './site';
 
 /** The one content type this module's output may be served as. */
@@ -44,10 +51,11 @@ export function wantsMarkdown(accept: string | null | undefined): boolean {
 
 const url = (path: string) => `${SITE.url}${path}`;
 
-/** The two indexes an agent should be pointed at from anywhere on the site. */
+/** The indexes and the endpoint an agent should be pointed at from anywhere on the site. */
 const INDEXES = [
   `- [llms.txt](${url('/llms.txt')}): this site in one paragraph, for a model.`,
   `- [sitemap.xml](${url('/sitemap.xml')}): every page meant to be indexed.`,
+  `- MCP server at \`${url(MCP_PATH)}\`: the same review for an agent without a browser, over stateless Streamable HTTP. \`${MCP_TOOLS.pullRequest}\` takes a public pull request URL; \`${MCP_TOOLS.paste}\` takes a unified diff or files, up to ${MAX_PASTE_CHARS.toLocaleString('en-US')} characters. ${MCP_CALLS_PER_WINDOW} calls per ${MCP_WINDOW_MINUTES} minutes per address.`,
   `- [Source](${SITE.source}): the whole application, including the question set and the prompts.`,
 ].join('\n');
 
@@ -173,6 +181,12 @@ file to Jev through the Vercel AI Gateway to be answered, and sends Jev's
 findings plus the file's text to Luna, through the same gateway, to be written
 up. That is the whole path. Your code reaches the gateway and the two model
 providers behind it, and nothing else.
+
+Code can also arrive from an agent, through the MCP server at
+\`${url(MCP_PATH)}\`. That path takes the same route to the same two models in
+a single request, with no session and no browser tab. It keeps what the page
+keeps: the same one-hour cache of answers and reviews, and a count of calls per
+network address, ${MCP_CALLS_PER_WINDOW} per ${MCP_WINDOW_MINUTES} minutes, held in one server instance's memory.
 
 ## How long anything is kept
 

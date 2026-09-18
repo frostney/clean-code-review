@@ -1,5 +1,12 @@
 import { QUESTION_COUNT } from '@/agent/lib/questions';
 import { REVIEW_LIMITS } from '@/agent/lib/review';
+import {
+  MAX_PASTE_CHARS,
+  MCP_CALLS_PER_WINDOW,
+  MCP_PATH,
+  MCP_TOOLS,
+  MCP_WINDOW_MINUTES,
+} from '@/lib/mcp-limits';
 import { SITE } from '@/lib/site';
 
 /**
@@ -20,7 +27,16 @@ Reach for ${SITE.name} when there is a public GitHub pull request, a unified dif
 
 It is not a linter, a type checker, a test runner or a security scanner, and it never executes the code it reads. It judges at most ${REVIEW_LIMITS.maxFiles} code files in one review, ${REVIEW_LIMITS.maxCharsPerFile.toLocaleString('en-US')} characters each, from public repositories only.
 
-An agent can open a review directly at ${SITE.url}/owner/repo/pull/123, and can read any page of this site as Markdown by sending the header \`Accept: text/markdown\`. There is no separate judging API yet.
+An agent can open a review directly at ${SITE.url}/owner/repo/pull/123, and can read any page of this site as Markdown by sending the header \`Accept: text/markdown\`.
+
+## MCP server
+
+An agent without a browser gets the same review from the MCP server at ${SITE.url}${MCP_PATH}, over stateless Streamable HTTP with no sign-in. It has two tools, and each returns every answer Jev gave per file, Luna's decision and paragraphs, the files that were not judged and why, the models and the cost, as structured content and as text.
+
+- \`${MCP_TOOLS.pullRequest}\` takes a public GitHub pull request URL and also returns the permalink to the same review on this site.
+- \`${MCP_TOOLS.paste}\` takes what you would paste into the page: a unified diff, whole files each introduced by a \`// file: path\` line, or a single file, up to ${MAX_PASTE_CHARS.toLocaleString('en-US')} characters.
+
+Each address may make ${MCP_CALLS_PER_WINDOW} calls per ${MCP_WINDOW_MINUTES} minutes.
 
 ## Links
 
