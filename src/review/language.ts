@@ -1,4 +1,4 @@
-import { type BundledLanguage, bundledLanguagesInfo } from 'shiki/langs';
+import type { BundledLanguage } from 'shiki/langs';
 
 import { isProsePath } from '@/agent/lib/review/review';
 
@@ -6,7 +6,7 @@ import { isProsePath } from '@/agent/lib/review/review';
  * What language a file is written in, named the way shiki names it.
  *
  * The grammars are shiki's whole bundled registry — every language it ships,
- * fetched on first use in `src/review/highlight.ts` — so nothing here is a list of
+ * fetched on first use in `src/review/highlight.worker.ts` — so nothing here is a list of
  * languages we support. What is written down is the one thing shiki does not
  * know: which file extension means which of its languages. "text" is shiki's
  * own no-op grammar and the answer whenever nothing places a file, so an
@@ -15,20 +15,294 @@ import { isProsePath } from '@/agent/lib/review/review';
  */
 export type Lang = BundledLanguage | 'text';
 
-/** Every id and alias shiki ships, pointing at the name it prints for itself. */
+/**
+ * Shiki's own name and aliases for every language a file here can be placed
+ * in, copied out of `bundledLanguagesInfo` rather than imported from it.
+ * That registry carries a loader for each of its two hundred grammars, and
+ * importing it put the whole list on every page — the landing page included,
+ * which only needs to know that `.ts` is "TypeScript". The grammars
+ * themselves are still shiki's, fetched by the highlighting worker.
+ *
+ * Keyed by shiki's ids, so a language shiki renames is a type error here. A
+ * language added to the tables below needs its row here too, or its chip
+ * reads "Text".
+ */
+const SHIKI_NAMES: Partial<
+  Record<BundledLanguage, { aliases: readonly string[]; name: string }>
+> = {
+  astro: {
+    aliases: [],
+    name: 'Astro',
+  },
+  bat: {
+    aliases: ['batch', 'cmd'],
+    name: 'Batch File',
+  },
+  c: {
+    aliases: [],
+    name: 'C',
+  },
+  clojure: {
+    aliases: ['clj'],
+    name: 'Clojure',
+  },
+  cmake: {
+    aliases: [],
+    name: 'CMake',
+  },
+  cpp: {
+    aliases: ['c++'],
+    name: 'C++',
+  },
+  csharp: {
+    aliases: ['c#', 'cs'],
+    name: 'C#',
+  },
+  css: {
+    aliases: [],
+    name: 'CSS',
+  },
+  dart: {
+    aliases: [],
+    name: 'Dart',
+  },
+  diff: {
+    aliases: [],
+    name: 'Diff',
+  },
+  docker: {
+    aliases: ['dockerfile'],
+    name: 'Dockerfile',
+  },
+  elixir: {
+    aliases: [],
+    name: 'Elixir',
+  },
+  elm: {
+    aliases: [],
+    name: 'Elm',
+  },
+  erlang: {
+    aliases: ['erl'],
+    name: 'Erlang',
+  },
+  fish: {
+    aliases: [],
+    name: 'Fish',
+  },
+  fsharp: {
+    aliases: ['f#', 'fs'],
+    name: 'F#',
+  },
+  go: {
+    aliases: [],
+    name: 'Go',
+  },
+  graphql: {
+    aliases: ['gql'],
+    name: 'GraphQL',
+  },
+  groovy: {
+    aliases: [],
+    name: 'Groovy',
+  },
+  haskell: {
+    aliases: ['hs'],
+    name: 'Haskell',
+  },
+  hcl: {
+    aliases: [],
+    name: 'HashiCorp HCL',
+  },
+  html: {
+    aliases: [],
+    name: 'HTML',
+  },
+  ini: {
+    aliases: ['properties'],
+    name: 'INI',
+  },
+  java: {
+    aliases: [],
+    name: 'Java',
+  },
+  javascript: {
+    aliases: ['js', 'cjs', 'mjs'],
+    name: 'JavaScript',
+  },
+  json: {
+    aliases: [],
+    name: 'JSON',
+  },
+  json5: {
+    aliases: [],
+    name: 'JSON5',
+  },
+  jsonc: {
+    aliases: [],
+    name: 'JSON with Comments',
+  },
+  jsx: {
+    aliases: [],
+    name: 'JSX',
+  },
+  julia: {
+    aliases: ['jl'],
+    name: 'Julia',
+  },
+  kotlin: {
+    aliases: ['kt', 'kts'],
+    name: 'Kotlin',
+  },
+  less: {
+    aliases: [],
+    name: 'Less',
+  },
+  lua: {
+    aliases: [],
+    name: 'Lua',
+  },
+  make: {
+    aliases: ['makefile'],
+    name: 'Makefile',
+  },
+  markdown: {
+    aliases: ['md'],
+    name: 'Markdown',
+  },
+  mdx: {
+    aliases: [],
+    name: 'MDX',
+  },
+  nim: {
+    aliases: [],
+    name: 'Nim',
+  },
+  nix: {
+    aliases: [],
+    name: 'Nix',
+  },
+  'objective-c': {
+    aliases: ['objc'],
+    name: 'Objective-C',
+  },
+  'objective-cpp': {
+    aliases: [],
+    name: 'Objective-C++',
+  },
+  ocaml: {
+    aliases: [],
+    name: 'OCaml',
+  },
+  perl: {
+    aliases: [],
+    name: 'Perl',
+  },
+  php: {
+    aliases: [],
+    name: 'PHP',
+  },
+  powershell: {
+    aliases: ['ps', 'ps1', 'pwsh'],
+    name: 'PowerShell',
+  },
+  proto: {
+    aliases: ['protobuf'],
+    name: 'Protocol Buffer 3',
+  },
+  python: {
+    aliases: ['py'],
+    name: 'Python',
+  },
+  r: {
+    aliases: [],
+    name: 'R',
+  },
+  ruby: {
+    aliases: ['rb'],
+    name: 'Ruby',
+  },
+  rust: {
+    aliases: ['rs'],
+    name: 'Rust',
+  },
+  sass: {
+    aliases: [],
+    name: 'Sass',
+  },
+  scala: {
+    aliases: [],
+    name: 'Scala',
+  },
+  scss: {
+    aliases: [],
+    name: 'SCSS',
+  },
+  shellscript: {
+    aliases: ['bash', 'sh', 'shell', 'zsh'],
+    name: 'Shell',
+  },
+  solidity: {
+    aliases: [],
+    name: 'Solidity',
+  },
+  sql: {
+    aliases: [],
+    name: 'SQL',
+  },
+  svelte: {
+    aliases: [],
+    name: 'Svelte',
+  },
+  swift: {
+    aliases: [],
+    name: 'Swift',
+  },
+  terraform: {
+    aliases: ['tf', 'tfvars'],
+    name: 'Terraform',
+  },
+  toml: {
+    aliases: [],
+    name: 'TOML',
+  },
+  tsx: {
+    aliases: [],
+    name: 'TSX',
+  },
+  typescript: {
+    aliases: ['ts', 'cts', 'mts'],
+    name: 'TypeScript',
+  },
+  vue: {
+    aliases: [],
+    name: 'Vue',
+  },
+  xml: {
+    aliases: [],
+    name: 'XML',
+  },
+  yaml: {
+    aliases: ['yml'],
+    name: 'YAML',
+  },
+  zig: {
+    aliases: [],
+    name: 'Zig',
+  },
+};
+
+/** Every id and alias above, pointing at the name shiki prints for itself. */
 const NAME_BY_ID = new Map<string, string>(
-  bundledLanguagesInfo.flatMap((info) => [
-    [info.id, info.name] as [string, string],
-    ...(info.aliases ?? []).map((alias): [string, string] => [
-      alias,
-      info.name,
-    ]),
+  Object.entries(SHIKI_NAMES).flatMap(([id, info]) => [
+    [id, info.name] as [string, string],
+    ...info.aliases.map((alias): [string, string] => [alias, info.name]),
   ]),
 );
 
 /** A language's own alternative names, for the fence names derived below. */
 const ALIASES_BY_ID = new Map<string, readonly string[]>(
-  bundledLanguagesInfo.map((info) => [info.id, info.aliases ?? []]),
+  Object.entries(SHIKI_NAMES).map(([id, info]) => [id, info.aliases]),
 );
 
 /**

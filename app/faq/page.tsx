@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 
-import { DuckTransition } from '@/src/landing/Duck';
+import { DuckTransition } from '@/src/landing/DuckTransition';
 import { FAQ } from '@/src/site/faq';
 import { SITE } from '@/src/site/site';
 import { Faq } from '@/src/ui/Faq';

@@ -1,7 +1,13 @@
 'use client';
 
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import {
+  type CSSProperties,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import {
   GROUPS,
@@ -34,6 +40,7 @@ import { GroupIcon } from './icons';
 import { langLabel, langOf, splitPath } from './language';
 import { Meter } from './Meter';
 import { ReviewNote } from './ReviewNote';
+import { useOnScreen, type WatchCard } from './useCardWindow';
 import { type Changes, useChanges } from './useChanges';
 
 /**
@@ -352,6 +359,64 @@ function FindingGroup({
   );
 }
 
+/** One `.code-line` row, and the `py-2` around a file's rows. */
+const CODE_ROW_PX = 20;
+const CODE_PAD_PX = 16;
+
+/**
+ * A drawn card's code is laid out and painted only while it is near the
+ * screen. Ten cards of a large pull request are thousands of rows, and laying
+ * them all out before the first paint was most of the first frame. The
+ * browser holds the space at the height the rows will take — exact, since
+ * every row is one line of the same height — so nothing moves when it is.
+ * The text stays in the document, where find-in-page and a screen reader
+ * still reach it.
+ */
+function codeSpace(lines: number): CSSProperties {
+  return {
+    containIntrinsicBlockSize: `auto ${lines * CODE_ROW_PX + CODE_PAD_PX}px`,
+    contentVisibility: 'auto',
+  };
+}
+
+/**
+ * The space an undrawn card's body will take, held empty until it is drawn.
+ *
+ * The code is exact: every line is one `.code-line` row, twenty pixels, and
+ * the plain and highlighted versions of a file have the same rows. The review
+ * and the meters under it are an estimate from how many rows and chapters
+ * there are, in `globals.css`, where the layout they depend on is.
+ */
+function BodySpace({
+  groups,
+  judged,
+  lines,
+  rows,
+}: {
+  groups: number;
+  judged: boolean;
+  lines: number;
+  rows: number;
+}) {
+  const style = {
+    '--space-groups': groups,
+    '--space-judged': judged ? 1 : 0,
+    '--space-lines': lines,
+    '--space-rows': rows,
+  } as CSSProperties;
+  // Never the element the browser keeps the reader's place by: it is about to
+  // be replaced, and an anchor that leaves the page anchors nothing.
+  return (
+    <div
+      aria-hidden="true"
+      className="@container/space [overflow-anchor:none]"
+      data-space="1"
+    >
+      <div className="card-space" style={style} />
+    </div>
+  );
+}
+
 /**
  * One file of the review: its code across the card, Luna's paragraph about it,
  * and Jev's answers underneath. The code is the subject, so it gets the full
@@ -385,6 +450,8 @@ export function FileCard({
   collapsed,
   onToggle,
   onChange,
+  deferred,
+  watch,
 }: {
   file: ReviewFile;
   /** Where the card stands in the review, which is its anchor. */
@@ -403,6 +470,10 @@ export function FileCard({
   collapsed: boolean;
   onToggle: () => void;
   onChange: (next: string) => void;
+  /** Not drawn yet: the header, and an empty space where the body will be. */
+  deferred: boolean;
+  /** How an undrawn card asks to be drawn once the reader comes near it. */
+  watch: WatchCard;
 }) {
   const answers = judgment?.answers;
   // Documentation, not code: shown with the review, never sent to either
@@ -431,13 +502,27 @@ export function FileCard({
     [file.content],
   );
   const [findingsOpen, setFindingsOpen] = useState(true);
+  const articleRef = useRef<HTMLElement>(null);
+  const onScreen = useOnScreen(articleRef);
+
+  useEffect(() => {
+    const article = articleRef.current;
+    return deferred && article ? watch(article, file.path) : undefined;
+  }, [deferred, watch, file.path]);
+
+  const groups = useMemo(
+    () => GROUPS.filter((g) => questions.some((q) => q.group === g.id)).length,
+    [questions],
+  );
 
   return (
     <article
       className="overflow-hidden rounded-md border border-line scroll-mt-4"
       data-collapsed={collapsed ? '1' : undefined}
+      data-deferred={deferred ? '1' : undefined}
       data-file={file.path}
       id={cardId(index)}
+      ref={articleRef}
     >
       <CardHeader
         answers={answers}
@@ -452,19 +537,29 @@ export function FileCard({
         verdict={verdict}
       />
 
-      {!collapsed && (
+      {!collapsed && deferred ? (
+        <BodySpace
+          groups={groups}
+          judged={!prose}
+          lines={lineCount}
+          rows={questions.length}
+        />
+      ) : null}
+      {!collapsed && !deferred && (
         <>
-          <div className="min-w-0">
+          <div className="min-w-0" style={codeSpace(lineCount)}>
             {file.patch ? (
               <PatchEditor
                 content={file.content}
                 onChange={prose ? null : onChange}
+                onScreen={onScreen}
                 path={file.path}
               />
             ) : (
               <Editor
                 content={file.content}
                 onChange={prose ? null : onChange}
+                onScreen={onScreen}
                 path={file.path}
               />
             )}

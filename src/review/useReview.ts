@@ -1,16 +1,14 @@
 'use client';
 
-import {
+import type {
   Client,
-  ClientError,
-  type ClientSession,
-  type MessageResponse,
-  type MessageStreamEvent,
+  ClientSession,
+  MessageResponse,
+  MessageStreamEvent,
 } from 'eve/client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { Answers } from '@/agent/lib/judging/schema';
-import { parseReview } from '@/agent/lib/judging/schema';
 import { judgeMessage, summarizeMessage } from '@/agent/lib/review/prompt';
 import {
   type FileJudgment,
@@ -31,6 +29,31 @@ import {
 } from '@/agent/lib/spend/budgets';
 
 import { isMeaningful, NO_SUMMARY, type SummaryView } from './display';
+
+type TurnRuntime = typeof import('./turn-runtime')['turnRuntime'];
+
+/** The runtime once it has arrived, for the one check that cannot wait for it. */
+let turnRuntime: TurnRuntime | null = null;
+let turnRuntimeLoading: Promise<TurnRuntime> | null = null;
+
+/**
+ * eve's client and the review parser, fetched the first time a review sends
+ * anything. A page that never starts one never downloads either. A chunk that
+ * failed to arrive is asked for again by the next turn rather than remembered.
+ */
+function loadTurnRuntime(): Promise<TurnRuntime> {
+  turnRuntimeLoading ??= import('./turn-runtime').then(
+    (module) => {
+      turnRuntime = module.turnRuntime;
+      return module.turnRuntime;
+    },
+    (err: unknown) => {
+      turnRuntimeLoading = null;
+      throw err;
+    },
+  );
+  return turnRuntimeLoading;
+}
 
 /**
  * Long enough to coalesce a burst of keystrokes, short enough that a pause in
@@ -830,9 +853,12 @@ export function useReview(
   const stateRef = useRef(state);
   stateRef.current = state;
 
-  const client = useCallback((): Client => {
-    // Same origin: `withEve` mounts the agent at /eve/v1 on this very host.
-    clientRef.current ??= new Client({ host: '' });
+  const client = useCallback(async (): Promise<Client> => {
+    if (!clientRef.current) {
+      const runtime = await loadTurnRuntime();
+      // Same origin: `withEve` mounts the agent at /eve/v1 on this very host.
+      clientRef.current ??= new runtime.Client({ host: '' });
+    }
     return clientRef.current;
   }, []);
 
@@ -855,7 +881,7 @@ export function useReview(
         const session = sessionRef.current;
         return { response: await session.send(message), session };
       }
-      const created = await client().sessions.create({ message });
+      const created = await (await client()).sessions.create({ message });
       sessionRef.current = created.session;
       return { response: created.response, session: created.session };
     },
@@ -1291,6 +1317,7 @@ export function useReview(
       paths: readonly string[],
       sent: ReadonlyMap<string, string>,
       ms: number,
+      parseReview: TurnRuntime['parseReview'],
     ) => {
       const costUsd = costOf(result.events);
       // The budget prompt: eve parked the turn waiting for an Approve/Stop we
@@ -1373,8 +1400,12 @@ export function useReview(
 
   /** The turn failed on the wire, so say what happened and free what it held. */
   const failTurn = useCallback((err: unknown, paths: readonly string[]) => {
+    // A turn can only reach the wire once the runtime is here, so an error
+    // from the wire is always checked against the class that threw it.
     const message =
-      err instanceof ClientError ? `HTTP ${err.status}` : String(err);
+      turnRuntime && err instanceof turnRuntime.ClientError
+        ? `HTTP ${err.status}`
+        : String(err);
     // The session may be what failed (a retired id throws), so let the next
     // turn open a fresh one. Forgetting what was sent matters too: otherwise
     // the effect below reads those files as already judged.
@@ -1416,7 +1447,8 @@ export function useReview(
         const { response } = await sendTurn(message);
         const result = await response.result();
         const ms = Math.round(performance.now() - started);
-        applyJudgeResult(result, batch, paths, sent, ms);
+        const { parseReview } = await loadTurnRuntime();
+        applyJudgeResult(result, batch, paths, sent, ms, parseReview);
       } catch (err) {
         failTurn(err, paths);
       } finally {

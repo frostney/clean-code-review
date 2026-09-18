@@ -383,6 +383,10 @@ export function TutorialDuckPicture() {
         alt=""
         className="h-44 w-44 sm:h-62 sm:w-62"
         data-duck-loop={tapping ? 'foot-taps' : 'wink'}
+        // The largest paint on the landing page. `preload` would put a
+        // `<link>` in the head for one of the two sources; inside a
+        // `picture` the hint belongs on the image itself.
+        fetchPriority="high"
         height={480}
         loading="eager"
         src={tapping ? FOOT_TAPS : '/ducky-wink.webp'}

@@ -3,6 +3,7 @@
 import {
   type KeyboardEvent,
   type ReactNode,
+  type RefObject,
   useEffect,
   useMemo,
   useRef,
@@ -151,12 +152,20 @@ export function Editor({
   path,
   content,
   onChange,
+  onScreen,
 }: {
   path: string;
   content: string;
   onChange: ((next: string) => void) | null;
+  /** Whether the card is in view, so its colours go before those out of sight. */
+  onScreen?: RefObject<boolean>;
 }) {
-  const lines = useTokens(content, langOf(path), HIGHLIGHT_DEBOUNCE_MS);
+  const lines = useTokens(
+    content,
+    langOf(path),
+    HIGHLIGHT_DEBOUNCE_MS,
+    onScreen,
+  );
   const numbers = useMemo(() => lines.map((_, i) => i + 1), [lines]);
 
   return (
@@ -185,13 +194,21 @@ export function PatchEditor({
   path,
   content,
   onChange,
+  onScreen,
 }: {
   path: string;
   content: string;
   onChange: ((next: string) => void) | null;
+  /** Whether the card is in view, so its colours go before those out of sight. */
+  onScreen?: RefObject<boolean>;
 }) {
   const lines = useMemo(() => parsePatch(content), [content]);
-  const tokens = useDiffTokens(lines, langOf(path), HIGHLIGHT_DEBOUNCE_MS);
+  const tokens = useDiffTokens(
+    lines,
+    langOf(path),
+    HIGHLIGHT_DEBOUNCE_MS,
+    onScreen,
+  );
   const oldNumbers = useMemo(() => lines.map((l) => l.oldNo), [lines]);
   const newNumbers = useMemo(() => lines.map((l) => l.newNo), [lines]);
   const backgrounds = useMemo(() => gutterBackgrounds(lines), [lines]);

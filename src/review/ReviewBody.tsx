@@ -9,10 +9,12 @@ import { Notice } from '@/src/ui/Notice';
 import { isWriting, overallSummaryStatus } from './display';
 import { cardId, FileCard } from './FileCard';
 import { FileList } from './FileList';
+import { KeepPlace } from './KeepPlace';
 import { cappedText, skippedText } from './open-review';
 import { ReviewNote } from './ReviewNote';
 import { ReviewPills } from './ReviewPills';
 import { useReviewView } from './ReviewProvider';
+import { useCardWindow } from './useCardWindow';
 import type { LocalPause } from './useReview';
 
 /**
@@ -33,6 +35,8 @@ export function ReviewBody() {
     index: number;
     at: number;
   } | null>(null);
+
+  const cards = useCardWindow(review.id);
 
   const allCollapsed =
     review.files.length > 0 &&
@@ -80,8 +84,9 @@ export function ReviewBody() {
       ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [revealed]);
 
-  /** The sidebar's click: unfold that file and bring it into view. */
+  /** The sidebar's click: unfold that file, draw it, and bring it into view. */
   function reveal(path: string) {
+    cards.jumpTo(path);
     setCollapsed((current) => {
       if (!current[path]) {
         return current;
@@ -167,10 +172,11 @@ export function ReviewBody() {
           }
           paused={judge.pausedFiles}
         />
-        <div className="flex min-w-0 flex-col gap-4">
+        <KeepPlace className="flex min-w-0 flex-col gap-4" drawn={cards.drawn}>
           {review.files.map((file, index) => (
             <FileCard
               collapsed={collapsed[file.path] === true}
+              deferred={!cards.isDrawn(index, file.path)}
               failed={judge.failed[file.path] === true}
               file={file}
               index={index}
@@ -195,9 +201,10 @@ export function ReviewBody() {
               pending={judge.pending[file.path] === true}
               summary={judge.summary}
               truncated={review.truncated[file.path] === true}
+              watch={cards.watch}
             />
           ))}
-        </div>
+        </KeepPlace>
       </div>
     </>
   );

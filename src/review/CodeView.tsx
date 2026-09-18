@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { type RefObject, useMemo } from 'react';
 
 import type { DiffLine } from './diff';
 import { type TokenLine, useTokens } from './highlight';
@@ -99,6 +99,7 @@ export function useDiffTokens(
   lines: readonly DiffLine[],
   lang: Lang,
   debounceMs = 0,
+  onScreen?: RefObject<boolean>,
 ): TokenLine[] {
   const stripped = useMemo(
     () =>
@@ -107,7 +108,7 @@ export function useDiffTokens(
         .join('\n'),
     [lines],
   );
-  return useTokens(stripped, lang, debounceMs);
+  return useTokens(stripped, lang, debounceMs, onScreen);
 }
 
 /**

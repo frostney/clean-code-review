@@ -205,6 +205,48 @@ body {
   white-space: pre;
 }
 
+/* The space a card holds for its body before it is drawn (`BodySpace` in
+   `src/review/FileCard.tsx`). The code is exact: a row per line at the
+   `.code-line` height, and the `py-2` around them. Under it, for a judged
+   file, the review and its meters, estimated from how many rows and chapters
+   the card will have in each of the layouts the card itself switches
+   between: one narrow column on a phone, one wide column, two columns from
+   800px of card. The estimate only has to be close — a card is drawn well
+   before it is on screen, and the browser keeps the reader's place when one
+   above them is drawn a little taller or shorter than its space. */
+.card-space {
+  --space-judgment: calc(
+    var(--space-judged) *
+    (
+      var(--space-base) +
+      var(--space-groups) *
+      var(--space-group) +
+      var(--space-rows) *
+      var(--space-row)
+    )
+  );
+  /* Measured on a real pull request, unjudged, at 375px, 1100px and 1350px. */
+  --space-base: 231px;
+  --space-group: 30px;
+  --space-row: 39px;
+  height: calc(var(--space-lines) * 20px + 16px + var(--space-judgment));
+}
+
+@container space (width >= 420px) {
+  .card-space {
+    --space-base: 218px;
+    --space-row: 28px;
+  }
+}
+
+@container space (width >= 800px) {
+  .card-space {
+    --space-base: 308px;
+    --space-group: 15px;
+    --space-row: 15px;
+  }
+}
+
 /* The two views of this page, and the bird that is in both of them.
    The landing view and the code view are the same document in two shapes, so
    the browser animates between them rather than the page repainting: the duck
