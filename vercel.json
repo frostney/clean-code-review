@@ -1,33 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "headers": [
-    {
-      "headers": [
-        {
-          "key": "Vary",
-          "value": "Accept"
-        }
-      ],
-      "source": "/"
-    },
-    {
-      "headers": [
-        {
-          "key": "Vary",
-          "value": "Accept"
-        }
-      ],
-      "source": "/faq"
-    },
-    {
-      "headers": [
-        {
-          "key": "Vary",
-          "value": "Accept"
-        }
-      ],
-      "source": "/privacy"
-    }
-  ],
   "installCommand": "bunx bun@1.4.0 install --frozen-lockfile"
 }
