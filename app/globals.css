@@ -200,6 +200,22 @@ textarea {
   white-space: pre;
 }
 
+/* The two views of this page, and the bird that is in both of them.
+   The landing view and the code view are the same document in two shapes, so
+   the browser animates between them rather than the page repainting: the duck
+   carries a `view-transition-name` in both, which is what makes the large one
+   above the field and the small one beside it the same element to the browser,
+   and everything else crosses over under the root's own group.
+   The duck keeps the browser's own timing — a shrink that size reads well at
+   it — so the only thing written down here is the page underneath, which is a
+   change of shape rather than a scene change and has no business taking a
+   quarter of a second over it. A reader who has asked for less motion never
+   gets here at all: the transition is not started. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+}
+
 /* A row whose judgment moved lights up and fades back out. 900ms: long enough
    to catch the eye mid-scan, short enough to be gone before the next turn. */
 @keyframes rowFlash {

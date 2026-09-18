@@ -2,37 +2,14 @@
 
 import { type ReactNode, useRef, useState } from 'react';
 
+import {
+  HOST_PREFIX,
+  PULL_INFIX,
+  pullRequestUrl,
+  splitPullRequest,
+} from '@/lib/address';
+
 import { useReviewControls } from './ReviewProvider';
-
-/** The fixed parts of the address; only what is between them is typed. */
-const PREFIX = 'github.com/';
-const INFIX = '/pull/';
-
-/** `github.com/vercel/ai/pull/20851`, in any of the shapes a paste takes. */
-const PR_URL =
-  /(?:^|\/\/)(?:www\.)?github\.com\/([^/\s]+\/[^/\s]+)\/pull\/(\d+)/i;
-
-/** A bare `owner/repo/pull/123`, which is what the old single field took. */
-const PR_PATH = /^([^/\s]+\/[^/\s]+)\/pull\/(\d+)\/?$/i;
-
-/**
- * The two typed parts of a pull request's address, as the field holds them.
- * A paste that carries the whole URL fills both; anything else is left alone
- * for the repo box, because a half-typed `owner/` is not a mistake.
- */
-export function splitPullRequest(
-  pasted: string,
-): { repo: string; number: string } | null {
-  const text = pasted.trim();
-  const url = PR_URL.exec(text) ?? PR_PATH.exec(text);
-  return url ? { number: url[2], repo: url[1].replace(/\.git$/i, '') } : null;
-}
-
-/** The address the action is asked for, from the two parts of the field. */
-export function pullRequestUrl(repo: string, number: string): string {
-  const owner = repo.trim().replace(/^\/+|\/+$/g, '');
-  return `https://${PREFIX}${owner}${INFIX}${number.trim()}`;
-}
 
 /**
  * The way in: the address is on screen with only its two variable parts left
@@ -48,15 +25,19 @@ export function pullRequestUrl(repo: string, number: string): string {
  * two spans across the boundary would buy nothing — this component ships
  * either way, and the markup would only move from its bundle to every request.
  *
- * `duck` is the mascot, rendered on the server and handed in: it stands at the
- * left of this row rather than above it, because the page has no title and the
- * duck is what says which page this is. It is a node rather than an import so
- * that `next/image` stays out of this component's bundle.
+ * `duck` is the mascot, rendered on the server and handed in: in the code view
+ * it stands at the left of this row and is the way back out of the review, and
+ * on the landing view it renders nothing, because there it is the large one
+ * above. It is a node rather than an import so that `next/image` stays out of
+ * this component's bundle.
  */
 export function PullRequestField({ duck }: { duck?: ReactNode }) {
-  const { openPullRequest, fetching } = useReviewControls();
-  const [repo, setRepo] = useState('');
-  const [number, setNumber] = useState('');
+  const { address, openPullRequest, fetching } = useReviewControls();
+  // A permalink arrives with the request already named, and the field is where
+  // that name belongs: the URL and the boxes say the same thing from the first
+  // paint, so editing one digit is how you get to the next pull request.
+  const [repo, setRepo] = useState(address.repo);
+  const [number, setNumber] = useState(address.number);
   const numberRef = useRef<HTMLInputElement>(null);
 
   const ready = repo.trim() !== '' && number.trim() !== '';
@@ -98,7 +79,7 @@ export function PullRequestField({ duck }: { duck?: ReactNode }) {
         {duck}
         <div className="flex min-h-11 min-w-0 flex-1 items-stretch rounded-md border border-line bg-page focus-within:border-accent lg:min-h-0 lg:min-w-[12rem]">
           <span className="flex shrink-0 items-center border-r border-line pr-2 pl-2.5 font-mono text-[12px] text-muted select-none lg:py-2 lg:text-[13px]">
-            {PREFIX}
+            {HOST_PREFIX}
           </span>
           <input
             aria-label="GitHub owner and repository"
@@ -127,7 +108,7 @@ export function PullRequestField({ duck }: { duck?: ReactNode }) {
             value={repo}
           />
           <span className="flex shrink-0 items-center border-l border-line pr-0.5 pl-2 font-mono text-[12px] text-muted select-none lg:text-[13px]">
-            {INFIX}
+            {PULL_INFIX}
           </span>
           <input
             aria-label="Pull request number"

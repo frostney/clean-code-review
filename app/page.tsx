@@ -1,16 +1,13 @@
 import { SITE } from '@/lib/site';
 
-import { FAQ, Faq } from './_components/Faq';
-import { Footer } from './_components/Footer';
-import { Hero } from './_components/Hero';
-import { ReviewBody } from './_components/ReviewBody';
-import { ReviewProvider } from './_components/ReviewProvider';
+import { FAQ } from './_components/Faq';
+import { Shell } from './_components/Shell';
 
 /**
- * The page is a server component that hands the interactive review its frame:
- * the provider holds the state, and everything around it — the header's static
- * markup, the questions, the footer — is rendered here and passed in as
- * children, so none of it is ever sent to the browser as JavaScript.
+ * The front door: the page with nothing open. What it looks like and what it
+ * is made of are `Shell`'s, because the permalink route renders the very same
+ * tree with a pull request in it; what is only ever true here is the
+ * structured data below, which describes this URL and no other.
  */
 
 /** What this is, for a machine that has to decide whether to recommend it. */
@@ -46,18 +43,7 @@ const FAQ_LD = {
 export default function Page() {
   return (
     <>
-      <ReviewProvider>
-        <div className="mx-auto max-w-[1280px] px-4 py-5">
-          <main>
-            {/* The page's own name. On screen it is the browser tab and the
-                first field's placeholder; a document still needs a heading. */}
-            <Hero />
-            <ReviewBody />
-            <Faq />
-          </main>
-          <Footer />
-        </div>
-      </ReviewProvider>
+      <Shell />
       <script
         dangerouslySetInnerHTML={{ __html: JSON.stringify(APPLICATION_LD) }}
         type="application/ld+json"
