@@ -18,6 +18,25 @@ import {
 } from './Tutorial';
 
 /**
+ * The width of the field, the hint and the examples from `lg` up.
+ *
+ * Below `lg` the address takes the whole line and nothing here applies. Above
+ * it, a field as wide as the page is mostly empty box: on the landing view it
+ * is half the content width and centred, so the duck, the field and the
+ * examples read as one column; once a review is open it is four fifths and
+ * left-aligned, under the small duck and over the review it names.
+ *
+ * Which view is on screen is `useReviewView().open`, and the one place that is
+ * already written into the markup is the home duck, which renders exactly when
+ * a review is open. Keying the width on its presence keeps this whole header
+ * on the server — no client wrapper, no effect — and a permalink's
+ * server-rendered HTML already carries the home duck, so its first paint is
+ * the code view's width rather than a jump from the landing one.
+ */
+const COLUMN =
+  'lg:mx-auto lg:w-1/2 lg:group-has-[[data-duck=home]]/hero:mx-0 lg:group-has-[[data-duck=home]]/hero:w-4/5';
+
+/**
  * The top of a review: what is being reviewed, and how it got here.
  *
  * A pull request is the way in, so it is the first thing on the page: one
@@ -44,7 +63,7 @@ import {
  */
 export function Hero() {
   return (
-    <header className="mb-4">
+    <header className="group/hero mb-4">
       <h1 className="sr-only">{SITE.name}</h1>
       <TutorialProvider>
         {/* The landing view's duck: above the field and centred rather than
@@ -80,9 +99,13 @@ export function Hero() {
         </LandingDuck>
         {/* The theme switch lives up here, in plain sight: beside the field where
             there is room, and at the end of the hint line on phones, where the
-            field needs every pixel for the repository name. */}
-        <div className="flex items-start gap-2">
-          <div className="min-w-0 flex-1">
+            field needs every pixel for the repository name. From `lg` up it is
+            pinned to the page's right edge in both views rather than riding at
+            the end of the landing column: that way it does not jump when a
+            review opens, and the column stays centred on the duck instead of
+            being pushed off-centre by a button. */}
+        <div className="relative flex items-start gap-2">
+          <div className={`min-w-0 flex-1 lg:flex-none ${COLUMN}`}>
             <PullRequestField
               duck={
                 <HomeDuck>
@@ -98,36 +121,43 @@ export function Hero() {
               }
             />
           </div>
-          <div className="hidden h-11 shrink-0 items-center sm:flex">
+          <div className="hidden h-11 shrink-0 items-center sm:flex lg:absolute lg:top-0 lg:right-0">
             <ThemeToggle />
           </div>
         </div>
-        <div className="mt-1.5 flex items-center justify-between gap-2">
-          <p className="text-tiny text-muted">public repositories only</p>
-          <div className="flex sm:hidden">
-            <ThemeToggle />
+        <div className={COLUMN}>
+          <div className="mt-1.5 flex items-center justify-between gap-2">
+            <p className="text-tiny text-muted">
+              Public repositories only. Every file is judged against Clean Code,
+              then reviewed.
+            </p>
+            <div className="flex shrink-0 sm:hidden">
+              <ThemeToggle />
+            </div>
           </div>
-        </div>
 
-        <TutorialSpotlight>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[12px] text-muted">
-              Or choose one of the examples:
-            </span>
-            {PRESETS.map((preset) => (
-              <PresetChip
-                blurb={preset.blurb}
-                key={preset.label}
-                label={preset.label}
-              />
-            ))}
-            <PasteButton />
-          </div>
-        </TutorialSpotlight>
+          <TutorialSpotlight>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[12px] text-muted">
+                Or choose one of the examples:
+              </span>
+              {PRESETS.map((preset) => (
+                <PresetChip
+                  blurb={preset.blurb}
+                  key={preset.label}
+                  label={preset.label}
+                />
+              ))}
+              <PasteButton />
+            </div>
+          </TutorialSpotlight>
+        </div>
       </TutorialProvider>
 
-      <PullRequestSummary />
-      <ReviewStats />
+      <div className="lg:w-4/5">
+        <PullRequestSummary />
+        <ReviewStats />
+      </div>
     </header>
   );
 }
