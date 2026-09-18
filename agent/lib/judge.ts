@@ -11,7 +11,12 @@ import type {
   ReviewResult,
 } from './review';
 import type { Answer, Answers } from './schema';
-import { JEV_FILE_ESTIMATE_USD, jevCostUsd } from './spend';
+import {
+  failureWasProcessed,
+  JEV_FILE_ESTIMATE_USD,
+  jevCostUsd,
+  jevFailedCallUsd,
+} from './spend';
 
 /** Jev, TypeSafe AI's System One model, as the AI Gateway lists it. */
 export const JEV = 'typesafe-ai/jev';
@@ -96,33 +101,78 @@ export async function judgeEstimateUsd(files: readonly ReviewFile[]) {
 }
 
 /**
- * What a judged turn is settled at: the cost every judged file reported, and
- * the estimate for every file that failed, since a call that failed may still
- * have been paid for and never says so.
+ * What a judged turn is settled at: what every file cost, the attempts that
+ * failed along the way included (see `judgeFile`).
  */
-export function judgeChargeUsd(judged: { cost: number; errors: string[] }) {
-  return judged.cost + judged.errors.length * JEV_FILE_ESTIMATE_USD;
+export function judgeChargeUsd(judged: { cost: number; failedUsd: number }) {
+  return judged.cost + judged.failedUsd;
 }
 
+/** What Jev is sent for one file, in characters, beside the questions. */
+const stateChars = (file: ReviewFile) =>
+  file.patch ? 2 * file.content.length : file.content.length;
+
+/** A file Jev could not judge, and what the attempts at it plausibly cost. */
+class JudgeFileError extends Error {
+  readonly spentUsd: number;
+  constructor(spentUsd: number, cause: unknown) {
+    super(String(cause), { cause });
+    this.spentUsd = spentUsd;
+  }
+}
+
+/** Every file failed; `spentUsd` is what their attempts plausibly cost together. */
+export class JudgeFailedError extends Error {
+  readonly spentUsd: number;
+  constructor(message: string, spentUsd: number) {
+    super(message);
+    this.spentUsd = spentUsd;
+  }
+}
+
+/**
+ * One file's judgment, from the cache or from Jev. `cost` is what the file
+ * cost this time, a first attempt that failed before its retry succeeded
+ * included. A file that could not be judged throws a `JudgeFileError` that
+ * says what its attempts plausibly cost: nothing for one never sent or turned
+ * away, its input for one cancelled, timed out or failed by the server.
+ */
 export async function judgeFile(file: ReviewFile, signal?: AbortSignal) {
   const started = performance.now();
   const key = judgeKey(file);
-  const { value, hit } = await cached(key, 'jev-judgment', async () =>
-    toJudgment(
-      await withOneRetry(
-        (attempt) => evaluateFile(file, attempt),
-        CALL_TIMEOUT_MS,
-        signal,
-      ),
-    ),
-  );
+  let failedUsd = 0;
+  const once = async (attempt: AbortSignal) => {
+    if (attempt.aborted) {
+      // Never sent: the retry's wait was cut short, or the caller had gone.
+      throw attempt.reason;
+    }
+    try {
+      return await evaluateFile(file, attempt);
+    } catch (err) {
+      failedUsd += jevFailedCallUsd(stateChars(file), {
+        outputChars: 0,
+        processed: failureWasProcessed(err, attempt.aborted),
+        sent: true,
+      });
+      throw err;
+    }
+  };
+  let got: { value: ReturnType<typeof toJudgment>; hit: boolean };
+  try {
+    got = await cached(key, 'jev-judgment', async () =>
+      toJudgment(await withOneRetry(once, CALL_TIMEOUT_MS, signal)),
+    );
+  } catch (err) {
+    throw new JudgeFileError(failedUsd, err);
+  }
+  const { value, hit } = got;
   const judgment: FileJudgment = {
     ...value.judgment,
     cached: hit,
     ms: Math.round(performance.now() - started),
   };
   return {
-    cost: hit ? 0 : value.cost,
+    cost: hit ? 0 : value.cost + failedUsd,
     judgment,
     model: value.model,
     warnings: value.warnings,
@@ -203,12 +253,18 @@ export async function judgeReview(input: ReviewInput, signal?: AbortSignal) {
     usage: { input_tokens: 0, output_tokens: 0 },
   };
   let cost = 0;
+  /** What the files that could not be judged plausibly cost. */
+  let failedUsd = 0;
   const warnings: Awaited<ReturnType<typeof judgeFile>>['warnings'] = [];
   const errors: string[] = [];
   settled.forEach((outcome, i) => {
     const path = input.files[i].path;
     if (outcome.status === 'rejected') {
-      errors.push(`${path}: ${String(outcome.reason)}`);
+      const reason = outcome.reason;
+      failedUsd += reason instanceof JudgeFileError ? reason.spentUsd : 0;
+      errors.push(
+        `${path}: ${String(reason instanceof JudgeFileError ? reason.cause : reason)}`,
+      );
       return;
     }
     const { judgment, cost: c, warnings: w, model } = outcome.value;
@@ -220,7 +276,7 @@ export async function judgeReview(input: ReviewInput, signal?: AbortSignal) {
     warnings.push(...w);
   });
   if (errors.length === input.files.length && input.files.length > 0) {
-    throw new Error(errors.join('; '));
+    throw new JudgeFailedError(errors.join('; '), failedUsd);
   }
-  return { cost, errors, result, warnings };
+  return { cost, errors, failedUsd, result, warnings };
 }

@@ -115,12 +115,23 @@ export interface LocalPause extends PausedReply {
 }
 
 /**
+ * How far past the reset a tab waits, at most, before asking again. Every
+ * paused tab is told the same reset; without a spread they would all ask in
+ * the same instant, which is the burst the spend brake counts worst.
+ */
+const RESUME_JITTER_MS = 60_000;
+
+/**
  * The refusal, and when to ask again: the server's wait counted from when the
  * reply arrived, so a browser clock running ahead cannot read a reset still to
- * come as one already past.
+ * come as one already past, and a random moment of up to a minute after it.
  */
 function localPause(reply: PausedReply): LocalPause {
-  return { ...reply, resumeAt: Date.now() + reply.waitMs };
+  return {
+    ...reply,
+    resumeAt:
+      Date.now() + reply.waitMs + Math.floor(Math.random() * RESUME_JITTER_MS),
+  };
 }
 
 /** A turn's reply read as a refusal, as this tab holds one, or null when it is anything else. */
@@ -335,19 +346,19 @@ function settledText(run: SummaryRun): Summary | null {
 }
 
 /**
- * The one section the reviewer is still writing: the last file section while it
- * belongs to this review, and otherwise the overall paragraph once it has
- * started. Everything before it is finished.
+ * The one section the reviewer is still writing: the section the text so far
+ * ends in, while it belongs to this review, and otherwise the overall
+ * paragraph once it has started. Not always the last file section: a part
+ * written again repeats its sections from the first.
  */
 function writingSection(
   parsed: Summary,
   asked: ReadonlySet<string>,
 ): string | null {
-  const last = parsed.files.at(-1);
-  if (last && asked.has(last.path)) {
-    return last.path;
+  if (parsed.writing !== null && asked.has(parsed.writing)) {
+    return parsed.writing;
   }
-  return parsed.overall ? 'overall' : null;
+  return parsed.overall ? OVERALL_BLOCK : null;
 }
 
 /** The review as it looks mid-stream, with the text written so far on screen. */
@@ -358,22 +369,29 @@ function withStreamedSummary(
   decisionSeen: boolean,
 ): ReviewState {
   const files = { ...s.summary.files };
+  // A block this run has written anew says for itself whether it is cut
+  // off; a "Cut off" from an earlier run belongs to text no longer shown.
   const incomplete = { ...s.summary.incomplete };
   for (const file of parsed.files) {
     if (asked.has(file.path)) {
       files[file.path] = file.summary;
       if (file.incomplete) {
         incomplete[file.path] = true;
+      } else {
+        delete incomplete[file.path];
       }
     }
   }
   if (parsed.overallIncomplete) {
     incomplete[OVERALL_BLOCK] = true;
+  } else if (parsed.overall) {
+    delete incomplete[OVERALL_BLOCK];
   }
-  // Only the last section is still being written; the ones before it are done,
-  // so their cards stop waiting for a rewrite.
-  const done = parsed.files
-    .slice(0, -1)
+  // The sections before the open one are done, so their cards stop waiting
+  // for a rewrite. Those after it are the first try of a part being written
+  // again, and are about to be replaced.
+  const open = parsed.files.findIndex((f) => f.path === parsed.writing);
+  const done = (open === -1 ? parsed.files : parsed.files.slice(0, open))
     .map((f) => f.path)
     .filter((path) => asked.has(path));
   return {

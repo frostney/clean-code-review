@@ -20,11 +20,11 @@
  * only place that knows both what a turn is about to run and what it cost,
  * which is why the brake sits here rather than in a channel or a route: a
  * turn reserves an estimate for the work the cache cannot answer before it
- * starts, and settles to what it cost once it stops, whether it finished,
- * failed or was cancelled (`./spend.ts`). A refused turn is not a failure: its
- * whole reply is a `pausedReply`, which the page shows as a notice. The MCP
- * endpoint calls the same judge and reviewer without this adapter, and counts
- * against a budget of its own.
+ * starts, and settles to what it plausibly cost once it stops, whether it
+ * finished, failed or was cancelled (`./spend.ts`). A refused turn is not a
+ * failure: its whole reply is a `pausedReply`, which the page shows as a
+ * notice. The MCP endpoint calls the same judge and reviewer without this
+ * adapter, and counts against a budget of its own.
  */
 import type {
   LanguageModelV4,
@@ -39,7 +39,13 @@ import {
   PAGE_HOURLY_BUDGET_USD,
   pausedReply,
 } from './budgets';
-import { JEV, judgeChargeUsd, judgeEstimateUsd, judgeReview } from './judge';
+import {
+  JEV,
+  JudgeFailedError,
+  judgeChargeUsd,
+  judgeEstimateUsd,
+  judgeReview,
+} from './judge';
 import { parseMessage, type SummarizeInput } from './prompt';
 import {
   emptyReviewUsage,
@@ -145,9 +151,18 @@ async function judge(
   if ('paused' in admitted) {
     return textResult(admitted.paused);
   }
-  // A turn that throws, every file failed or cancelled, keeps its whole
-  // reservation: those calls may have been paid for, and none said how much.
-  const judged = await judgeReview(input, options.abortSignal);
+  let judged: Awaited<ReturnType<typeof judgeReview>>;
+  try {
+    judged = await judgeReview(input, options.abortSignal);
+  } catch (err) {
+    // Every file failed or was cancelled: settled at what those attempts
+    // plausibly cost, which is nothing for a gateway that turned them away.
+    // Anything else is a fault here, and keeps the reservation.
+    if (err instanceof JudgeFailedError) {
+      await admitted.hold.settle(err.spentUsd);
+    }
+    throw err;
+  }
   await admitted.hold.settle(judgeChargeUsd(judged));
   const { result, cost, warnings, errors } = judged;
   return textResult(JSON.stringify({ kind: 'judged', ...result }), {
@@ -274,7 +289,7 @@ export function jev(): LanguageModelV4 {
             }
             try {
               // Every part is charged, finished or not: `reviewWithin`
-              // settles with what reported and the estimate for what did not.
+              // settles with what reported and what the rest plausibly used.
               const { usage } = await reviewWithin(
                 admitted.hold,
                 admitted.plan,

@@ -17,7 +17,12 @@
  *
  * Some lines are the adapter's, never the model's, and are read as signals
  * rather than as text: `OVERALL_REWRITE_LINE` before the overall part is
- * written again, and `cutOffLine` after a part that was cut off even so.
+ * written again, and `cutOffLine` after a part that was cut off even so. A
+ * file part is written after reading someone else's code, so its text is
+ * untrusted: `withoutSignalLines` drops every line of model text shaped like
+ * a signal before the parser can see it, and the parser takes the decision,
+ * the overall paragraph and a rewrite only from the part that comes first,
+ * the overall one, before any file section has opened.
  */
 
 /**
@@ -32,6 +37,61 @@ export const OVERALL_REWRITE_LINE = '<!-- overall written again -->';
 export const OVERALL_SECTION = 'overall';
 
 const CUT_OFF = /^<!-- cut off: (.+) -->$/;
+
+/** What every signal line starts with, once trimmed. */
+const SIGNAL_START = '<!--';
+
+/**
+ * Model text as it streams, with every line that begins with an HTML comment
+ * dropped, so that only the adapter can write a signal line. A line is held
+ * back only while it could still become one; anything else streams at once.
+ * `\r` ends a line too, because the parser reads it as one.
+ */
+export function withoutSignalLines(push: (delta: string) => void): {
+  write(delta: string): void;
+  end(): void;
+} {
+  /** The start of the current line, held while it may yet be a signal. */
+  let held = '';
+  /** The current line is known not to be one, and streams as it comes. */
+  let plain = false;
+  const settleHeld = () => {
+    const head = held.trimStart();
+    if (
+      head.length > 0 &&
+      !SIGNAL_START.startsWith(head) &&
+      !head.startsWith(SIGNAL_START)
+    ) {
+      push(held);
+      held = '';
+      plain = true;
+    }
+  };
+  const endLine = () => {
+    // A held line that got this far is a comment line, or blank.
+    if (!held.trimStart().startsWith(SIGNAL_START)) {
+      push(held);
+    }
+    held = '';
+    plain = false;
+  };
+  return {
+    end: endLine,
+    write(delta) {
+      for (const piece of delta.split(/(\r\n|\r|\n)/)) {
+        if (piece === '\n' || piece === '\r' || piece === '\r\n') {
+          endLine();
+          push(piece);
+        } else if (plain) {
+          push(piece);
+        } else if (piece) {
+          held += piece;
+          settleHeld();
+        }
+      }
+    },
+  };
+}
 
 /**
  * Written after a part that was cut off at its ceiling twice, once for each
@@ -69,6 +129,13 @@ export interface Summary {
   overallIncomplete?: true;
   /** True when the text is still arriving and the last section may be cut. */
   partial?: boolean;
+  /**
+   * The section the text ended in, still open: a path, `OVERALL_SECTION`, or
+   * null. While a review streams it is the one being written, which is not
+   * always the last in `files`: a part written again repeats sections that
+   * keep their first place.
+   */
+  writing: string | null;
 }
 
 const DECISIONS: readonly Decision[] = [
@@ -89,6 +156,11 @@ interface SummaryParse {
   incomplete: Set<string>;
   overall: string[];
   overallIncomplete: boolean;
+  /**
+   * A file section has opened: the overall part is over, and nothing after
+   * this may set the decision, add to the overall paragraph or restart it.
+   */
+  filesStarted: boolean;
 }
 
 /**
@@ -136,6 +208,10 @@ function flushSection(parse: SummaryParse): void {
 function readSignalLine(parse: SummaryParse, line: string): boolean {
   const trimmed = line.trim();
   if (trimmed === OVERALL_REWRITE_LINE) {
+    // Only the overall part is ever written again this way, and it comes first.
+    if (parse.filesStarted) {
+      return true;
+    }
     flushSection(parse);
     // The overall part starts over, its decision line included.
     parse.overall.length = 0;
@@ -155,14 +231,19 @@ function readSignalLine(parse: SummaryParse, line: string): boolean {
   return true;
 }
 
-/** Open the section a heading names. A second `Overall` continues the first. */
+/**
+ * Open the section a heading names. A second `Overall` continues the first,
+ * unless a file section has opened since: an `Overall` in a file part's text
+ * is read into nothing.
+ */
 function openSection(parse: SummaryParse, title: string): void {
   flushSection(parse);
   if (/^overall$/i.test(title)) {
     parse.currentPath = null;
-    parse.current = parse.overall;
+    parse.current = parse.filesStarted ? [] : parse.overall;
     return;
   }
+  parse.filesStarted = true;
   parse.currentPath = title;
   parse.current = [];
 }
@@ -174,7 +255,12 @@ function readSummaryLine(parse: SummaryParse, raw: string): void {
     return;
   }
   const named = readDecisionLine(line);
-  if (named && parse.currentPath === null && parse.overall.length === 0) {
+  if (
+    named &&
+    !parse.filesStarted &&
+    parse.currentPath === null &&
+    parse.overall.length === 0
+  ) {
     if (named !== 'unrecognised') {
       parse.decision = named;
     }
@@ -198,6 +284,7 @@ export function parseSummaryText(text: string, partial = false): Summary {
     currentPath: null,
     decision: 'comment',
     files: [],
+    filesStarted: false,
     incomplete: new Set(),
     overall: [],
     overallIncomplete: false,
@@ -205,6 +292,9 @@ export function parseSummaryText(text: string, partial = false): Summary {
   for (const raw of text.replace(/\r\n?/g, '\n').split('\n')) {
     readSummaryLine(parse, raw);
   }
+  const writing =
+    parse.currentPath ??
+    (parse.current === parse.overall ? OVERALL_SECTION : null);
   flushSection(parse);
   return {
     decision: parse.decision,
@@ -220,5 +310,6 @@ export function parseSummaryText(text: string, partial = false): Summary {
     overall: parse.overall.join('\n').trim(),
     ...(parse.overallIncomplete ? { overallIncomplete: true as const } : {}),
     ...(partial ? { partial: true } : {}),
+    writing,
   };
 }

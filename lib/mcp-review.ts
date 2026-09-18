@@ -27,6 +27,7 @@ import {
   parsePullRequest,
 } from '@/agent/lib/github';
 import {
+  JudgeFailedError,
   judgeChargeUsd,
   judgeEstimateUsd,
   judgeReview,
@@ -403,6 +404,15 @@ async function writeReview(
   }
 }
 
+/** What a cut-off notice names: the file paragraphs, the overall paragraph, or both. */
+function cutOffWhat(files: number, overall: boolean): string {
+  const paragraphs = `the paragraphs marked reviewIncomplete (${files})`;
+  if (files && overall) {
+    return `the overall paragraph and ${paragraphs} are`;
+  }
+  return files ? `${paragraphs} are` : 'the overall paragraph is';
+}
+
 /** Judge the opened files, write the review, and put it all in one result. */
 async function reviewOpened(
   opened: Opened,
@@ -431,8 +441,13 @@ async function reviewOpened(
   let judged: Awaited<ReturnType<typeof judgeReview>>;
   try {
     judged = await judgeReview({ files: code }, signal);
-  } catch {
-    // Every file failed: the reservation stands for whatever those calls cost.
+  } catch (err) {
+    // Every file failed: settled at what those attempts plausibly cost, which
+    // is nothing for a gateway that turned them away. Anything else is a
+    // fault here, and keeps the reservation.
+    if (err instanceof JudgeFailedError) {
+      await admission.hold.settle(err.spentUsd);
+    }
     throw new ReviewError(
       'Jev could not judge any of these files. Try again in a minute.',
     );
@@ -472,11 +487,10 @@ async function reviewOpened(
   );
   if (cutOff.size || summary?.overallIncomplete) {
     notices.push(
-      `Luna ran into its output limit twice on part of this review, so ${
-        cutOff.size
-          ? `the paragraphs marked reviewIncomplete (${cutOff.size}) are`
-          : 'the overall paragraph is'
-      } as far as it got. That part is not cached: call again to have it written afresh.`,
+      `Luna ran into its output limit twice on part of this review, so ${cutOffWhat(
+        cutOff.size,
+        summary?.overallIncomplete === true,
+      )} as far as it got. That part is not cached: call again to have it written afresh.`,
     );
   }
   const files = summarized.map((f) => ({

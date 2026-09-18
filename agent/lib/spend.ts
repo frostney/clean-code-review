@@ -3,16 +3,18 @@
  * counted per clock hour and per UTC day, and a yes or no on whether new model
  * work may start.
  *
- * Work reserves before it starts and settles when it reports. A caller works
+ * Work reserves before it starts and settles when it stops. A caller works
  * out what it is about to do that the cache cannot answer, prices that at a
  * conservative estimate (`JEV_FILE_ESTIMATE_USD` per file Jev has to judge,
  * `lunaPartEstimateUsd` per review part Luna has to write), and asks
  * `reserve` for it. The estimate is added to the counters before any model
- * runs, so the next caller sees it at once, and is then replaced by the real
- * cost when the work reports it. Work that never reports, because it failed,
- * was cancelled or timed out, keeps its reservation: it was probably paid for
- * in part, and nobody will ever say how much. Work that needs no model
- * reserves nothing and is never refused.
+ * runs, so the next caller sees it at once, and is then replaced by what the
+ * work plausibly cost once it stops: what a finished call reported, and for a
+ * call that failed or was cancelled, what it can have used (`failedCallUsd`),
+ * which is nothing for a call that was never sent or was turned away. The
+ * reservation is the worst case and only stops a burst before it starts;
+ * settling at the worst case would let cancelled work lock the page. Work
+ * that needs no model reserves nothing and is never refused.
  *
  * A reservation is refused when it would take the hour or the day past its
  * cap, so the counters stay at or below the caps apart from what the next
@@ -34,20 +36,29 @@
  * trip wide instead of a whole turn wide.
  *
  * When the counters cannot be read, uncached work is refused: a brake that
- * reads a failure as zero is no brake. When a write fails the turn still runs,
- * and both are logged once per instance so they show in the function logs.
+ * reads a failure as zero is no brake. The Runtime Cache client never says a
+ * read failed (it answers null, as for a missing key; see `./cache.ts`), so a
+ * scope also keeps a marker naming the counters it has written. A missing
+ * marker is written and read back, and a store that cannot return it is not
+ * answering. A counter the marker names that reads as missing is read once
+ * more, and while the marker still reads it is taken to have been evicted and
+ * counts from zero. A Runtime Cache that is really this instance's memory
+ * (no endpoint configured) is refused outright. Write failures are silent in
+ * that client, so work whose counter write was lost simply goes uncounted.
+ * Failures are logged once per instance so they show in the function logs.
  */
-import { CacheUnavailableError, cacheGetStrict, cacheSetStrict } from './cache';
+import { cacheGetStrict, cacheSetStrict } from './cache';
 import { REVIEW_LIMITS } from './review';
 
 /**
  * Where the counters are read and written. Injected by a test; the shared
- * cache otherwise. `get` resolves undefined for a missing key and throws when
- * the store cannot be read, and `set` throws when it cannot be written.
+ * cache otherwise. `get` resolves undefined or null for a missing key, and
+ * may resolve the same for a read that failed; either may throw when the
+ * store says it failed.
  */
 export interface SpendStore {
   get(key: string): Promise<unknown>;
-  set(key: string, value: number, ttlSeconds: number): Promise<void>;
+  set(key: string, value: unknown, ttlSeconds: number): Promise<void>;
 }
 
 /** The most one scope may spend, in US dollars, per clock hour and per UTC day. */
@@ -71,9 +82,9 @@ export interface SpendRefusal {
 export interface Hold {
   readonly reservedUsd: number;
   /**
-   * Replace the reservation with what the work really cost. Called once; a
-   * later call does nothing. Never called for work that never reported, which
-   * is how that work keeps its reservation.
+   * Replace the reservation with what the work plausibly cost. Called once; a
+   * later call does nothing. A caller that cannot say at all (a fault of this
+   * code, not of a model call) does not call it, and keeps the reservation.
    */
   settle(actualUsd: number): Promise<void>;
 }
@@ -164,6 +175,107 @@ export function lunaCostUsd(
   );
 }
 
+/** The HTTP status a failed call got back, looking through wrapped causes, or undefined when none came back. */
+function httpStatusOf(err: unknown): number | undefined {
+  let at: unknown = err;
+  for (let depth = 0; depth < MAX_CAUSE_DEPTH && at; depth++) {
+    const e = at as { statusCode?: unknown; responseHeaders?: unknown };
+    // A status with response headers is a response; the gateway also makes
+    // up a 500 for a request that never got one, and that has no headers.
+    if (typeof e.statusCode === 'number' && e.responseHeaders) {
+      return e.statusCode;
+    }
+    at = (at as { cause?: unknown }).cause;
+  }
+  return;
+}
+
+/** How far down a chain of `cause`s to look. */
+const MAX_CAUSE_DEPTH = 6;
+
+/** Connection failures: the request never reached anything that could run it. */
+const UNREACHED_CODES = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'UND_ERR_CONNECT_TIMEOUT',
+]);
+
+/** True when a failed call never reached a server: a refused connection, an unknown host. */
+function neverReached(err: unknown): boolean {
+  let at: unknown = err;
+  for (let depth = 0; depth < MAX_CAUSE_DEPTH && at; depth++) {
+    const code = (at as { code?: unknown }).code;
+    if (typeof code === 'string' && UNREACHED_CODES.has(code)) {
+      return true;
+    }
+    at = (at as { cause?: unknown }).cause;
+  }
+  return false;
+}
+
+const CLIENT_ERROR = 400;
+const SERVER_ERROR = 500;
+
+/**
+ * Whether a call that failed after it was sent can have had its prompt read:
+ * true when it was cancelled or timed out on the way (the model may be
+ * reading it), and for a server error or a failure that says nothing; false
+ * when it was turned away with a 4xx (a bad key, a rate limit) or never
+ * reached a server at all.
+ */
+export function failureWasProcessed(err: unknown, cancelled: boolean): boolean {
+  if (cancelled) {
+    return true;
+  }
+  const status = httpStatusOf(err);
+  if (status !== undefined) {
+    return !(status >= CLIENT_ERROR && status < SERVER_ERROR);
+  }
+  return !neverReached(err);
+}
+
+/** What happened to a model call that did not report its cost. */
+export interface FailedCall {
+  /** False when the call was never made, because its signal had already aborted. */
+  sent: boolean;
+  /** Whether its prompt can have been read: `failureWasProcessed`. */
+  processed: boolean;
+  /** Characters of output, answer and reasoning, received before it stopped. */
+  outputChars: number;
+}
+
+/**
+ * What a Luna call that failed or was cancelled plausibly cost: nothing when
+ * it was never sent, or turned away before it wrote anything; otherwise its
+ * prompt, and whatever it had written, at three characters a token.
+ */
+export function lunaFailedCallUsd(promptChars: number, call: FailedCall) {
+  if (!call.sent || (call.outputChars === 0 && !call.processed)) {
+    return 0;
+  }
+  return (
+    lunaPartEstimateUsd(promptChars, 0) +
+    (Math.max(0, call.outputChars) / CHARS_PER_TOKEN) *
+      LUNA_OUTPUT_USD_PER_TOKEN
+  );
+}
+
+/**
+ * What a Jev call that failed or was cancelled plausibly cost: its input,
+ * `stateChars` of state and the questions, unless it was never sent or was
+ * turned away. Jev charges nothing for output.
+ */
+export function jevFailedCallUsd(stateChars: number, call: FailedCall) {
+  if (!(call.sent && call.processed)) {
+    return 0;
+  }
+  return (
+    ((Math.max(0, stateChars) + JEV_QUESTION_CHARS) / CHARS_PER_TOKEN) *
+    JEV_INPUT_USD_PER_TOKEN
+  );
+}
+
 const MS_PER_HOUR = 3_600_000;
 const SECONDS_PER_HOUR = 3600;
 const HOURS_PER_DAY = 24;
@@ -205,40 +317,72 @@ const cacheStore: SpendStore = {
   set: (key, value, ttl) => cacheSetStrict(key, value, 'model-spend', ttl),
 };
 
-/** Each kind of store failure, logged once per instance. */
-const logged = new Set<'read' | 'write'>();
+/** Each kind of store trouble, logged once per instance. */
+type Trouble = 'read' | 'write' | 'lost';
+const logged = new Set<Trouble>();
 
-function logOnce(kind: 'read' | 'write', scope: string, err: unknown): void {
+const TROUBLE: Record<Trouble, string> = {
+  lost: 'lost a counter it had written, and counts it from zero',
+  read: 'could not be read, so uncached model work is refused until it can be',
+  write: 'could not be written, so work goes uncounted until it can be',
+};
+
+function logOnce(kind: Trouble, scope: string, err: unknown): void {
   if (logged.has(kind)) {
     return;
   }
   logged.add(kind);
-  const cause =
-    err instanceof CacheUnavailableError || err instanceof Error
-      ? err.message
-      : String(err);
+  const cause = err instanceof Error ? err.message : String(err);
   console.error(
-    kind === 'read'
-      ? `[spend] The ${scope} spend counter could not be read, so uncached model work is refused until it can be (${cause}). Logged once per instance.`
-      : `[spend] The ${scope} spend counter could not be written, so work goes uncounted until it can be (${cause}). Logged once per instance.`,
+    `[spend] The ${scope} spend counter ${TROUBLE[kind]} (${cause}). Logged once per instance.`,
   );
 }
 
-/** A stored amount: zero for a missing key, and a throw when the store cannot say. */
-async function read(store: SpendStore, key: string): Promise<number> {
-  const value = await store.get(key);
-  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+/** What a counter holds. A bare number is the shape counters had before, read the same. */
+interface Counter {
+  usd: number;
+  v: 1;
 }
 
-/** Add `usd`, which may be negative, to a counter, never taking it below zero. */
-async function add(
-  store: SpendStore,
-  key: string,
-  usd: number,
-  ttl: number,
-): Promise<void> {
-  await store.set(key, Math.max(0, (await read(store, key)) + usd), ttl);
+/** Which counters of a scope have been written: the current hour's and day's, by key. */
+interface Written {
+  v: 1;
+  hour: string | null;
+  day: string | null;
 }
+
+/** A stored amount, or undefined when the key is missing (or the read failed). */
+function amountOf(value: unknown): number | undefined {
+  const usd =
+    typeof value === 'number' ? value : (value as Counter | null)?.usd;
+  return typeof usd === 'number' && Number.isFinite(usd) ? usd : undefined;
+}
+
+function writtenOf(value: unknown): Written | null {
+  const w = value as Partial<Written> | null | undefined;
+  return w && typeof w === 'object' && w.v === 1
+    ? { day: w.day ?? null, hour: w.hour ?? null, v: 1 }
+    : null;
+}
+
+const counter = (usd: number): Counter => ({ usd: Math.max(0, usd), v: 1 });
+
+/** The counters could not be read, and nobody knows what they hold. */
+class Unreadable extends Error {}
+
+/** One read of a scope's marker and of the two counters a turn is counted in. */
+interface Read {
+  written: Written | null;
+  hour: number | undefined;
+  hourKey: string;
+  day: number | undefined;
+  dayKey: string;
+}
+
+/** A counter the marker says was written reads as missing. */
+const lostCounter = (r: Read) =>
+  (r.hour === undefined && r.written?.hour === r.hourKey) ||
+  (r.day === undefined && r.written?.day === r.dayKey);
 
 /** A brake for one scope, such as `mcp`. Separate scopes never count against each other. */
 export function createSpendBrake(
@@ -246,12 +390,78 @@ export function createSpendBrake(
   caps: SpendCaps,
   store: SpendStore = cacheStore,
 ): SpendBrake {
-  /** Add to both of the windows a reservation was made in, and log a failure rather than throw it. */
+  const writtenKey = `spend:${scope}:written`;
+
+  async function readOnce(hourKey: string, dayKey: string): Promise<Read> {
+    const [written, hour, day] = await Promise.all([
+      store.get(writtenKey).then(writtenOf),
+      store.get(hourKey).then(amountOf),
+      store.get(dayKey).then(amountOf),
+    ]);
+    return { day, dayKey, hour, hourKey, written };
+  }
+
+  /**
+   * No marker: never written, expired, evicted, or the store is not
+   * answering. Write one and read it back; a store that cannot return it is
+   * not answering.
+   */
+  async function probe(read: Read): Promise<void> {
+    await store.set(
+      writtenKey,
+      {
+        day: read.day === undefined ? null : read.dayKey,
+        hour: read.hour === undefined ? null : read.hourKey,
+        v: 1,
+      } satisfies Written,
+      DAY_KEY_TTL_SECONDS,
+    );
+    if (writtenOf(await store.get(writtenKey)) === null) {
+      throw new Unreadable(`${writtenKey} could not be read back`);
+    }
+  }
+
+  /**
+   * The two counters, or `Unreadable` when the store is not answering. A
+   * missing counter is zero only once the store has shown it can answer:
+   * by returning the marker, or by returning one just written.
+   */
+  async function readCounters(
+    hourKey: string,
+    dayKey: string,
+  ): Promise<[number, number]> {
+    let read = await readOnce(hourKey, dayKey);
+    if (read.written === null) {
+      await probe(read);
+    } else if (lostCounter(read)) {
+      // A counter this scope wrote reads as missing: ask once more.
+      read = await readOnce(hourKey, dayKey);
+      if (read.written === null) {
+        throw new Unreadable(`${writtenKey} read as missing`);
+      }
+      if (lostCounter(read)) {
+        // The store answers, and still has no such counter: it was evicted.
+        logOnce('lost', scope, `${hourKey} or ${dayKey}`);
+      }
+    }
+    return [read.hour ?? 0, read.day ?? 0];
+  }
+
+  /** Add `usd`, which may be negative, to both windows a reservation was made in; log a failure rather than throw it. */
   async function charge(hourKey: string, dayKey: string, usd: number) {
+    let hour: number;
+    let day: number;
+    try {
+      [hour, day] = await readCounters(hourKey, dayKey);
+    } catch (err) {
+      // Writing a sum from an unreadable counter would overwrite what it holds.
+      logOnce('read', scope, err);
+      return;
+    }
     try {
       await Promise.all([
-        add(store, hourKey, usd, HOUR_KEY_TTL_SECONDS),
-        add(store, dayKey, usd, DAY_KEY_TTL_SECONDS),
+        store.set(hourKey, counter(hour + usd), HOUR_KEY_TTL_SECONDS),
+        store.set(dayKey, counter(day + usd), DAY_KEY_TTL_SECONDS),
       ]);
     } catch (err) {
       logOnce('write', scope, err);
@@ -294,10 +504,7 @@ export function createSpendBrake(
       let hour: number;
       let day: number;
       try {
-        [hour, day] = await Promise.all([
-          read(store, hourKey),
-          read(store, dayKey),
-        ]);
+        [hour, day] = await readCounters(hourKey, dayKey);
       } catch (err) {
         logOnce('read', scope, err);
         return {
@@ -329,11 +536,18 @@ export function createSpendBrake(
       }
       // Written from the values just read rather than read again, to keep the
       // window in which another reservation can slip past as short as it goes.
+      // The marker is written after the counters, so a reader that finds it
+      // naming a counter can expect that counter to be there.
       try {
         await Promise.all([
-          store.set(hourKey, hour + reserved, HOUR_KEY_TTL_SECONDS),
-          store.set(dayKey, day + reserved, DAY_KEY_TTL_SECONDS),
+          store.set(hourKey, counter(hour + reserved), HOUR_KEY_TTL_SECONDS),
+          store.set(dayKey, counter(day + reserved), DAY_KEY_TTL_SECONDS),
         ]);
+        await store.set(
+          writtenKey,
+          { day: dayKey, hour: hourKey, v: 1 } satisfies Written,
+          DAY_KEY_TTL_SECONDS,
+        );
       } catch (err) {
         logOnce('write', scope, err);
       }

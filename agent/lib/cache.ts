@@ -63,57 +63,101 @@ const memoryCache: CacheLike = {
 };
 
 /**
+ * Where the Runtime Cache client sends a call, mirroring `getCache` in
+ * `@vercel/functions` 3.9.8 (`cache/index.js`): the request context's own
+ * cache when the platform put one there, the cache endpoint when both of its
+ * variables are set and parse, and otherwise a memory of this instance's own,
+ * with nothing more than one console warning. Asked on every strict call,
+ * because the request context is per request.
+ */
+function runtimeCacheIsShared(): boolean {
+  const context = (
+    globalThis as {
+      [key: symbol]: { get?: () => { cache?: unknown } } | undefined;
+    }
+  )[Symbol.for('@vercel/request-context')]?.get?.();
+  if (context?.cache) {
+    return true;
+  }
+  const { RUNTIME_CACHE_ENDPOINT, RUNTIME_CACHE_HEADERS } = process.env;
+  if (
+    process.env.RUNTIME_CACHE_DISABLE_BUILD_CACHE === 'true' ||
+    !RUNTIME_CACHE_ENDPOINT ||
+    !RUNTIME_CACHE_HEADERS
+  ) {
+    return false;
+  }
+  try {
+    JSON.parse(RUNTIME_CACHE_HEADERS);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The store, and whether it is the one it should be. On Vercel a store that
- * fell back to this instance's memory is `shared: false`: fine for a judgment
+ * is really this instance's memory is `shared: false`: fine for a judgment
  * cache, which only repeats work, and wrong for a counter every instance
  * must see (`./spend.ts`).
  */
-let backend: Promise<{ store: CacheLike; shared: boolean }> | null = null;
+let backend: Promise<CacheLike | null> | null = null;
 
-function backendOf(): Promise<{ store: CacheLike; shared: boolean }> {
+/** The Runtime Cache client, or null when it could not be loaded. */
+function runtimeOf(): Promise<CacheLike | null> {
   backend ??= (async () => {
-    if (!process.env.VERCEL) {
-      // Off Vercel there is one process, and its memory is the whole store.
-      return { shared: true, store: memoryCache };
-    }
     try {
       const { getCache } = await import('@vercel/functions');
       const runtime = getCache({ namespace: 'clean-code-judge' });
       return {
-        shared: true,
-        store: {
-          get: (key) => runtime.get(key),
-          set: (key, value, options) => runtime.set(key, value, options),
-        },
+        get: (key) => runtime.get(key),
+        set: (key, value, options) => runtime.set(key, value, options),
       };
     } catch {
-      return { shared: false, store: memoryCache };
+      return null;
     }
   })();
   return backend;
+}
+
+async function backendOf(): Promise<{ store: CacheLike; shared: boolean }> {
+  if (!process.env.VERCEL) {
+    // Off Vercel there is one process, and its memory is the whole store.
+    return { shared: true, store: memoryCache };
+  }
+  const runtime = await runtimeOf();
+  return runtime
+    ? { shared: runtimeCacheIsShared(), store: runtime }
+    : { shared: false, store: memoryCache };
 }
 
 async function cache(): Promise<CacheLike> {
   return (await backendOf()).store;
 }
 
-/** Why a strict read or write did not happen: the store failed, or it is not the shared one. */
-export class CacheUnavailableError extends Error {}
+/** Why a strict read or write did not happen: the store threw, or it is not the shared one. */
+class CacheUnavailableError extends Error {}
 
 /** The shared store, or a `CacheUnavailableError` when this instance only has its own memory. */
 async function sharedCache(): Promise<CacheLike> {
   const { store, shared } = await backendOf();
   if (!shared) {
     throw new CacheUnavailableError(
-      'the Runtime Cache could not be loaded, so this instance only has its own memory',
+      'the Runtime Cache is not configured here (no request-context cache and no RUNTIME_CACHE_ENDPOINT), so this instance only has its own memory',
     );
   }
   return store;
 }
 
 /**
- * Read a key for a caller that must tell a failed read from a missing one:
- * undefined means the key is not there, and a throw means nobody knows.
+ * Read a key from the shared store: undefined when it is not there, and a
+ * throw when this instance has no shared store or the store threw.
+ *
+ * Undefined is not proof of a missing key. The Runtime Cache client catches
+ * every failed read, a 5xx, a network error or its own 500 ms timeout, logs
+ * it and answers null, exactly as it answers for a key that is not there. A
+ * caller that must tell the two apart has to do it itself, as `./spend.ts`
+ * does with a key it knows is present.
  */
 export async function cacheGetStrict(key: string): Promise<unknown> {
   const store = await sharedCache();
@@ -125,7 +169,11 @@ export async function cacheGetStrict(key: string): Promise<unknown> {
   }
 }
 
-/** Write a key, and throw when it could not be written. */
+/**
+ * Write a key to the shared store, and throw when this instance has none or
+ * the store threw. As with a read, the Runtime Cache client catches a failed
+ * write itself, so no throw is no proof that it landed.
+ */
 export async function cacheSetStrict(
   key: string,
   value: unknown,

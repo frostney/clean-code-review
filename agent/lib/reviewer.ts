@@ -14,7 +14,13 @@
  *
  * Every part that ran is paid for, finished or not. A part that reports its
  * cost adds that; one that fails or is cancelled first cannot say, and adds
- * the estimate it was reserved at instead (`./spend.ts`).
+ * what it plausibly used instead (`lunaFailedCallUsd` in `./spend.ts`): its
+ * prompt and what it had streamed, or nothing when it was never sent or was
+ * turned away.
+ *
+ * The model's text never reaches the reader as it was written: a file part
+ * has read someone else's code, so every line of it shaped like one of the
+ * adapter's signal lines is dropped (`withoutSignalLines`).
  */
 import { streamText } from 'ai';
 
@@ -22,7 +28,12 @@ import { cacheGet, cacheKey, cacheSet } from './cache';
 import type { SummarizeInput } from './prompt';
 import { questionById, SMELL_IDS } from './questions';
 import { REVIEWER_INSTRUCTIONS } from './reviewer-prompt';
-import { lunaCostUsd, lunaPartEstimateUsd } from './spend';
+import {
+  failureWasProcessed,
+  lunaCostUsd,
+  lunaFailedCallUsd,
+  lunaPartEstimateUsd,
+} from './spend';
 import {
   cutOffLine,
   OVERALL_REWRITE_LINE,
@@ -31,10 +42,14 @@ import {
   REVIEW_BATCH_SIZE,
   REVIEWER_MODEL,
   type ReviewPart,
+  withoutSignalLines,
 } from './summary';
 
-/** Bump when the reviewer's instructions change, so cached parts expire. */
-const REVIEW_VERSION = 10;
+/**
+ * Bump when the reviewer's instructions change, so cached parts expire. 11:
+ * parts cached before model text was stripped of signal lines.
+ */
+const REVIEW_VERSION = 11;
 
 /** How much of a file a file part is shown; the findings carry the rest. */
 const FILE_EXCERPT_CHARS = 8_000;
@@ -196,12 +211,13 @@ export async function planReview(input: SummarizeInput): Promise<ReviewPlan> {
   return { parts };
 }
 
-/** What one attempt at a part is reserved at, and charged when it never reports. */
+/** Everything one attempt at a part is sent. */
+const promptChars = (p: PlannedPart) =>
+  p.message.length + REVIEWER_INSTRUCTIONS.length;
+
+/** What one attempt at a part is reserved at: its prompt, and its output at the full ceiling. */
 function attemptEstimateUsd(p: PlannedPart, ceiling: number): number {
-  return lunaPartEstimateUsd(
-    p.message.length + REVIEWER_INSTRUCTIONS.length,
-    ceiling,
-  );
+  return lunaPartEstimateUsd(promptChars(p), ceiling);
 }
 
 /**
@@ -223,7 +239,7 @@ export interface ReviewUsage {
   outputTokens: number;
   /** What the parts that reported cost, by the gateway or, failing that, by their tokens. */
   costUsd: number;
-  /** The estimate for every attempt that ran and never reported: failed, cancelled or timed out. */
+  /** What every attempt that never reported plausibly cost: failed, cancelled or timed out. */
   unreportedUsd: number;
   /** True when every part came from the cache. */
   cached: boolean;
@@ -239,16 +255,59 @@ export function emptyReviewUsage(): ReviewUsage {
   };
 }
 
-/** What a review is settled at: what reported, and the estimate for what could not. */
+/** What a review is settled at: what reported, and what the rest plausibly cost. */
 export function reviewChargeUsd(usage: ReviewUsage): number {
   return usage.costUsd + usage.unreportedUsd;
 }
 
 /**
- * One attempt at a part: stream its text to `push`, then add what it cost to
- * `usage`. Resolves with why it stopped. An attempt that fails or is
- * cancelled, which the SDK reports by throwing from its usage rather than
- * from its text, adds its estimate and throws.
+ * Why the other parts of a review were stopped: one part failed. They were
+ * sent to the same gateway at the same moment, so a part stopped with nothing
+ * written is charged as the failed one was: nothing when that one was turned
+ * away (a bad key, a rate limit, no connection), its prompt otherwise.
+ */
+class PartFailed extends Error {
+  readonly processed: boolean;
+  constructor(cause: unknown, processed: boolean) {
+    super('another part of the review failed', { cause });
+    this.processed = processed;
+  }
+}
+
+/**
+ * Read one attempt's stream to its end: its text to `text`, and every
+ * character of output, answer and reasoning, counted in `seen`. Throws when
+ * the call failed or was cancelled, which the stream reports as a part.
+ */
+async function readParts(
+  parts: AsyncIterable<{ type: string; text?: string; error?: unknown }>,
+  text: ReturnType<typeof withoutSignalLines>,
+  seen: { chars: number },
+  signal: AbortSignal,
+): Promise<void> {
+  for await (const part of parts) {
+    if (part.type === 'text-delta' || part.type === 'reasoning-delta') {
+      const delta = part.text ?? '';
+      seen.chars += delta.length;
+      if (part.type === 'text-delta') {
+        text.write(delta);
+      }
+    } else if (part.type === 'error') {
+      throw part.error;
+    } else if (part.type === 'abort') {
+      signal.throwIfAborted();
+      throw new Error('the model call was aborted');
+    }
+  }
+  text.end();
+}
+
+/**
+ * One attempt at a part: stream its text to `push`, without signal lines,
+ * then add what it cost to `usage`. Resolves with why it stopped. An attempt
+ * whose signal has already aborted is never sent, and costs nothing. One
+ * that fails or is cancelled, which the SDK reports as an error part or by
+ * throwing from its usage, adds what it plausibly used and throws.
  */
 async function attempt(
   p: PlannedPart,
@@ -257,6 +316,7 @@ async function attempt(
   usage: ReviewUsage,
   signal: AbortSignal,
 ): Promise<string> {
+  signal.throwIfAborted();
   const stream = streamText({
     abortSignal: signal,
     maxOutputTokens: ceiling,
@@ -264,10 +324,11 @@ async function attempt(
     prompt: p.message,
     system: REVIEWER_INSTRUCTIONS,
   });
+  const text = withoutSignalLines(push);
+  /** Output received, answer and reasoning both: what a failed call is charged for. */
+  const seen = { chars: 0 };
   try {
-    for await (const delta of stream.textStream) {
-      push(delta);
-    }
+    await readParts(stream.stream, text, seen, signal);
     const [finishReason, u, meta] = await Promise.all([
       stream.finishReason,
       stream.usage,
@@ -284,7 +345,15 @@ async function attempt(
     );
     return finishReason;
   } catch (err) {
-    usage.unreportedUsd += attemptEstimateUsd(p, ceiling);
+    const stoppedFor = signal.aborted ? signal.reason : undefined;
+    usage.unreportedUsd += lunaFailedCallUsd(promptChars(p), {
+      outputChars: seen.chars,
+      processed:
+        stoppedFor instanceof PartFailed
+          ? stoppedFor.processed
+          : failureWasProcessed(err, signal.aborted),
+      sent: true,
+    });
     throw err;
   }
 }
@@ -358,7 +427,7 @@ function startPart(
   p: PlanEntry,
   usage: ReviewUsage,
   signal: AbortSignal,
-  onFailure: () => void,
+  onFailure: (err: unknown) => void,
 ): StartedPart {
   const buffer: string[] = [];
   const sink: { listener: ((delta: string) => void) | null } = {
@@ -404,12 +473,22 @@ export async function runReview(
   const combined = signal
     ? AbortSignal.any([signal, stop.signal])
     : stop.signal;
+  /** Stop every part, because one failed with `err`. */
+  const stopFor = (err: unknown) => {
+    if (!stop.signal.aborted) {
+      stop.abort(
+        err instanceof PartFailed
+          ? err
+          : new PartFailed(err, failureWasProcessed(err, combined.aborted)),
+      );
+    }
+  };
   const runs = plan.parts.map((p) => {
     if (p.hit !== null) {
       return { kind: 'hit' as const, p, text: p.hit };
     }
     usage.cached = false;
-    return startPart(p, usage, combined, () => stop.abort());
+    return startPart(p, usage, combined, stopFor);
   });
   const everyPart = () =>
     Promise.allSettled(runs.map((r) => (r.kind === 'run' ? r.done : null)));
@@ -439,7 +518,7 @@ export async function runReview(
       }
     }
   } catch (err) {
-    stop.abort();
+    stopFor(err);
     await everyPart();
     throw err;
   }
