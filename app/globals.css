@@ -248,6 +248,31 @@ textarea {
   }
 }
 
+/* An FAQ answer slides open and fades in, and folds away the same way.
+   Growing to `auto` needs `interpolate-size` (Chromium only for now);
+   elsewhere the answer still fades, and without `::details-content` it simply
+   appears. `allow-discrete` keeps a closing answer rendered until it is gone. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-faq] {
+    interpolate-size: allow-keywords;
+  }
+
+  [data-faq]::details-content {
+    block-size: 0;
+    opacity: 0;
+    overflow: clip;
+    transition:
+      block-size 200ms ease-out,
+      opacity 200ms ease-out,
+      content-visibility 200ms allow-discrete;
+  }
+
+  [data-faq][open]::details-content {
+    block-size: auto;
+    opacity: 1;
+  }
+}
+
 /* A row whose judgment moved lights up and fades back out. 900ms: long enough
    to catch the eye mid-scan, short enough to be gone before the next turn. */
 @keyframes rowFlash {
