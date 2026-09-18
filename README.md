@@ -6,14 +6,14 @@
 
 **Clean Code, judged by a model that does not write prose.**
 Point it at a GitHub pull request, a diff or a codebase. Every code file
-is scored against 34 questions from Robert C. Martin's *Clean Code* by
+is judged against Robert C. Martin's *Clean Code* by
 [Jev](https://vercel.com/ai-gateway/models/jev), TypeSafe's evaluation
 model, and a short review is written from those findings. It runs on
 [eve](https://eve.dev), Vercel's agent framework, and deploys as one
 Next.js project.
 
 - **Typed judgments, not opinions** — Jev answers each question with a
-  calibrated probability (34 per file, one call, about half a second).
+  calibrated probability (every question in one call, about half a second).
   A lit row is a finding; the bars move as you edit.
 - **The review is evidence-first** — Luna writes two sentences per file
   and a decision for the whole change, from Jev's findings, in parallel
@@ -28,8 +28,8 @@ Next.js project.
   highlighted, each grammar fetched the first time a review needs it.
 - **Documentation is read, not judged** — a README or a changelog in the
   change gets a card with its own highlighting and no verdict, because
-  none of the 34 questions is a question about prose.
-- **Cheap to run** — a 24-file PR costs about $0.03 to judge and
+  none of the questions is a question about prose.
+- **Cheap to run** — a 24-file PR costs about $0.02 to judge and
   review; judgments and review parts are cached for an hour.
 
 🌐 **Live:** <https://clean-code-review.vercel.app>
