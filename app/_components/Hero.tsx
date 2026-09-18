@@ -44,7 +44,7 @@ export function Hero() {
       <LandingDuck>
         <Image
           alt=""
-          className="h-24 w-24 sm:h-32 sm:w-32"
+          className="h-40 w-40 sm:h-56 sm:w-56"
           height={256}
           priority={true}
           src="/ducky-256.png"
