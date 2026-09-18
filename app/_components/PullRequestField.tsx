@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 
 import {
   HOST_PREFIX,
@@ -38,7 +38,30 @@ export function PullRequestField({ duck }: { duck?: ReactNode }) {
   // paint, so editing one digit is how you get to the next pull request.
   const [repo, setRepo] = useState(address.repo);
   const [number, setNumber] = useState(address.number);
+  const repoRef = useRef<HTMLInputElement>(null);
   const numberRef = useRef<HTMLInputElement>(null);
+  /** What the boxes were last filled from, so a re-render is not a refill. */
+  const filled = useRef(`${address.repo}${PULL_INFIX}${address.number}`);
+
+  // Back and Forward open another pull request without going through this
+  // form, and the boxes are part of the address: they follow it. What they do
+  // not do is take it away from whoever is using them — a review closing names
+  // nothing, and a cursor in either box means that box is being typed in.
+  useEffect(() => {
+    const next = `${address.repo}${PULL_INFIX}${address.number}`;
+    if (next === filled.current || !address.repo) {
+      return;
+    }
+    filled.current = next;
+    const typing =
+      document.activeElement === repoRef.current ||
+      document.activeElement === numberRef.current;
+    if (typing) {
+      return;
+    }
+    setRepo(address.repo);
+    setNumber(address.number);
+  }, [address]);
 
   const ready = repo.trim() !== '' && number.trim() !== '';
 
@@ -100,6 +123,7 @@ export function PullRequestField({ duck }: { duck?: ReactNode }) {
               }
             }}
             placeholder="owner/repo"
+            ref={repoRef}
             spellCheck={false}
             type="text"
             // `min-w-0` is what keeps the row a row: without it an input's

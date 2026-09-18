@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
-import { isGitHubName } from '@/agent/lib/github';
+import { type PullRequestRef, parsePullRequest } from '@/agent/lib/github';
 import { Shell } from '@/app/_components/Shell';
 import { pullRequestUrl } from '@/lib/address';
 import { loadPullRequest, type PullRequestAnswer } from '@/lib/pull-request';
@@ -26,26 +26,31 @@ interface Params {
   number: string;
 }
 
-/** Only digits. `/vercel/ai/pull/abc` is not a pull request that exists. */
-const NUMBER_ONLY = /^\d+$/;
-
 /**
  * What the URL names, or nothing. Route parameters are whatever was typed into
- * the address bar, so they are checked against what GitHub could have named
- * before they are made into a request to it.
+ * the address bar, so they are put back together as the address they claim to
+ * be and read by the one parser that also does the fetching: the capitals are
+ * folded, the number is a number, and anything that is not a spelling GitHub
+ * would have written — `/pull/0002`, `/pull/abc`, a number no repository will
+ * ever reach — is a page that does not exist rather than a fetch worth making.
  */
-function addressOf(params: Params): string | null {
-  const named =
-    isGitHubName(params.owner) &&
-    isGitHubName(params.repo) &&
-    NUMBER_ONLY.test(params.number);
-  return named
-    ? pullRequestUrl(`${params.owner}/${params.repo}`, params.number)
-    : null;
+function refOf(params: Params): PullRequestRef | null {
+  return parsePullRequest(
+    pullRequestUrl(`${params.owner}/${params.repo}`, params.number),
+  );
+}
+
+/** `/owner/repo/pull/123`: the one address this review is kept at. */
+function pathOf(ref: PullRequestRef): string {
+  return `/${ref.owner}/${ref.repo}/pull/${ref.number}`;
 }
 
 /** As many characters of the description as a search result would show. */
 const DESCRIPTION_CHARS = 160;
+
+/** The two cards `app/opengraph-image.tsx` and `app/twitter-image.tsx` draw. */
+const OPEN_GRAPH_IMAGE = '/opengraph-image';
+const TWITTER_IMAGE = '/twitter-image';
 
 /**
  * The author's own words, flattened to one line and cut to the length a result
@@ -63,10 +68,19 @@ function describe(answer: PullRequestAnswer, fallback: string): string {
 }
 
 /**
- * What this page tells a crawler: the pull request's own title, and not to
- * index it. The reviews are worth reading and worth linking to, but this site
- * is not going to become a search engine's copy of other people's pull
- * requests. The Open Graph image stays the root's, so a link still previews.
+ * What this page tells a crawler, and what a link to it unfurls as.
+ *
+ * Not to be indexed: the reviews are worth reading and worth linking to, but
+ * this site is not going to become a search engine's copy of other people's
+ * pull requests. Worth previewing all the same — somebody pasting the link
+ * into a chat should see the pull request's own title and its first sentences,
+ * which is why the Open Graph and Twitter blocks are written out here. The
+ * root layout's are a description of the site, and a child that names one
+ * block replaces it rather than adding to it; the image is the file
+ * convention's and stays inherited.
+ *
+ * The canonical link is the normalised permalink, not the capitalisation that
+ * was typed and not the layout's `/`.
  */
 export async function generateMetadata({
   params,
@@ -74,17 +88,37 @@ export async function generateMetadata({
   params: Promise<Params>;
 }): Promise<Metadata> {
   const named = await params;
-  const url = addressOf(named);
+  const ref = refOf(named);
   const robots = { follow: false, index: false };
-  if (!url) {
+  if (!ref) {
     return { robots };
   }
-  const answer = await loadPullRequest(url);
-  const name = `${named.owner}/${named.repo}#${named.number}`;
+  const answer = await loadPullRequest(ref.url);
+  const name = `${ref.owner}/${ref.repo}#${ref.number}`;
+  const title = answer.ok ? answer.pr.title : name;
+  const description = describe(answer, `A Clean Code review of ${name}.`);
+  const path = pathOf(ref);
   return {
-    description: describe(answer, `A Clean Code review of ${name}.`),
+    alternates: { canonical: path },
+    description,
+    openGraph: {
+      description,
+      // The site's own card, named rather than inherited: a route that writes
+      // an Open Graph block replaces the layout's whole block, and the image
+      // the file convention put there goes with it.
+      images: [OPEN_GRAPH_IMAGE],
+      title,
+      type: 'article',
+      url: path,
+    },
     robots,
-    title: answer.ok ? answer.pr.title : name,
+    title,
+    twitter: {
+      card: 'summary_large_image',
+      description,
+      images: [TWITTER_IMAGE],
+      title,
+    },
   };
 }
 
@@ -94,14 +128,14 @@ export default async function PullRequestPage({
   params: Promise<Params>;
 }) {
   const named = await params;
-  const url = addressOf(named);
-  if (!url) {
+  const ref = refOf(named);
+  if (!ref) {
     notFound();
   }
-  const answer = await loadPullRequest(url);
+  const answer = await loadPullRequest(ref.url);
   return (
     <Shell
-      address={{ number: named.number, repo: `${named.owner}/${named.repo}` }}
+      address={{ number: String(ref.number), repo: `${ref.owner}/${ref.repo}` }}
       error={answer.ok ? null : answer.error}
       pullRequest={answer.ok ? answer.pr : null}
     />

@@ -1,8 +1,19 @@
 import { headers } from 'next/headers';
 import { cache, createElement, type ReactNode } from 'react';
+// The token, the caller's address and GitHub's rate limit are all on this side
+// of the boundary, and so is the markdown pipeline this file renders with. An
+// import of it from a client component is a build error rather than a bundle
+// nobody looked at.
+// biome-ignore lint/correctness/noUndeclaredDependencies: `server-only` is Next's own, aliased by the bundler to next/dist/compiled/server-only; a package.json entry would pin a second copy of a module that exports nothing.
+import 'server-only';
 
 import { cached, cacheKey } from '@/agent/lib/cache';
-import { fetchPullRequest } from '@/agent/lib/github';
+import {
+  fetchPullRequest,
+  NOT_A_PULL_REQUEST,
+  type PullRequestReview,
+  parsePullRequest,
+} from '@/agent/lib/github';
 import { PullRequestBody } from '@/app/_components/PullRequestBody';
 import { callerIp, throttled } from '@/lib/throttle';
 
@@ -43,6 +54,16 @@ const THROTTLE_MESSAGE =
   'Too many pull requests fetched from this address. Try again in a few minutes.';
 
 /**
+ * What the cache would have to hold for this pull request, in bytes. The diff
+ * is all of it, and a large one is past what a cache item may be — measuring
+ * it is what turns a `set` that fails silently into a value that is simply
+ * not stored.
+ */
+function storedBytes(pr: PullRequestReview): number {
+  return Buffer.byteLength(JSON.stringify(pr));
+}
+
+/**
  * Fetch a public pull request and hand back everything a review opens with.
  *
  * Failure is a value, not a throw: every way this can fail is something to put
@@ -56,20 +77,29 @@ const THROTTLE_MESSAGE =
  * those one call per request; the minute-long cache underneath is what makes a
  * reload one call per minute. The throttle sits inside the miss, so a cached
  * answer is free and only a real trip to GitHub is counted.
+ *
+ * Everything past the parse is the canonical URL, never the string that came
+ * in: the key, the throttle and the fetch all read the one spelling, so the
+ * capitals someone typed cost neither a second entry nor a second request.
  */
 export const loadPullRequest = cache(
-  async (url: string): Promise<PullRequestAnswer> => {
+  async (input: string): Promise<PullRequestAnswer> => {
+    const ref = parsePullRequest(input);
+    if (!ref) {
+      return { error: NOT_A_PULL_REQUEST, ok: false };
+    }
     try {
       const { value: pr } = await cached(
-        cacheKey('pull-request', url),
+        cacheKey('pull-request', ref.url),
         'pull request',
         async () => {
           if (throttled(callerIp(await headers()))) {
             throw new Error(THROTTLE_MESSAGE);
           }
-          return fetchPullRequest(url);
+          return fetchPullRequest(ref.url);
         },
         CACHE_SECONDS,
+        storedBytes,
       );
       return {
         ok: true,

@@ -17,29 +17,63 @@ const NAME = '[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*';
 const PR_URL = new RegExp(
   `^https?:\\/\\/(?:www\\.)?github\\.com\\/(${NAME})\\/(${NAME})\\/pull\\/(\\d+)(?:[/?#].*)?$`,
 );
-const NAME_ONLY = new RegExp(`^${NAME}$`);
 
 /** GitHub allows a repository 100 characters and an owner 39. */
 const MAX_NAME_LENGTH = 100;
 
 /**
- * Could GitHub have given an owner or a repository this name? What arrives in
- * a route's parameters is whatever was typed into the address bar, and a
- * segment that is not a name is a page that does not exist rather than a fetch
- * worth making.
+ * A pull request's number as GitHub writes it: no leading zero, and no longer
+ * than any repository will ever count to. `…/pull/0002` is a second spelling
+ * of the second pull request, and a second spelling is a second cache entry
+ * and a second trip to GitHub for the same page.
  */
-export function isGitHubName(value: string): boolean {
-  return value.length <= MAX_NAME_LENGTH && NAME_ONLY.test(value);
+const NUMBER = /^[1-9][0-9]{0,8}$/;
+
+/** What a caller is told when the string it was given names nothing. */
+export const NOT_A_PULL_REQUEST =
+  'That is not a GitHub pull request URL (expected github.com/owner/repo/pull/123).';
+
+/** A pull request, named the one way this site names it. */
+export interface PullRequestRef {
+  /** Folded to lower case: GitHub matches owners and repositories that way. */
+  owner: string;
+  repo: string;
+  number: number;
+  /** The canonical URL — what is fetched, and what the cache is keyed on. */
+  url: string;
 }
 
-function parsePullRequestUrl(
-  input: string,
-): { owner: string; repo: string; number: number } | null {
+/**
+ * The pull request a string names, in its one canonical spelling, or null.
+ *
+ * What arrives in a route's parameters is whatever was typed into the address
+ * bar, and GitHub answers to more than one spelling of the same request:
+ * `/Facebook/React/pull/2` and `/facebook/react/pull/2` are one pull request.
+ * Folding them together here is what keeps them one cache entry and one fetch
+ * rather than one of each per capitalisation. Anything that is not a spelling
+ * GitHub itself would write — a number with a leading zero, a segment that is
+ * not a name — is not normalised into one; it is nothing.
+ */
+export function parsePullRequest(input: string): PullRequestRef | null {
   const m = PR_URL.exec(input.trim());
   if (!m) {
     return null;
   }
-  return { number: Number(m[3]), owner: m[1], repo: m[2] };
+  const owner = m[1].toLowerCase();
+  const repo = m[2].toLowerCase();
+  if (
+    owner.length > MAX_NAME_LENGTH ||
+    repo.length > MAX_NAME_LENGTH ||
+    !NUMBER.test(m[3])
+  ) {
+    return null;
+  }
+  return {
+    number: Number(m[3]),
+    owner,
+    repo,
+    url: `https://github.com/${owner}/${repo}/pull/${m[3]}`,
+  };
 }
 
 /** 4 MB of diff is far past anything the page can judge; refuse rather than buffer. */
@@ -87,11 +121,9 @@ export async function fetchPullRequest(
   input: string,
   token = process.env.GITHUB_TOKEN,
 ): Promise<PullRequestReview> {
-  const ref = parsePullRequestUrl(input);
+  const ref = parsePullRequest(input);
   if (!ref) {
-    throw new Error(
-      'That is not a GitHub pull request URL (expected github.com/owner/repo/pull/123).',
-    );
+    throw new Error(NOT_A_PULL_REQUEST);
   }
   const base = `https://api.github.com/repos/${ref.owner}/${ref.repo}/pulls/${ref.number}`;
   const headers: Record<string, string> = {
@@ -149,6 +181,6 @@ export async function fetchPullRequest(
     changedFiles: json.changed_files ?? 0,
     diff: text,
     title: json.title ?? `${ref.owner}/${ref.repo}#${ref.number}`,
-    url: json.html_url ?? input.trim(),
+    url: json.html_url ?? ref.url,
   };
 }

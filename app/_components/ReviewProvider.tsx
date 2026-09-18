@@ -15,6 +15,7 @@ import {
 import { PRESETS } from '@/agent/lib/presets';
 import {
   openPullRequest as fetchPullRequest,
+  type PullRequestAnswer,
   type PullRequestPayload,
 } from '@/app/actions';
 import {
@@ -128,18 +129,40 @@ const NO_REVIEW: OpenReview = {
 /** What a pull request with nothing worth judging in it is called on screen. */
 const NOTHING_TO_JUDGE = 'That pull request has no code files to judge.';
 
+/**
+ * The server action, with the one way it can reject folded into the answer it
+ * otherwise returns. A server action that throws reaches the browser as a
+ * digest with the reason stripped out, so there is nothing to tell apart: what
+ * the caller wants either way is a payload or a sentence.
+ */
+async function answered(url: string): Promise<PullRequestAnswer> {
+  try {
+    return await fetchPullRequest(url);
+  } catch (err) {
+    return {
+      error:
+        err instanceof Error
+          ? err.message
+          : 'Could not fetch that pull request.',
+      ok: false,
+    };
+  }
+}
+
 /** The review the page opens with, when the URL already named one. */
 function opening(payload?: PullRequestPayload | null): {
   review: OpenReview;
   error: string | null;
+  /** Where what opened is kept, in GitHub's own spelling — null if nothing did. */
+  path: string | null;
 } {
   if (!payload) {
-    return { error: null, review: NO_REVIEW };
+    return { error: null, path: null, review: NO_REVIEW };
   }
   const review = fromPullRequest(payload, 'pr#0');
   return review
-    ? { error: null, review }
-    : { error: NOTHING_TO_JUDGE, review: NO_REVIEW };
+    ? { error: null, path: pullRequestPath(payload.url) ?? '/', review }
+    : { error: NOTHING_TO_JUDGE, path: null, review: NO_REVIEW };
 }
 
 /**
@@ -148,11 +171,20 @@ function opening(payload?: PullRequestPayload | null): {
  * showing it — so this is the history entry that makes Back mean something and
  * the URL something to copy, and nothing more. Next's router syncs itself with
  * the native call.
+ *
+ * `replace` is for the one that is not a move: an open that Back or Forward
+ * started is already at its entry, and the only thing left to correct is how
+ * the owner and the repository are spelled there.
  */
-function showPath(path: string): void {
-  if (window.location.pathname !== path) {
-    window.history.pushState(null, '', path);
+function showPath(path: string, replace = false): void {
+  if (window.location.pathname === path) {
+    return;
   }
+  if (replace) {
+    window.history.replaceState(null, '', path);
+    return;
+  }
+  window.history.pushState(null, '', path);
 }
 
 export function ReviewProvider({
@@ -188,6 +220,19 @@ export function ReviewProvider({
     nonceRef.current += 1;
     return `${kind}#${nonceRef.current}`;
   }, []);
+  // Which open the page is waiting for. Everything that changes what is on
+  // screen bumps it, and a fetch that comes back under an old number is
+  // dropped: a pull request resolving after the reader has gone home, or gone
+  // back twice, must not open itself over where they actually are.
+  const generationRef = useRef(0);
+  /**
+   * The path the page is showing, which is not always the one it is at: a
+   * `popstate` moves the address bar without re-rendering the route, and this
+   * is what tells the two apart. It is written wherever the view changes —
+   * including by a fetch that failed, so that the entry it failed at is not
+   * fetched again on every pass over it.
+   */
+  const shownPathRef = useRef(opened.path ?? '/');
 
   // What goes on the wire: the files as shown, with every patch back under the
   // headers it was split from, so the agent's parser and its after-image read a
@@ -244,14 +289,46 @@ export function ReviewProvider({
    * it. The template is the layout's, written out because this side of the
    * boundary has no metadata to inherit it from.
    */
-  const show = useCallback((next: OpenReview, path: string) => {
+  const show = useCallback(
+    (next: OpenReview, path: string, replace = false) => {
+      generationRef.current += 1;
+      switchView(() => {
+        setReview(next);
+        setPasting(false);
+        setPrError(null);
+        setFetching(false);
+      });
+      shownPathRef.current = path;
+      showPath(path, replace);
+      document.title = next.pr ? `${next.pr.title} · ${SITE.name}` : SITE.name;
+    },
+    [],
+  );
+
+  /**
+   * A fetch that opened nothing, put on screen.
+   *
+   * Asked for by hand it is only a notice: whatever is open stays open, above
+   * the reason the next one did not. Asked for by Back or Forward it is also a
+   * reconciliation — the address bar has already moved, and a review the URL
+   * no longer names cannot stay on screen — so the landing view comes back
+   * with the reason on it, the tab is renamed, and that entry is marked as
+   * shown so that passing over it again is not another fetch.
+   */
+  const showError = useCallback((message: string, entry: string | null) => {
+    if (!entry) {
+      setPrError(message);
+      setFetching(false);
+      return;
+    }
     switchView(() => {
-      setReview(next);
+      setReview(NO_REVIEW);
       setPasting(false);
-      setPrError(null);
+      setPrError(message);
+      setFetching(false);
     });
-    showPath(path);
-    document.title = next.pr ? `${next.pr.title} · ${SITE.name}` : SITE.name;
+    shownPathRef.current = entry;
+    document.title = SITE.name;
   }, []);
 
   /** The duck's click: close the review and stand at the door again. */
@@ -282,6 +359,32 @@ export function ReviewProvider({
   );
 
   /**
+   * What the fetch came back with, put on screen: the review it opened, or the
+   * reason it opened none.
+   *
+   * The URL the page ends on is GitHub's own, not the one that was typed: it
+   * is the canonical spelling of the owner and the repository. `entry` is the
+   * history entry this open came from, when Back or Forward started it and not
+   * the button — the address bar is already there, so that spelling replaces
+   * it rather than pushing another entry on top of it.
+   */
+  const settle = useCallback(
+    (answer: PullRequestAnswer, entry: string | null) => {
+      if (!answer.ok) {
+        showError(answer.error, entry);
+        return;
+      }
+      const next = fromPullRequest(answer.pr, nextId('pr'));
+      if (!next) {
+        showError(NOTHING_TO_JUDGE, entry);
+        return;
+      }
+      show(next, pullRequestPath(answer.pr.url) ?? '/', entry !== null);
+    },
+    [nextId, show, showError],
+  );
+
+  /**
    * A pull request is fetched by the page's own server action: GitHub sends no
    * CORS headers for a diff, and the description comes back already rendered,
    * which is what keeps a markdown pipeline out of this bundle. The fetch is
@@ -289,41 +392,36 @@ export function ReviewProvider({
    * to be flushed inside the browser's own view transition and a transition's
    * update cannot be; `fetching` is the "Fetching…" state instead.
    *
-   * The URL the page ends on is GitHub's own, not the one that was typed: it
-   * is the canonical spelling of the owner and the repository.
+   * A number taken at the start and checked at the end is what makes a late
+   * answer harmless. GitHub is slower than a second press of Back, and a
+   * review that opened itself over the page the reader had already returned to
+   * — rewriting the history they were walking through — is the bug that guards
+   * against.
    */
-  const openPullRequest = useCallback(
-    (url: string) => {
+  const open = useCallback(
+    (url: string, entry: string | null) => {
+      generationRef.current += 1;
+      const generation = generationRef.current;
       setPrError(null);
       setFetching(true);
       const run = async () => {
-        try {
-          const answer = await fetchPullRequest(url);
-          if (!answer.ok) {
-            setPrError(answer.error);
-            return;
-          }
-          const next = fromPullRequest(answer.pr, nextId('pr'));
-          if (!next) {
-            setPrError(NOTHING_TO_JUDGE);
-            return;
-          }
-          show(next, pullRequestPath(answer.pr.url) ?? '/');
-        } catch (err) {
-          setPrError(
-            err instanceof Error
-              ? err.message
-              : 'Could not fetch that pull request.',
-          );
-        } finally {
-          setFetching(false);
+        const answer = await answered(url);
+        if (generationRef.current === generation) {
+          settle(answer, entry);
         }
       };
       run().catch(() => {
         /* Every way this fails is already on screen. */
       });
     },
-    [nextId, show],
+    [settle],
+  );
+
+  const openPullRequest = useCallback(
+    (url: string) => {
+      open(url, null);
+    },
+    [open],
   );
 
   /**
@@ -338,10 +436,6 @@ export function ReviewProvider({
    * than from GitHub. Neither writes a history entry: the address bar is
    * already where it is going.
    */
-  const shownPath = review.pr ? (pullRequestPath(review.pr.url) ?? '/') : '/';
-  const shownPathRef = useRef(shownPath);
-  shownPathRef.current = shownPath;
-
   useEffect(() => {
     function onPopState() {
       const path = window.location.pathname;
@@ -354,12 +448,33 @@ export function ReviewProvider({
       }
       const parts = splitPullRequest(path.slice(1));
       if (parts) {
-        openPullRequest(pullRequestUrl(parts.repo, parts.number));
+        open(pullRequestUrl(parts.repo, parts.number), path);
       }
     }
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, [openPullRequest, show]);
+  }, [open, show]);
+
+  /**
+   * The address bar, corrected once to the spelling the page is showing.
+   *
+   * GitHub answers to any capitalisation of an owner and a repository, so a
+   * permalink can arrive as `/Facebook/React/pull/2` while the review that
+   * came back is kept at `/facebook/react/pull/2`. `replaceState` rather than
+   * a push: the two are one page, and Back should leave the site rather than
+   * swap the capitals. With nothing open there is nothing to correct to — the
+   * URL that failed is the one this entry shows, error notice and all, and
+   * saying so here is what keeps Back to it from fetching again.
+   */
+  useEffect(() => {
+    if (!opened.path) {
+      shownPathRef.current = window.location.pathname;
+      return;
+    }
+    if (window.location.pathname !== opened.path) {
+      window.history.replaceState(null, '', opened.path);
+    }
+  }, [opened.path]);
 
   const startPasting = useCallback(() => setPasting(true), []);
   const stopPasting = useCallback(() => setPasting(false), []);
@@ -373,10 +488,26 @@ export function ReviewProvider({
     }));
   }, []);
 
+  /**
+   * What the two boxes say: the review that is on screen, not the one the page
+   * was opened with. Back and Forward change which pull request is open
+   * without the route re-rendering, and a field still naming the one before it
+   * is the same lie as a tab still named after it. With nothing open the
+   * address the page arrived at is what is left — the field is not emptied
+   * under someone who is typing in it.
+   */
+  const address = useMemo<PullRequestAddress>(
+    () =>
+      review.pr
+        ? (splitPullRequest(review.pr.url) ?? initialAddress)
+        : initialAddress,
+    [review.pr, initialAddress],
+  );
+
   const controls = useMemo<ReviewControls>(
     () => ({
       activePreset: review.preset,
-      address: initialAddress,
+      address,
       fetching,
       goHome,
       judgePasted,
@@ -387,7 +518,7 @@ export function ReviewProvider({
     }),
     [
       review.preset,
-      initialAddress,
+      address,
       fetching,
       goHome,
       openPreset,

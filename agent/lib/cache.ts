@@ -19,6 +19,16 @@ const MAX_MEMORY_ENTRIES = 5_000;
 /** How much of the digest names a key: enough that a collision is unthinkable. */
 const KEY_DIGEST_CHARS = 40;
 
+/**
+ * What one item may hold: the Runtime Cache's own limit, two megabytes.
+ * A `set` past it fails where nobody is listening — the catch below is the
+ * only thing that hears it — so a caller whose value can be that big says how
+ * big this one is, and an oversized value is computed, returned and not
+ * stored. The memory fallback holds to the same limit rather than to none, so
+ * that a deploy and a laptop skip the same values.
+ */
+const MAX_ITEM_BYTES = 2_000_000;
+
 interface CacheLike {
   get(key: string): Promise<unknown>;
   set(
@@ -82,13 +92,16 @@ export function cacheKey(kind: string, input: unknown): string {
  * Read through: return the cached value or compute, store and return it.
  * Reports whether it was a hit. `ttl` is in seconds, and is the hour above
  * unless the caller has a reason for a shorter one — a pull request moves
- * while a judgment of fixed text does not.
+ * while a judgment of fixed text does not. `sizeOf` measures a value the
+ * store might refuse, in the bytes it would be stored as; without it every
+ * value is assumed to fit, which is true of everything but a diff.
  */
 export async function cached<T>(
   key: string,
   name: string,
   compute: () => Promise<T>,
   ttl = CACHE_TTL_SECONDS,
+  sizeOf?: (value: T) => number,
 ): Promise<{ value: T; hit: boolean }> {
   const store = await cache();
   try {
@@ -100,10 +113,12 @@ export async function cached<T>(
     /* a cache failure is never a judging failure */
   }
   const value = await compute();
-  try {
-    await store.set(key, value, { name, ttl });
-  } catch {
-    /* same */
+  if (!sizeOf || sizeOf(value) <= MAX_ITEM_BYTES) {
+    try {
+      await store.set(key, value, { name, ttl });
+    } catch {
+      /* same */
+    }
   }
   return { hit: false, value };
 }

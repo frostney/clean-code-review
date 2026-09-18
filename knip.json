@@ -9,6 +9,6 @@
     "agent/subagents/**/*.ts",
     "scripts/*.ts"
   ],
-  "ignoreDependencies": ["vercel"],
+  "ignoreDependencies": ["server-only", "vercel"],
   "project": ["**/*.{ts,tsx,mjs,css}"]
 }
