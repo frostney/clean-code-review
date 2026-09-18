@@ -2,23 +2,23 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
+import { QUESTION_COUNT } from '@/agent/lib/judging/questions';
+import { REVIEW_LIMITS } from '@/agent/lib/review/review';
+import { REVIEWER_MODEL } from '@/agent/lib/review/summary';
 import {
   dollars,
   MCP_DAILY_BUDGET_USD,
   MCP_HOURLY_BUDGET_USD,
   PAGE_DAILY_BUDGET_USD,
   PAGE_HOURLY_BUDGET_USD,
-} from '@/agent/lib/budgets';
-import { QUESTION_COUNT } from '@/agent/lib/questions';
-import { REVIEW_LIMITS } from '@/agent/lib/review';
-import { REVIEWER_MODEL } from '@/agent/lib/summary';
+} from '@/agent/lib/spend/budgets';
 import {
   MCP_CALLS_PER_WINDOW,
   MCP_PATH,
   MCP_WINDOW_MINUTES,
-} from '@/lib/mcp-limits';
-import { SITE } from '@/lib/site';
-import { REQUESTS_PER_WINDOW, WINDOW_MS } from '@/lib/throttle';
+} from '@/src/mcp/mcp-limits';
+import { REQUESTS_PER_WINDOW, WINDOW_MS } from '@/src/pull-request/throttle';
+import { SITE } from '@/src/site/site';
 
 /**
  * What happens to code somebody pastes here, written from the code that does

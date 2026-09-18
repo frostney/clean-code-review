@@ -2,11 +2,11 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 
-import { DuckTransition } from '@/app/_components/Duck';
-import { Faq } from '@/app/_components/Faq';
-import { Footer } from '@/app/_components/Footer';
-import { FAQ } from '@/lib/faq';
-import { SITE } from '@/lib/site';
+import { DuckTransition } from '@/src/landing/Duck';
+import { FAQ } from '@/src/site/faq';
+import { SITE } from '@/src/site/site';
+import { Faq } from '@/src/ui/Faq';
+import { Footer } from '@/src/ui/Footer';
 
 /**
  * The questions, at an address of their own.

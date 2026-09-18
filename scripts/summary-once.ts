@@ -8,14 +8,14 @@
  */
 import { Client } from 'eve/client';
 
-import { fetchPullRequest } from '../agent/lib/github';
-import { filesFromPatch } from '../agent/lib/patch';
-import { PRESETS } from '../agent/lib/presets';
-import { judgeMessage, summarizeMessage } from '../agent/lib/prompt';
-import { isProsePath } from '../agent/lib/review';
-import { parseReview } from '../agent/lib/schema';
-import { selectReviewFiles } from '../agent/lib/select';
-import { parseSummaryText } from '../agent/lib/summary';
+import { fetchPullRequest } from '../agent/lib/github/github';
+import { filesFromPatch } from '../agent/lib/judging/patch';
+import { parseReview } from '../agent/lib/judging/schema';
+import { selectReviewFiles } from '../agent/lib/judging/select';
+import { judgeMessage, summarizeMessage } from '../agent/lib/review/prompt';
+import { isProsePath } from '../agent/lib/review/review';
+import { parseSummaryText } from '../agent/lib/review/summary';
+import { PRESETS } from '../examples/presets';
 
 /** Dollars are printed to the cent Jev actually charges in. */
 const COST_DIGITS = 5;

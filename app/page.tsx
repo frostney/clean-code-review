@@ -1,6 +1,5 @@
-import { SITE } from '@/lib/site';
-
-import { Shell } from './_components/Shell';
+import { SITE } from '@/src/site/site';
+import { Shell } from '@/src/ui/Shell';
 
 /**
  * The front door: the page with nothing open. What it looks like and what it

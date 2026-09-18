@@ -229,7 +229,7 @@ body {
    Reduced motion is honoured here rather than in code, because React starts
    these transitions itself: every part of one ends as soon as it starts, and
    the new page is simply there. The landing and code-view switch never starts
-   one for that reader at all (`lib/view-transition.ts`). The root is named as
+   one for that reader at all (`src/landing/view-transition.ts`). The root is named as
    well as matched by `*` because the rule above names it, and a name is more
    specific than a wildcard: this one comes later and wins by order. */
 @media (prefers-reduced-motion: reduce) {

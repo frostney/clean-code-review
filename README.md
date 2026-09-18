@@ -83,7 +83,7 @@ and description. Read them as advice, never as authorization to merge.
 
 Each address may make 10 calls per 10 minutes. Every caller shares one model
 budget of $0.25 per hour and $1.00 per UTC day, counted in the Runtime Cache
-(`agent/lib/spend.ts`, caps in `agent/lib/budgets.ts`). Once it is spent, the
+(`agent/lib/spend/spend.ts`, caps in `agent/lib/spend/budgets.ts`). Once it is spent, the
 endpoint refuses new reviews with the time the budget resets. A review answered
 wholly from the cache is still served. The endpoint takes one JSON-RPC message
 per request and answers a batch with HTTP 400.
@@ -127,11 +127,11 @@ browser ──── summarize turn ─▶ eve session ──▶ Luna, one call 
   and streams the combined review as its reply. Cancelling the turn
   aborts the calls.
 - Jev is an AI SDK *evaluation* model, not a chat model, so
-  [`agent/lib/jev-model.ts`](agent/lib/jev-model.ts) is a small
+  [`agent/lib/judging/jev-model.ts`](agent/lib/judging/jev-model.ts) is a small
   adapter that lets eve treat it as the agent's model. Everything else
   eve provides works unchanged: durable sessions, streaming, limits,
   Agent Runs.
-- [`agent/lib/questions.ts`](agent/lib/questions.ts) is the single
+- [`agent/lib/judging/questions.ts`](agent/lib/judging/questions.ts) is the single
   source of truth. Change a question there and the prompt, the payload
   and the meters change together. Rows are conditional: the test row
   only on test paths, the Boy Scout row only on diffs.
@@ -141,14 +141,14 @@ browser ──── summarize turn ─▶ eve session ──▶ Luna, one call 
 
 | Layer | Where |
 |---|---|
-| Questions, groups, conditional rows | `agent/lib/questions.ts` |
-| Jev calls and per-file caching | `agent/lib/judge.ts` |
-| Luna calls, batching, streaming order | `agent/lib/reviewer.ts`, `agent/lib/reviewer-prompt.ts` |
-| Model adapter for eve | `agent/lib/jev-model.ts` |
-| Diff parsing, skip rules, file selection | `agent/lib/patch.ts`, `agent/lib/review.ts`, `agent/lib/select.ts` |
-| GitHub PR fetcher | `agent/lib/github.ts`, `app/api/github-pr/route.ts` |
-| MCP server and its one-request review | `app/api/mcp/route.ts`, `lib/mcp-server.ts`, `lib/mcp-review.ts` |
-| Page state and the two turns | `lib/useReview.ts` |
+| Questions, groups, conditional rows | `agent/lib/judging/questions.ts` |
+| Jev calls and per-file caching | `agent/lib/judging/judge.ts` |
+| Luna calls, batching, streaming order | `agent/lib/review/reviewer.ts`, `agent/lib/review/reviewer-prompt.ts` |
+| Model adapter for eve | `agent/lib/judging/jev-model.ts` |
+| Diff parsing, skip rules, file selection | `agent/lib/judging/patch.ts`, `agent/lib/review/review.ts`, `agent/lib/judging/select.ts` |
+| GitHub PR fetcher | `agent/lib/github/github.ts`, `app/api/github-pr/route.ts` |
+| MCP server and its one-request review | `app/api/mcp/route.ts`, `src/mcp/mcp-server.ts`, `src/mcp/mcp-review.ts` |
+| Page state and the two turns | `src/review/useReview.ts` |
 
 ## Deploy
 
@@ -176,12 +176,12 @@ deployment carries these brakes, outside in:
 | AI Gateway budget on the project | $15 per week (`vercel ai-gateway budgets set project clean-code-review --limit 15 --refresh-period weekly`) |
 | Per-session spend cap | `maxTokenCostUsdPerSession` in `agent/agent.ts` |
 | In-agent per-address limit on new sessions | `agent/channels/eve.ts`, best effort, one instance's memory |
-| MCP per-address limit on tool calls | 10 calls per 10 minutes, `lib/mcp-server.ts`, best effort, one instance's memory, an IPv6 address counted by its /64 and requests with no address in one shared bucket; `maxDuration` 120 s, the written review cut off at 60 s |
-| Page model budget, all tabs together | $0.40 per hour and $1.00 per UTC day, `agent/lib/budgets.ts`, counted in the Runtime Cache by `agent/lib/spend.ts` from `agent/lib/jev-model.ts`; a refused turn shows "review budget is spent" with the reset time, answers on screen stay, a wholly cached turn still served |
-| MCP model budget, all callers together | $0.25 per hour and $1.00 per UTC day, `agent/lib/budgets.ts`, counted in the Runtime Cache by `agent/lib/spend.ts`; reserved before Jev and again before Luna, a wholly cached review still served |
+| MCP per-address limit on tool calls | 10 calls per 10 minutes, `src/mcp/mcp-server.ts`, best effort, one instance's memory, an IPv6 address counted by its /64 and requests with no address in one shared bucket; `maxDuration` 120 s, the written review cut off at 60 s |
+| Page model budget, all tabs together | $0.40 per hour and $1.00 per UTC day, `agent/lib/spend/budgets.ts`, counted in the Runtime Cache by `agent/lib/spend/spend.ts` from `agent/lib/judging/jev-model.ts`; a refused turn shows "review budget is spent" with the reset time, answers on screen stay, a wholly cached turn still served |
+| MCP model budget, all callers together | $0.25 per hour and $1.00 per UTC day, `agent/lib/spend/budgets.ts`, counted in the Runtime Cache by `agent/lib/spend/spend.ts`; reserved before Jev and again before Luna, a wholly cached review still served |
 | How both budgets count | An estimate is reserved before any model runs and settled to what the work plausibly cost: a cancelled or failed call is charged its prompt and whatever it streamed, and nothing when it was never sent or was turned away (a 4xx, a rate limit, no connection). The Runtime Cache client answers a failed read with null, as for a missing key, so each budget keeps a marker key naming the counters it wrote; when the marker cannot be read back, or the Runtime Cache is not configured, uncached work is refused a minute at a time. Two turns counted within one round trip of each other can lose one update |
 | MCP JSON-RPC batches | Refused with HTTP 400 before any tool runs, `app/api/mcp/route.ts` |
-| Luna's output per review part | At most 4,000 tokens for a batch of files and 2,000 for the overall part, five and ten times the most measured, `agent/lib/reviewer.ts`; a safety net, not a length rule: a part that reaches it is written once more with twice the room, and one cut off even then is shown marked incomplete and never cached |
+| Luna's output per review part | At most 4,000 tokens for a batch of files and 2,000 for the overall part, five and ten times the most measured, `agent/lib/review/reviewer.ts`; a safety net, not a length rule: a part that reaches it is written once more with twice the room, and one cut off even then is shown marked incomplete and never cached |
 
 ## Limits
 

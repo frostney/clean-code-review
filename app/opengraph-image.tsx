@@ -3,8 +3,8 @@ import { join } from 'node:path';
 
 import { ImageResponse } from 'next/og';
 
-import { OG_CARD } from '@/lib/og';
-import { SITE } from '@/lib/site';
+import { OG_CARD } from '@/src/site/og';
+import { SITE } from '@/src/site/site';
 
 /**
  * The link preview, drawn from the page's own palette: white paper, one ink,

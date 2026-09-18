@@ -1,14 +1,14 @@
 import { createMcpHandler } from 'mcp-handler';
 
-import { MCP_SERVER_NAME, MCP_SERVER_VERSION } from '@/lib/mcp-limits';
-import { registerReviewTools } from '@/lib/mcp-server';
-import { SITE } from '@/lib/site';
+import { MCP_SERVER_NAME, MCP_SERVER_VERSION } from '@/src/mcp/mcp-limits';
+import { registerReviewTools } from '@/src/mcp/mcp-server';
+import { SITE } from '@/src/site/site';
 
 /**
  * The public MCP endpoint: stateless Streamable HTTP, for an agent with no
  * browser. Two tools, a pull request or pasted code, each returning the whole
- * review the page would show. `lib/mcp-server.ts` defines them and
- * `lib/mcp-review.ts` runs the review with the page's own functions.
+ * review the page would show. `src/mcp/mcp-server.ts` defines them and
+ * `src/mcp/mcp-review.ts` runs the review with the page's own functions.
  *
  * No session is kept between requests: every call carries its whole input, and
  * the only state is the caches the page already shares, a per-address counter

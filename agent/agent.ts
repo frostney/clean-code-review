@@ -1,7 +1,7 @@
 import { defineAgent } from 'eve';
 
-import { jev } from './lib/jev-model';
-import { SESSION_COST_CAP_USD } from './lib/review';
+import { jev } from './lib/judging/jev-model';
+import { SESSION_COST_CAP_USD } from './lib/review/review';
 
 /** A tab that closes without saying so should not hold a session for long. */
 const ONE_HOUR_MS = 3_600_000;
@@ -9,7 +9,7 @@ const ONE_HOUR_MS = 3_600_000;
 /**
  * The model is Jev (TypeSafe AI), reached through the Vercel AI Gateway: one
  * evaluation per turn, roughly half a second, priced at $42 per billion input
- * tokens. See lib/jev-model.ts for how an evaluation model sits in a language
+ * tokens. See lib/judging/jev-model.ts for how an evaluation model sits in a language
  * model's slot.
  */
 export default defineAgent({

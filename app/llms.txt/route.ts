@@ -1,10 +1,10 @@
+import { QUESTION_COUNT } from '@/agent/lib/judging/questions';
+import { REVIEW_LIMITS } from '@/agent/lib/review/review';
 import {
   dollars,
   MCP_DAILY_BUDGET_USD,
   MCP_HOURLY_BUDGET_USD,
-} from '@/agent/lib/budgets';
-import { QUESTION_COUNT } from '@/agent/lib/questions';
-import { REVIEW_LIMITS } from '@/agent/lib/review';
+} from '@/agent/lib/spend/budgets';
 import {
   MAX_PASTE_CHARS,
   MCP_CALLS_PER_WINDOW,
@@ -12,8 +12,8 @@ import {
   MCP_SERVER_CARD_PATH,
   MCP_TOOLS,
   MCP_WINDOW_MINUTES,
-} from '@/lib/mcp-limits';
-import { SITE } from '@/lib/site';
+} from '@/src/mcp/mcp-limits';
+import { SITE } from '@/src/site/site';
 
 /**
  * What this page is, for a model that has been asked about it and cannot click

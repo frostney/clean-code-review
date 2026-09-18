@@ -9,10 +9,10 @@
  */
 import { Client, type MessageResponse } from 'eve/client';
 
-import { PRESETS } from '../agent/lib/presets';
-import { judgeMessage } from '../agent/lib/prompt';
-import { questionsFor } from '../agent/lib/questions';
-import { type Answers, parseReview } from '../agent/lib/schema';
+import { questionsFor } from '../agent/lib/judging/questions';
+import { type Answers, parseReview } from '../agent/lib/judging/schema';
+import { judgeMessage } from '../agent/lib/review/prompt';
+import { PRESETS } from '../examples/presets';
 
 /** Probabilities are stored 0–1 and printed as whole percents. */
 const PERCENT = 100;

@@ -1,11 +1,17 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
-import { type PullRequestRef, parsePullRequest } from '@/agent/lib/github';
-import { Shell } from '@/app/_components/Shell';
-import { pullRequestPath, pullRequestUrl } from '@/lib/address';
-import { loadPullRequest, type PullRequestAnswer } from '@/lib/pull-request';
-import { SITE } from '@/lib/site';
+import {
+  type PullRequestRef,
+  parsePullRequest,
+} from '@/agent/lib/github/github';
+import { pullRequestPath, pullRequestUrl } from '@/src/pull-request/address';
+import {
+  loadPullRequest,
+  type PullRequestAnswer,
+} from '@/src/pull-request/pull-request';
+import { SITE } from '@/src/site/site';
+import { Shell } from '@/src/ui/Shell';
 
 /**
  * A pull request, at the address this site keeps it at.

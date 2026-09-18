@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next';
 
-import { SITE } from '@/lib/site';
+import { SITE } from '@/src/site/site';
 
 /**
  * The three pages worth indexing, said plainly, so a canonical URL is never

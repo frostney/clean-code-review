@@ -5,13 +5,13 @@ import {
   markdownFor,
   notFoundMarkdown,
   wantsMarkdown,
-} from '@/lib/agent-markdown';
+} from '@/src/site/agent-markdown';
 
 /**
  * Markdown content negotiation, for the whole site, in one place.
  *
  * A request carrying `Accept: text/markdown` gets the Markdown twin of the page
- * it asked for (`lib/agent-markdown.ts` writes them); everything else gets the
+ * it asked for (`src/site/agent-markdown.ts` writes them); everything else gets the
  * page. This is the only layer that sees every route before the router does,
  * which is what makes it the right one: the alternative is a route handler per
  * page, and a page added without one would quietly stop negotiating.

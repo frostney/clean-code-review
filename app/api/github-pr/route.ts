@@ -1,5 +1,5 @@
-import { fetchPullRequest } from '@/agent/lib/github';
-import { callerIp, throttled } from '@/lib/throttle';
+import { fetchPullRequest } from '@/agent/lib/github/github';
+import { callerIp, throttled } from '@/src/pull-request/throttle';
 
 export const dynamic = 'force-dynamic';
 

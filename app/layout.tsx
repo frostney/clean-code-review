@@ -2,10 +2,10 @@ import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import type { ReactNode } from 'react';
 
-import { Measurement } from '@/app/_components/Measurement';
-import { ThemeToggle } from '@/app/_components/ThemeToggle';
-import { SITE } from '@/lib/site';
-import { THEME_SCRIPT } from '@/lib/theme';
+import { Measurement } from '@/src/site/Measurement';
+import { SITE } from '@/src/site/site';
+import { ThemeToggle } from '@/src/theme/ThemeToggle';
+import { THEME_SCRIPT } from '@/src/theme/theme';
 import './globals.css';
 
 const sans = Geist({
@@ -89,7 +89,7 @@ export default function RootLayout({
             a page that flashes white on the way to black has told the reader it
             forgot which one they asked for. */}
         <script
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: an inline script is the only thing that runs before paint, and every byte of it is written in lib/theme.ts
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: an inline script is the only thing that runs before paint, and every byte of it is written in src/theme/theme.ts
           dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }}
         />
         {/* The theme switch, once for every page, in the top right corner of

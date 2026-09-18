@@ -286,14 +286,19 @@
       }
     },
     {
-      "includes": ["components/**", "app/**/_components/**"],
+      "includes": ["src/**/*.tsx"],
       "linter": {
         "rules": {
           "style": {
             "useFilenamingConvention": {
               "level": "error",
               "options": {
-                "filenameCases": ["camelCase", "PascalCase", "export"]
+                "filenameCases": [
+                  "camelCase",
+                  "kebab-case",
+                  "PascalCase",
+                  "export"
+                ]
               }
             }
           }
@@ -318,10 +323,7 @@
     {
       // Code rows are a positional list: a row's identity *is* its index, and
       // a token span or a gutter cell has nothing else to be keyed by.
-      "includes": [
-        "app/_components/CodeView.tsx",
-        "app/_components/Editor.tsx"
-      ],
+      "includes": ["src/review/CodeView.tsx", "src/review/Editor.tsx"],
       "linter": {
         "rules": {
           "suspicious": {
@@ -332,7 +334,7 @@
     },
     {
       // False positive: the reviewer's system prompt is one long prose string.
-      "includes": ["agent/lib/reviewer-prompt.ts"],
+      "includes": ["agent/lib/review/reviewer-prompt.ts"],
       "linter": {
         "rules": {
           "security": {
@@ -343,7 +345,7 @@
     },
     {
       // False positive: the hook names passed to `required(useContext(…), …)`.
-      "includes": ["app/_components/ReviewProvider.tsx"],
+      "includes": ["src/review/ReviewProvider.tsx"],
       "linter": {
         "rules": {
           "security": {

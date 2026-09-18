@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next';
 
-import { SITE } from '@/lib/site';
+import { SITE } from '@/src/site/site';
 
 /** The bots that fetch a page to show its card in a chat or a feed. */
 const UNFURLERS = [

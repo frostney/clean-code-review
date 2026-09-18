@@ -7,10 +7,10 @@
  */
 import { readFileSync } from 'node:fs';
 
-import { judgeFile } from '../agent/lib/judge';
-import { filesFromPatch, looksLikePatch } from '../agent/lib/patch';
-import { PRESETS } from '../agent/lib/presets';
-import type { ReviewFile } from '../agent/lib/review';
+import { judgeFile } from '../agent/lib/judging/judge';
+import { filesFromPatch, looksLikePatch } from '../agent/lib/judging/patch';
+import type { ReviewFile } from '../agent/lib/review/review';
+import { PRESETS } from '../examples/presets';
 
 const arg = process.argv[2] ?? '0';
 let files: ReviewFile[];

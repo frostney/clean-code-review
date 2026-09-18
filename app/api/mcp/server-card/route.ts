@@ -1,9 +1,9 @@
-import { serverCard } from '@/lib/mcp-card';
+import { serverCard } from '@/src/mcp/mcp-card';
 
 /**
  * The MCP server's card, at the endpoint's own address plus `/server-card`,
  * which is the location the server card proposal reserves. The document is in
- * `lib/mcp-card.ts`; this route only serves it.
+ * `src/mcp/mcp-card.ts`; this route only serves it.
  */
 export function GET(request: Request): Response {
   return serverCard.get(request);
