@@ -6,9 +6,10 @@
  * This instance's memory only: a serverless deploy runs many of these and none
  * of them agree, which is why it is a brake and not a quota.
  */
-const REQUESTS_PER_WINDOW = 20;
+/** One address's share of a window. Exported because /privacy says it out loud. */
+export const REQUESTS_PER_WINDOW = 20;
 /** Ten minutes: the window a caller's share is counted over. */
-const WINDOW_MS = 600_000;
+export const WINDOW_MS = 600_000;
 /** How many addresses the map holds before it is thrown away wholesale. */
 const MAX_TRACKED_ADDRESSES = 10_000;
 const seen = new Map<string, number[]>();
