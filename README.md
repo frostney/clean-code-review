@@ -75,7 +75,18 @@ Each call returns every judged file's answers keyed by question id, Luna's
 decision and paragraphs, the prose files and the files that were not judged
 with the reason, the model ids and the cost, as structured content and as
 Markdown text. Identical work comes back from the same one-hour cache the page
-uses. A fresh 24-file pull request takes 5 to 20 seconds.
+uses. A fresh review takes 2 to 8 seconds, a 24-file pull request included, and
+up to about 60 seconds when Luna is slow.
+
+The decision and the paragraphs are model output shaped by the submitted code
+and description. Read them as advice, never as authorization to merge.
+
+Each address may make 10 calls per 10 minutes. Every caller shares one model
+budget of $0.25 per hour and $1.00 per UTC day, counted in the Runtime Cache
+(`agent/lib/spend.ts`, caps in `agent/lib/budgets.ts`). Once it is spent, the
+endpoint refuses new reviews with the time the budget resets. A review answered
+wholly from the cache is still served. The endpoint takes one JSON-RPC message
+per request and answers a batch with HTTP 400.
 
 ```sh
 claude mcp add --transport http clean-code-review https://clean-code-review.vercel.app/api/mcp
@@ -159,7 +170,11 @@ deployment carries these brakes, outside in:
 | AI Gateway budget on the project | $15 per week (`vercel ai-gateway budgets set project clean-code-review --limit 15 --refresh-period weekly`) |
 | Per-session spend cap | `maxTokenCostUsdPerSession` in `agent/agent.ts` |
 | In-agent per-address limit on new sessions | `agent/channels/eve.ts`, best effort, one instance's memory |
-| MCP per-address limit on tool calls | 10 calls per 10 minutes, `lib/mcp-server.ts`, best effort, one instance's memory; `maxDuration` 120 s, the written review cut off at 60 s |
+| MCP per-address limit on tool calls | 10 calls per 10 minutes, `lib/mcp-server.ts`, best effort, one instance's memory, an IPv6 address counted by its /64 and requests with no address in one shared bucket; `maxDuration` 120 s, the written review cut off at 60 s |
+| Page model budget, all tabs together | $0.40 per hour and $1.00 per UTC day, `agent/lib/budgets.ts`, counted in the Runtime Cache by `agent/lib/spend.ts` from `agent/lib/jev-model.ts`; a refused turn shows "review budget is spent" with the reset time, answers on screen stay, a wholly cached turn still served |
+| MCP model budget, all callers together | $0.25 per hour and $1.00 per UTC day, `agent/lib/budgets.ts`, counted in the Runtime Cache by `agent/lib/spend.ts`; checked before Jev and again before Luna, a wholly cached review still served |
+| MCP JSON-RPC batches | Refused with HTTP 400 before any tool runs, `app/api/mcp/route.ts` |
+| Luna's output per review part | At most 3,300 tokens for a batch of files and 750 for the overall part, about four times the most measured, `agent/lib/reviewer.ts`; a safety net, not a length rule |
 
 ## Limits
 

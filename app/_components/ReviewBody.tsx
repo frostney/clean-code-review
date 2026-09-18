@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useState } from 'react';
 
+import type { PausedReply } from '@/agent/lib/budgets';
 import { isProsePath } from '@/agent/lib/review';
 import { isWriting, overallSummaryStatus } from '@/lib/display';
 import { cappedText, skippedText } from '@/lib/open-review';
@@ -132,6 +133,9 @@ export function ReviewBody() {
       </div>
 
       {judge.budgetSpent ? <BudgetSpent /> : null}
+      {judge.paused && !judge.budgetSpent ? (
+        <ReviewsPaused paused={judge.paused} />
+      ) : null}
       {prError ? <Notice data-pr="error">{prError}</Notice> : null}
       {selectionNotice && (
         <Notice data-files="skipped">{selectionNotice}</Notice>
@@ -156,6 +160,7 @@ export function ReviewBody() {
                   ),
             )
           }
+          paused={judge.paused !== null}
         />
         <div className="flex min-w-0 flex-col gap-4">
           {review.files.map((file) => (
@@ -176,6 +181,9 @@ export function ReviewBody() {
                   }
                   return next;
                 })
+              }
+              paused={
+                judge.paused !== null && judge.pending[file.path] !== true
               }
               pending={judge.pending[file.path] === true}
               summary={judge.summary}
@@ -214,6 +222,30 @@ function BudgetSpent() {
         This session has reached its limit.
       </strong>{' '}
       The meters are frozen on the last answers — reload for a fresh session.
+    </Notice>
+  );
+}
+
+/** `15:00`, the UTC clock time in an ISO timestamp. */
+const CLOCK_FROM = 11;
+const CLOCK_TO = 16;
+
+/**
+ * The site's own model budget, shared by every tab, is spent for this hour or
+ * this UTC day, and the agent refused the turn before any model ran. Unlike
+ * the session's cap this passes on its own, so it says when.
+ */
+function ReviewsPaused({ paused }: { paused: PausedReply }) {
+  const day = paused.window === 'day';
+  const at = day
+    ? 'midnight UTC'
+    : `${paused.resetsAt.slice(CLOCK_FROM, CLOCK_TO)} UTC`;
+  return (
+    <Notice data-budget="paused" data-window={paused.window}>
+      <strong className="font-semibold">
+        {day ? "Today's" : "This hour's"} review budget is spent.
+      </strong>{' '}
+      Reviews come back at {at}. The answers on screen stay as they are.
     </Notice>
   );
 }

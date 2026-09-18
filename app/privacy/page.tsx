@@ -2,6 +2,13 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
+import {
+  dollars,
+  MCP_DAILY_BUDGET_USD,
+  MCP_HOURLY_BUDGET_USD,
+  PAGE_DAILY_BUDGET_USD,
+  PAGE_HOURLY_BUDGET_USD,
+} from '@/agent/lib/budgets';
 import { QUESTION_COUNT } from '@/agent/lib/questions';
 import { REVIEW_LIMITS } from '@/agent/lib/review';
 import { REVIEWER_MODEL } from '@/agent/lib/summary';
@@ -116,6 +123,16 @@ export default function PrivacyPage() {
             reviews, and a count of calls per network address,{' '}
             {MCP_CALLS_PER_WINDOW} per {MCP_WINDOW_MINUTES} minutes, held in one
             server instance&rsquo;s memory for that window.
+          </p>
+          <p>
+            The site has a model budget that every visitor shares:{' '}
+            {dollars(PAGE_HOURLY_BUDGET_USD)} per hour and{' '}
+            {dollars(PAGE_DAILY_BUDGET_USD)} per UTC day, and it pauses reviews
+            once that is spent, until it resets. The MCP server has its own,{' '}
+            {dollars(MCP_HOURLY_BUDGET_USD)} per hour and{' '}
+            {dollars(MCP_DAILY_BUDGET_USD)} per UTC day, and refuses new reviews
+            once it is spent. Each budget is a running total of what the models
+            cost, and holds nothing about who asked.
           </p>
         </Section>
 

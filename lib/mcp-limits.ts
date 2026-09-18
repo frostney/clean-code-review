@@ -3,7 +3,9 @@
  * server enforces them, and llms.txt, the Markdown twins and /privacy quote
  * them, so a limit cannot change in one place and still be promised in another.
  * The docs import this file rather than the server, because the server brings
- * the whole review pipeline with it and `proxy.ts` reads the docs.
+ * the whole review pipeline with it and `proxy.ts` reads the docs. The
+ * endpoint's model budget is in `agent/lib/budgets.ts`, beside the page's,
+ * where the agent can reach both.
  */
 import { WINDOW_MS } from './throttle';
 

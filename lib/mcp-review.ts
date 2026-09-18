@@ -14,6 +14,11 @@
  * Nothing here imports `next/headers`, React's `cache` or `server-only`, so it
  * runs inside a route handler and from a script alike.
  */
+import {
+  dollars,
+  MCP_DAILY_BUDGET_USD,
+  MCP_HOURLY_BUDGET_USD,
+} from '@/agent/lib/budgets';
 import { cached, cacheKey } from '@/agent/lib/cache';
 import {
   fetchPullRequest,
@@ -21,7 +26,7 @@ import {
   type PullRequestReview,
   parsePullRequest,
 } from '@/agent/lib/github';
-import { judgeReview } from '@/agent/lib/judge';
+import { allJudged, judgeReview } from '@/agent/lib/judge';
 import { filesFromPatch } from '@/agent/lib/patch';
 import { GROUPS, questionById } from '@/agent/lib/questions';
 import {
@@ -30,9 +35,10 @@ import {
   type ReviewFile,
   skipReason,
 } from '@/agent/lib/review';
-import { runReview } from '@/agent/lib/reviewer';
+import { allReviewed, runReview } from '@/agent/lib/reviewer';
 import { type Answers, parseReview } from '@/agent/lib/schema';
 import { selectReviewFiles } from '@/agent/lib/select';
+import { createSpendBrake, type SpendCheck } from '@/agent/lib/spend';
 import { parseSummaryText, REVIEWER_MODEL } from '@/agent/lib/summary';
 
 import { pullRequestPath } from './address';
@@ -71,6 +77,53 @@ function storedBytes(pr: PullRequestReview): number {
  */
 const REVIEW_TIMEOUT_MS = 60_000;
 const MS_PER_SECOND = 1000;
+const MS_PER_MINUTE = 60_000;
+const MINUTES_PER_HOUR = 60;
+/** Where `14:00` sits in an ISO timestamp. */
+const CLOCK_FROM = 11;
+const CLOCK_TO = 16;
+
+/**
+ * Every caller of this endpoint together, per hour and per UTC day, across
+ * every instance: see `agent/lib/spend.ts`. The page's reviews count against
+ * a budget of their own, in `agent/lib/jev-model.ts`.
+ */
+const spend = createSpendBrake('mcp', {
+  dayUsd: MCP_DAILY_BUDGET_USD,
+  hourUsd: MCP_HOURLY_BUDGET_USD,
+});
+
+/**
+ * What a written review is charged when it fails before reporting its cost:
+ * about the worst whole call measured. A review cut off by the timeout or a
+ * cancel has still been paid for in part, and a caller must not be able to
+ * make Luna's work free by making it slow.
+ */
+const UNREPORTED_REVIEW_USD = 0.05;
+
+/** `in 23 minutes`, `in 5 hours 3 minutes`. */
+function until(when: Date, now: Date): string {
+  const minutes = Math.max(
+    1,
+    Math.ceil((when.getTime() - now.getTime()) / MS_PER_MINUTE),
+  );
+  const hours = Math.floor(minutes / MINUTES_PER_HOUR);
+  const rest = minutes % MINUTES_PER_HOUR;
+  const parts = [
+    hours ? `${hours} hour${hours === 1 ? '' : 's'}` : '',
+    rest ? `${rest} minute${rest === 1 ? '' : 's'}` : '',
+  ].filter(Boolean);
+  return `in ${parts.join(' ')}`;
+}
+
+/** Why the budget says no, and when to come back, in words an agent can act on. */
+function budgetSpent(check: Exclude<SpendCheck, { ok: true }>): string {
+  const now = new Date();
+  const window = check.window === 'hour' ? 'this hour' : 'today (UTC)';
+  const per = check.window === 'hour' ? 'per hour' : 'per UTC day';
+  const at = check.resetsAt.toISOString().slice(CLOCK_FROM, CLOCK_TO);
+  return `This endpoint's model budget for ${window} is spent: ${dollars(check.capUsd)} ${per}, shared by every caller. It resets at ${at} UTC, ${until(check.resetsAt, now)}. Call again after that; a review whose answers are all cached is served even while the budget is spent.`;
+}
 
 /** The messages `fetchPullRequest` writes for a person. Anything else is a fault, not a reason. */
 const GITHUB_MESSAGES =
@@ -293,6 +346,55 @@ function labelled(answers: Answers): Record<string, LabelledAnswer> {
 const COST_PRECISION = 1e6;
 const usd = (n: number) => Math.round(n * COST_PRECISION) / COST_PRECISION;
 
+/**
+ * Luna's written review, or the reason there is none. Checked against the
+ * budget again first, because Luna is most of a call's cost and Jev's answers
+ * may have spent the rest of it; Jev's answers are returned either way.
+ */
+async function writeReview(
+  input: Parameters<typeof runReview>[0],
+  signal: AbortSignal,
+): Promise<{
+  summary: ReturnType<typeof parseSummaryText> | null;
+  usage: { cached: boolean; costUsd: number };
+  notice?: string;
+}> {
+  const none = { summary: null, usage: { cached: false, costUsd: 0 } };
+  const before = await spend.check();
+  if (!(before.ok || (await allReviewed(input)))) {
+    return {
+      ...none,
+      notice: `Luna's written review was not started. ${budgetSpent(before)} Jev's answers are complete.`,
+    };
+  }
+  const timeout = AbortSignal.timeout(REVIEW_TIMEOUT_MS);
+  try {
+    const written = await runReview(
+      input,
+      () => {
+        /* One request, one reply: the whole text is read once it is done. */
+      },
+      AbortSignal.any([signal, timeout]),
+    );
+    await spend.record(written.usage.costUsd);
+    return { summary: parseSummaryText(written.text), usage: written.usage };
+  } catch {
+    // The parts that did run are paid for, and their cost was never reported.
+    await spend.record(UNREPORTED_REVIEW_USD);
+    if (signal.aborted) {
+      throw new ReviewError('The call was cancelled.');
+    }
+    const retry =
+      "Jev's answers are complete. Call again to retry: the answers come back from the cache.";
+    return {
+      ...none,
+      notice: timeout.aborted
+        ? `The written review did not finish within ${REVIEW_TIMEOUT_MS / MS_PER_SECOND} seconds. ${retry}`
+        : `Luna could not write the review: the model call failed. ${retry}`,
+    };
+  }
+}
+
 /** Judge the opened files, write the review, and put it all in one result. */
 async function reviewOpened(
   opened: Opened,
@@ -311,6 +413,13 @@ async function reviewOpened(
     throw new ReviewError('Nothing in that input is code to judge.');
   }
 
+  // Checked before any model work. A refusal still serves a review that is
+  // wholly cached, which costs a cache read per file to find out.
+  const before = await spend.check();
+  if (!(before.ok || (await allJudged(code)))) {
+    throw new ReviewError(budgetSpent(before));
+  }
+
   let judged: Awaited<ReturnType<typeof judgeReview>>;
   try {
     judged = await judgeReview({ files: code }, signal);
@@ -319,6 +428,7 @@ async function reviewOpened(
       'Jev could not judge any of these files. Try again in a minute.',
     );
   }
+  await spend.record(judged.cost);
   // Read back exactly as the page reads a judge turn's reply, so the answers
   // Luna is given, and the review-part cache keys made from them, match.
   const answers =
@@ -334,32 +444,18 @@ async function reviewOpened(
   const notices = [cappedText(opened.review)].filter(
     (n): n is string => n !== null,
   );
-  let summary: ReturnType<typeof parseSummaryText> | null = null;
-  let review = { cached: false, costUsd: 0 };
-  try {
-    const written = await runReview(
-      {
-        files: summarized,
-        judgments: Object.fromEntries(
-          summarized.map((f) => [f.path, answers[f.path]?.answers ?? {}]),
-        ),
-        pr: opened.pr,
-      },
-      () => {
-        /* One request, one reply: the whole text is read once it is done. */
-      },
-      AbortSignal.any([signal, AbortSignal.timeout(REVIEW_TIMEOUT_MS)]),
-    );
-    summary = parseSummaryText(written.text);
-    review = written.usage;
-  } catch {
-    if (signal.aborted) {
-      throw new ReviewError('The call was cancelled.');
-    }
-    notices.push(
-      `The written review did not finish within ${REVIEW_TIMEOUT_MS / MS_PER_SECOND} seconds; Jev's answers are complete. Call again to retry: the answers come back from the cache.`,
-    );
+  const reviewInput = {
+    files: summarized,
+    judgments: Object.fromEntries(
+      summarized.map((f) => [f.path, answers[f.path]?.answers ?? {}]),
+    ),
+    pr: opened.pr,
+  };
+  const written = await writeReview(reviewInput, signal);
+  if (written.notice) {
+    notices.push(written.notice);
   }
+  const { summary, usage: review } = written;
 
   const paragraphs = new Map(summary?.files.map((f) => [f.path, f.summary]));
   const files = summarized.map((f) => ({

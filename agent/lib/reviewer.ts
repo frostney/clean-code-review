@@ -31,6 +31,20 @@ const FILE_EXCERPT_CHARS = 8_000;
 /** How much of a pull request's body the overall part is shown. */
 const PR_BODY_CHARS = 2_000;
 
+/**
+ * A ceiling on what one part may write, reasoning included, as a safety net
+ * and never as a length control: the 300-character rule per file is the
+ * prompt's to keep. A file part is fed up to 8,000 characters of someone
+ * else's code per file, and without a ceiling that text could keep the model
+ * writing. Each is about four times the most measured on real reviews (a
+ * 6-file batch of a 24-file pull request wrote 816 tokens, the overall part
+ * of five reviews at most 183), so no normal review comes near it.
+ */
+const MAX_OUTPUT_TOKENS: Record<ReviewPart['role'], number> = {
+  files: 3300,
+  overall: 750,
+};
+
 /** Jev's yes/no answers are odds; at even odds or better the smell is a finding. */
 const EVEN_ODDS = 0.5;
 
@@ -145,6 +159,17 @@ function planParts(input: SummarizeInput): PlannedPart[] {
   return parts;
 }
 
+/**
+ * True when every part of this review is cached, so writing it now would cost
+ * nothing. Cache reads only, for a caller out of model budget.
+ */
+export async function allReviewed(input: SummarizeInput) {
+  const hits = await Promise.all(
+    planParts(input).map(async (p) => Boolean(await cacheGet<string>(p.key))),
+  );
+  return hits.every(Boolean);
+}
+
 export interface ReviewUsage {
   inputTokens: number;
   outputTokens: number;
@@ -184,6 +209,7 @@ export async function runReview(
       };
       const stream = streamText({
         abortSignal: signal,
+        maxOutputTokens: MAX_OUTPUT_TOKENS[p.part.role],
         model: REVIEWER_MODEL,
         prompt: p.message,
         system: REVIEWER_INSTRUCTIONS,
@@ -204,6 +230,12 @@ export async function runReview(
           (meta?.gateway as { cost?: string } | undefined)?.cost ?? 0,
         );
       })();
+      // Awaited in order below. When an earlier part fails, the loop stops
+      // and never reaches this one, and its rejection must not go unobserved:
+      // Node ends a process on an unhandled rejection.
+      done.catch(() => {
+        /* The loop below is where a failure is heard. */
+      });
       return {
         attach(fn: (delta: string) => void) {
           for (const d of buffer.splice(0)) {

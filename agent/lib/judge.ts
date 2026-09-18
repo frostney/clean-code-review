@@ -1,8 +1,9 @@
 import { experimental_evaluate as evaluate } from 'ai';
 
-import { cached, cacheKey } from './cache';
+import { cached, cacheGet, cacheKey } from './cache';
 import { afterImage } from './patch';
 import { type Question, questionsFor } from './questions';
+import { withOneRetry } from './retry';
 import type {
   FileJudgment,
   ReviewFile,
@@ -18,7 +19,8 @@ export const JEV = 'typesafe-ai/jev';
  * Jev answers in well under a second; a call past this is stuck, not slow.
  * The limit is per attempt, which is why the SDK's own retries are off below:
  * with them on, its backoff sleeps counted against these twelve seconds, and
- * the timeout firing mid-sleep looked exactly like the caller cancelling.
+ * the timeout firing mid-sleep looked exactly like the caller cancelling. The
+ * backoff lives in `withOneRetry` instead, between the attempts.
  */
 const CALL_TIMEOUT_MS = 12_000;
 
@@ -40,12 +42,13 @@ function questionsOf(rows: Question[]) {
   );
 }
 
-/** One file, one evaluation: this is the whole integration. */
-function evaluateFile(file: ReviewFile, signal?: AbortSignal) {
+/**
+ * One file, one evaluation: this is the whole integration. `signal` is one
+ * attempt's, the caller's cancel and that attempt's timeout together.
+ */
+function evaluateFile(file: ReviewFile, signal: AbortSignal) {
   return evaluate({
-    abortSignal: signal
-      ? AbortSignal.any([signal, AbortSignal.timeout(CALL_TIMEOUT_MS)])
-      : AbortSignal.timeout(CALL_TIMEOUT_MS),
+    abortSignal: signal,
     // One retry, ours, each attempt with its own twelve seconds.
     maxRetries: 0,
     model: JEV,
@@ -63,43 +66,45 @@ function evaluateFile(file: ReviewFile, signal?: AbortSignal) {
   });
 }
 
-/**
- * A timed-out or failed call gets exactly one more try; a cancelled one does
- * not. Which it was is decided by asking the caller's signal, never by the
- * error's shape: our own timeout and the caller's cancel both surface as an
- * `AbortError`, and telling them apart by their `cause` let a stuck call pass
- * for a cancelled one and leave its file unjudged.
- */
-async function withOneRetry<T>(
-  call: () => Promise<T>,
-  signal?: AbortSignal,
-): Promise<T> {
-  try {
-    return await call();
-  } catch (err) {
-    if (signal?.aborted) {
-      throw err;
-    }
-    return await call();
-  }
-}
-
 /** Bump when a question's wording changes, so cached answers to the old wording expire. */
 const QUESTIONS_VERSION = 3;
 
-export async function judgeFile(file: ReviewFile, signal?: AbortSignal) {
-  const started = performance.now();
+/** Where one file's judgment is cached. */
+function judgeKey(file: ReviewFile): string {
   // The key hashes this object as JSON, in key order: reordering these
   // properties (Biome sorts them) invalidates every stored judgment at once.
-  const key = cacheKey('judge', {
+  return cacheKey('judge', {
     content: file.content,
     ids: questionsFor(file).map((q) => q.id),
     patch: file.patch === true,
     path: file.path,
     v: QUESTIONS_VERSION,
   });
+}
+
+/**
+ * True when every one of these files has a cached judgment, so judging them
+ * now would cost nothing. Cache reads only: a caller out of model budget asks
+ * this before deciding a review is still free to serve.
+ */
+export async function allJudged(files: readonly ReviewFile[]) {
+  const hits = await Promise.all(
+    files.map(async (f) => (await cacheGet(judgeKey(f))) !== undefined),
+  );
+  return hits.every(Boolean);
+}
+
+export async function judgeFile(file: ReviewFile, signal?: AbortSignal) {
+  const started = performance.now();
+  const key = judgeKey(file);
   const { value, hit } = await cached(key, 'jev-judgment', async () =>
-    toJudgment(await withOneRetry(() => evaluateFile(file, signal), signal)),
+    toJudgment(
+      await withOneRetry(
+        (attempt) => evaluateFile(file, attempt),
+        CALL_TIMEOUT_MS,
+        signal,
+      ),
+    ),
   );
   const judgment: FileJudgment = {
     ...value.judgment,

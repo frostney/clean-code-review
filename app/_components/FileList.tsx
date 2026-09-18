@@ -27,6 +27,7 @@ export function FileList({
   files,
   judgments,
   failed,
+  paused,
   allCollapsed,
   onToggleAll,
   onSelect,
@@ -35,6 +36,8 @@ export function FileList({
   judgments: Record<string, FileJudgment>;
   /** Paths Jev was asked about twice and answered for neither. */
   failed: Record<string, true>;
+  /** The site's model budget refused the last turn, so an unjudged file waits for it to reset. */
+  paused: boolean;
   /** Every card in the review is folded to its header. */
   allCollapsed: boolean;
   onToggleAll: () => void;
@@ -78,6 +81,7 @@ export function FileList({
               : fileVerdict(score, {
                   empty: !file.content.trim(),
                   failed: failed[file.path] === true,
+                  paused,
                 });
             return (
               <li className="shrink-0 lg:shrink" key={file.path}>
