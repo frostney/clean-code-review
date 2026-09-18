@@ -440,6 +440,11 @@ export function ReviewProvider({
     function onPopState() {
       const path = window.location.pathname;
       if (path === shownPathRef.current) {
+        // The page already shows this address — but a fetch for the entry the
+        // reader just left may still be on its way, and it must not open
+        // itself over this one when it lands.
+        generationRef.current += 1;
+        setFetching(false);
         return;
       }
       if (path === '/') {
@@ -496,13 +501,17 @@ export function ReviewProvider({
    * address the page arrived at is what is left — the field is not emptied
    * under someone who is typing in it.
    */
-  const address = useMemo<PullRequestAddress>(
-    () =>
-      review.pr
-        ? (splitPullRequest(review.pr.url) ?? initialAddress)
-        : initialAddress,
-    [review.pr, initialAddress],
-  );
+  const openedOnce = useRef(false);
+  const address = useMemo<PullRequestAddress>(() => {
+    if (review.pr) {
+      openedOnce.current = true;
+      return splitPullRequest(review.pr.url) ?? initialAddress;
+    }
+    // A closed review names nothing; only a page that has shown nothing yet
+    // keeps the address it arrived with, so a failed permalink stays in the
+    // boxes for correcting.
+    return openedOnce.current ? NO_ADDRESS : initialAddress;
+  }, [review.pr, initialAddress]);
 
   const controls = useMemo<ReviewControls>(
     () => ({

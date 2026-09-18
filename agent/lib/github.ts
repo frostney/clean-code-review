@@ -12,8 +12,9 @@ export interface PullRequestReview {
   changedFiles: number;
 }
 
-// GitHub names: alphanumerics, hyphens, underscores and dots, never "." or ".." alone.
-const NAME = '[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*';
+// GitHub names: alphanumerics, hyphens, underscores and dots — `.github` is a
+// repository — but never "." or ".." alone.
+const NAME = '(?!\\.\\.?\\/)[A-Za-z0-9_.-]+';
 const PR_URL = new RegExp(
   `^https?:\\/\\/(?:www\\.)?github\\.com\\/(${NAME})\\/(${NAME})\\/pull\\/(\\d+)(?:[/?#].*)?$`,
 );
@@ -60,7 +61,8 @@ export function parsePullRequest(input: string): PullRequestRef | null {
     return null;
   }
   const owner = m[1].toLowerCase();
-  const repo = m[2].toLowerCase();
+  // A clone URL's `.git` is not part of the name, and the field strips it too.
+  const repo = m[2].toLowerCase().replace(/\.git$/, '');
   if (
     owner.length > MAX_NAME_LENGTH ||
     repo.length > MAX_NAME_LENGTH ||

@@ -49,5 +49,8 @@ export function pullRequestUrl(repo: string, number: string): string {
 /** `/owner/repo/pull/123`: where this site keeps the review of that request. */
 export function pullRequestPath(url: string): string | null {
   const parts = splitPullRequest(url);
-  return parts ? `/${parts.repo}${PULL_INFIX}${parts.number}` : null;
+  // Folded to lower case, the way the server keys and the canonical link say it.
+  return parts
+    ? `/${parts.repo.toLowerCase()}${PULL_INFIX}${parts.number}`
+    : null;
 }

@@ -52,13 +52,13 @@ export function PullRequestField({ duck }: { duck?: ReactNode }) {
     if (next === filled.current || !address.repo) {
       return;
     }
-    filled.current = next;
     const typing =
       document.activeElement === repoRef.current ||
       document.activeElement === numberRef.current;
     if (typing) {
       return;
     }
+    filled.current = next;
     setRepo(address.repo);
     setNumber(address.number);
   }, [address]);

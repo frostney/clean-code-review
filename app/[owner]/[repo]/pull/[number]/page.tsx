@@ -5,6 +5,7 @@ import { type PullRequestRef, parsePullRequest } from '@/agent/lib/github';
 import { Shell } from '@/app/_components/Shell';
 import { pullRequestUrl } from '@/lib/address';
 import { loadPullRequest, type PullRequestAnswer } from '@/lib/pull-request';
+import { SITE } from '@/lib/site';
 
 /**
  * A pull request, at the address this site keeps it at.
@@ -107,6 +108,8 @@ export async function generateMetadata({
       // an Open Graph block replaces the layout's whole block, and the image
       // the file convention put there goes with it.
       images: [OPEN_GRAPH_IMAGE],
+      locale: 'en_US',
+      siteName: SITE.name,
       title,
       type: 'article',
       url: path,
