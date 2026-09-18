@@ -1,7 +1,5 @@
 'use client';
 
-import type { ReactNode } from 'react';
-
 import { Notice } from './Notice';
 import { Paste } from './Paste';
 import { ReviewBody } from './ReviewBody';
@@ -10,18 +8,20 @@ import { useReviewView } from './ReviewProvider';
 /**
  * Everything under the header, which is one of two pages.
  *
- * With a review open it is the review, and the questions are not on the page
- * at all — someone reading a judgment of their own code is past asking what
- * this is. With nothing open it is the questions, which is why they are handed
- * in as a node: they are rendered on the server, in the initial HTML of `/`,
- * where a crawler and the `FAQPage` data beside them can find them. Hiding
- * them is this component's business; writing them is not.
+ * With a review open it is the review, and nothing else: someone reading a
+ * judgment of their own code is past being introduced to the page. With
+ * nothing open it is the landing view, which is the ways in.
  *
  * The paste dialog and the notice that a pull request did not open belong to
  * both views, and the review carries its own — so on the landing view they are
  * rendered here instead, where they are the only things that can happen.
+ *
+ * The landing branch is a list, and it is meant to grow: anything that belongs
+ * on the door rather than in the review goes in it, below the paste dialog,
+ * and this component's only business is which of the two branches is on
+ * screen.
  */
-export function Stage({ questions }: { questions: ReactNode }) {
+export function Stage() {
   const { open, prError } = useReviewView();
 
   if (open) {
@@ -32,7 +32,6 @@ export function Stage({ questions }: { questions: ReactNode }) {
     <>
       {prError ? <Notice data-pr="error">{prError}</Notice> : null}
       <Paste />
-      {questions}
     </>
   );
 }

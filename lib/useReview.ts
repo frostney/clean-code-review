@@ -58,13 +58,6 @@ const SUMMARY_TIMEOUT_ERROR = 'the review took too long';
  */
 const DECISION_LINE = /\bdecision\b\s*[:：][^\n]*\n/i;
 
-/** Tokens and dollars for one settled turn, summed over its model steps. */
-interface TurnUsage {
-  inputTokens: number;
-  outputTokens: number;
-  costUsd: number;
-}
-
 export interface ReviewState {
   /** The judgment for each path that has one. Kept while the next turn runs. */
   judgments: Record<string, FileJudgment>;
@@ -76,7 +69,6 @@ export interface ReviewState {
   error: string | null;
   /** Wall-clock time of the last settled turn, in milliseconds. */
   ms: number | null;
-  usage: TurnUsage | null;
   /** Everything this tab's session has spent so far. */
   spentUsd: number;
   /** The session hit the agent's per-session cost cap and will not answer again. */
@@ -98,7 +90,6 @@ const IDLE: ReviewState = {
   pending: {},
   spentUsd: 0,
   summary: NO_SUMMARY,
-  usage: null,
 };
 
 /** The pull request a review came from, when it came from one. */
@@ -108,22 +99,15 @@ export interface PullRequestContext {
   url?: string;
 }
 
-/** Sum the per-step usage the runtime reports, so the footer can show a real number. */
-function usageOf(
-  events: readonly { type: string; data?: unknown }[],
-): TurnUsage {
-  const zero: TurnUsage = { costUsd: 0, inputTokens: 0, outputTokens: 0 };
+/** Sum what one settled turn cost, over the model steps the runtime reported. */
+function costOf(events: readonly { type: string; data?: unknown }[]): number {
   return events
     .filter((e) => e.type === 'step.completed')
-    .reduce((acc, e) => {
-      const usage = (e.data as { usage?: Partial<TurnUsage> } | undefined)
+    .reduce((total, e) => {
+      const usage = (e.data as { usage?: { costUsd?: number } } | undefined)
         ?.usage;
-      return {
-        costUsd: acc.costUsd + (usage?.costUsd ?? 0),
-        inputTokens: acc.inputTokens + (usage?.inputTokens ?? 0),
-        outputTokens: acc.outputTokens + (usage?.outputTokens ?? 0),
-      };
-    }, zero);
+      return total + (usage?.costUsd ?? 0);
+    }, 0);
 }
 
 /**
@@ -447,6 +431,8 @@ function freshJudgments(
 /** What one judge turn came back with, once it is merged into the page by path. */
 interface JudgeTurn {
   cached: boolean;
+  /** What the turn cost, to add to what this tab's session has spent. */
+  costUsd: number;
   /** Paths given up on: unanswered twice running. */
   failed: readonly string[];
   fresh: Record<string, FileJudgment>;
@@ -454,7 +440,6 @@ interface JudgeTurn {
   paths: readonly string[];
   review: ReviewResult | null;
   unjudged: number;
-  usage: TurnUsage;
 }
 
 /** The turn the session's cost cap stopped, with the paths it carried freed. */
@@ -501,8 +486,7 @@ function withJudgeTurn(s: ReviewState, turn: JudgeTurn): ReviewState {
     judgments: { ...s.judgments, ...turn.fresh },
     ms: turn.ms,
     pending: without(s.pending, turn.paths),
-    spentUsd: s.spentUsd + turn.usage.costUsd,
-    usage: turn.usage,
+    spentUsd: s.spentUsd + turn.costUsd,
   };
 }
 
@@ -1096,13 +1080,13 @@ export function useReview(
       sent: ReadonlyMap<string, string>,
       ms: number,
     ) => {
-      const usage = usageOf(result.events);
+      const costUsd = costOf(result.events);
       // The budget prompt: eve parked the turn waiting for an Approve/Stop we
       // will never send. Anything after this could only be parked too.
       if (result.events.some((e) => e.type === 'input.requested')) {
         budgetSpentRef.current = true;
         queuedRef.current.clear();
-        setState((s) => withBudgetSpentTurn(s, paths, usage.costUsd));
+        setState((s) => withBudgetSpentTurn(s, paths, costUsd));
         return;
       }
       if (result.status === 'failed') {
@@ -1111,7 +1095,7 @@ export function useReview(
         for (const path of paths) {
           sentRef.current.delete(path);
         }
-        setState((s) => withFailedTurn(s, paths, usage.costUsd));
+        setState((s) => withFailedTurn(s, paths, costUsd));
         return;
       }
       const review = parseReview(result.message);
@@ -1130,13 +1114,13 @@ export function useReview(
       setState((s) =>
         withJudgeTurn(s, {
           cached,
+          costUsd,
           failed,
           fresh,
           ms,
           paths,
           review,
           unjudged: unjudged.length,
-          usage,
         }),
       );
       // New answers are new material for the review. The first set of a review

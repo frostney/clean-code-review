@@ -8,6 +8,12 @@ export interface PullRequestReview {
   title: string;
   body: string;
   diff: string;
+  /**
+   * The repository owner's avatar, so the header can show whose project this
+   * is. Empty when GitHub sent none: it is decoration on a line that reads the
+   * same without it.
+   */
+  avatarUrl: string;
   /** Files GitHub reports on the PR, for the "largest 24" rule and the skip list. */
   changedFiles: number;
 }
@@ -173,12 +179,14 @@ export async function fetchPullRequest(
     body?: string | null;
     html_url?: string;
     changed_files?: number;
+    base?: { repo?: { owner?: { avatar_url?: string } } };
   };
   const text = await readCapped(diff, MAX_DIFF_BYTES);
   if (text === null) {
     throw new Error("That pull request's diff is too large to judge here.");
   }
   return {
+    avatarUrl: json.base?.repo?.owner?.avatar_url ?? '',
     body: json.body ?? '',
     changedFiles: json.changed_files ?? 0,
     diff: text,
