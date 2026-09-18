@@ -23,6 +23,14 @@ export function Footer() {
       </Link>
       <a
         className={LINK_CLASS}
+        href={SITE.book}
+        rel="noreferrer"
+        target="_blank"
+      >
+        based on Clean Code
+      </a>
+      <a
+        className={LINK_CLASS}
         href={SITE.jev}
         rel="noreferrer"
         target="_blank"

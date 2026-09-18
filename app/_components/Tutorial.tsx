@@ -463,15 +463,20 @@ export function TutorialBubble() {
           size and for the same reason: it is part of the bubble, and a
           dialogue box in two typefaces reads as two things. The arrow is the
           face's own `>`, not an icon, so it sits on the same grid. */}
+      {/* Small and in the corner, the way a game's dialogue box marks that
+          there is more: 8px is the face's own grid, so it stays crisp, and the
+          padding keeps the target a comfortable size for a finger. */}
       {more ? (
-        <button
-          className={`${pixel.className} -mb-1 mt-1 inline-flex min-h-8 cursor-pointer items-center rounded-sm text-[16px]! text-white [font-variant-ligatures:none]! underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2`}
-          data-tutorial="next"
-          onClick={advance}
-          type="button"
-        >
-          Next &gt;
-        </button>
+        <div className="-mb-1 flex justify-end">
+          <button
+            className={`${pixel.className} inline-flex min-h-6 min-w-6 cursor-pointer items-center justify-end rounded-sm px-1 text-[8px]! text-white [font-variant-ligatures:none]! underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-white focus-visible:outline-offset-2`}
+            data-tutorial="next"
+            onClick={advance}
+            type="button"
+          >
+            Next &gt;
+          </button>
+        </div>
       ) : null}
     </div>
   );
