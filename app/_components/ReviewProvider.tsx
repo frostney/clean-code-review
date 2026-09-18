@@ -1,5 +1,6 @@
 'use client';
 
+import { usePathname } from 'next/navigation';
 import {
   createContext,
   type ReactNode,
@@ -165,6 +166,62 @@ function opening(payload?: PullRequestPayload | null): {
     : { error: NOTHING_TO_JUDGE, path: null, review: NO_REVIEW };
 }
 
+/** What the page starts with, and what it still has to do about the URL. */
+interface Arrival extends ReturnType<typeof opening> {
+  /** What the address field starts with. */
+  address: PullRequestAddress;
+  /** The route rendered this page for another address than the one it is at. */
+  restored: boolean;
+  /** The pull request the address bar names and the route did not bring. */
+  pending: string | null;
+}
+
+/**
+ * The page as the route rendered it — unless the address bar is somewhere
+ * else, in which case the address bar wins.
+ *
+ * Both routes render this provider, and the entries it writes itself carry
+ * whichever of the two was rendering when it wrote them: Next's patched
+ * `pushState` copies its route tree into every entry, and there is no tree for
+ * an address the router never navigated to. Back and Forward between this
+ * page's own entries never look at that tree. Back into one of them from
+ * another route (`/faq`) is Next's to handle, and Next restores the tree it
+ * finds: the landing route under a pull request's address, or a pull request's
+ * route under `/`. The page it renders then was made for another URL, and what
+ * it opens with is what the URL names — the landing view for `/`, and for a
+ * pull request the same fetch Back would have made on this page.
+ */
+function arrive(
+  pathname: string,
+  address: PullRequestAddress,
+  payload: PullRequestPayload | null,
+  error: string | null,
+): Arrival {
+  const opened = opening(payload);
+  const route = address.repo
+    ? pullRequestPath(pullRequestUrl(address.repo, address.number))
+    : '/';
+  const here = pathname === '/' ? '/' : pullRequestPath(pathname.slice(1));
+  if (here === null || here === route || here === opened.path) {
+    return {
+      ...opened,
+      address,
+      error: error ?? opened.error,
+      pending: null,
+      restored: false,
+    };
+  }
+  const pending = here === '/' ? null : pathname;
+  return {
+    address: (pending && splitPullRequest(pending.slice(1))) || NO_ADDRESS,
+    error: null,
+    path: null,
+    pending,
+    restored: true,
+    review: NO_REVIEW,
+  };
+}
+
 /**
  * Put the review's own address in the address bar, without navigating to it.
  * The route for a pull request renders this very page, and the page is already
@@ -203,12 +260,13 @@ export function ReviewProvider({
 }) {
   // Nothing is open until something is opened: the first visit is the door,
   // not a review. A permalink is the exception — it arrives already fetched.
-  const [opened] = useState(() => opening(initialPullRequest));
+  const pathname = usePathname();
+  const [opened] = useState(() =>
+    arrive(pathname, initialAddress, initialPullRequest, initialError),
+  );
   const [review, setReview] = useState<OpenReview>(opened.review);
   const [pasting, setPasting] = useState(false);
-  const [prError, setPrError] = useState<string | null>(
-    initialError ?? opened.error,
-  );
+  const [prError, setPrError] = useState<string | null>(opened.error);
   const [fetching, setFetching] = useState(false);
   /** Where focus goes when the paste dialog closes. */
   const pasteButtonRef = useRef<HTMLButtonElement>(null);
@@ -463,23 +521,48 @@ export function ReviewProvider({
   /**
    * The address bar, corrected once to the spelling the page is showing.
    *
-   * GitHub answers to any capitalisation of an owner and a repository, so a
-   * permalink can arrive as `/Facebook/React/pull/2` while the review that
-   * came back is kept at `/facebook/react/pull/2`. `replaceState` rather than
-   * a push: the two are one page, and Back should leave the site rather than
-   * swap the capitals. With nothing open there is nothing to correct to — the
-   * URL that failed is the one this entry shows, error notice and all, and
-   * saying so here is what keeps Back to it from fetching again.
+   * GitHub answers to any capitalisation of an owner and a repository, and to
+   * a repository's old name, so a permalink can arrive as
+   * `/Facebook/React/pull/2` while the review that came back is kept at
+   * `/react/react/pull/2`. `replaceState` rather than a push: the two are one
+   * page, and Back should leave the site rather than swap the spelling. With
+   * nothing open there is nothing to correct to — the URL that failed is the
+   * one this entry shows, error notice and all, and saying so here is what
+   * keeps Back to it from fetching again.
+   *
+   * The correction waits for the end of this commit's effects. Next patches
+   * `replaceState` to keep its own state (the router tree, and the flag that
+   * says the entry is its to restore) in every entry written from outside it,
+   * but it installs that patch in an effect of the router, and a parent's
+   * effects run after its children's. Written from here directly, the entry's
+   * state is `null` — which Next's `popstate` handler ignores, so Back into it
+   * from `/faq`, where this page is not mounted to answer, changed the address
+   * bar and nothing else.
+   *
+   * A page restored under another address than its route's (see `arrive`)
+   * opens what the address names instead, and takes the site's name back from
+   * the route it was rendered for.
    */
   useEffect(() => {
-    if (!opened.path) {
+    let correction = 0;
+    if (opened.restored) {
+      document.title = SITE.name;
+    }
+    const parts = opened.pending && splitPullRequest(opened.pending.slice(1));
+    if (opened.pending && parts) {
+      open(pullRequestUrl(parts.repo, parts.number), opened.pending);
+    } else if (opened.path) {
+      const path = opened.path;
+      correction = window.setTimeout(() => showPath(path, true), 0);
+    } else {
       shownPathRef.current = window.location.pathname;
-      return;
     }
-    if (window.location.pathname !== opened.path) {
-      window.history.replaceState(null, '', opened.path);
-    }
-  }, [opened.path]);
+    return () => {
+      window.clearTimeout(correction);
+      // A fetch this page started must not settle over whatever replaced it.
+      generationRef.current += 1;
+    };
+  }, [opened, open]);
 
   const startPasting = useCallback(() => setPasting(true), []);
   const stopPasting = useCallback(() => setPasting(false), []);
@@ -505,13 +588,13 @@ export function ReviewProvider({
   const address = useMemo<PullRequestAddress>(() => {
     if (review.pr) {
       openedOnce.current = true;
-      return splitPullRequest(review.pr.url) ?? initialAddress;
+      return splitPullRequest(review.pr.url) ?? opened.address;
     }
     // A closed review names nothing; only a page that has shown nothing yet
     // keeps the address it arrived with, so a failed permalink stays in the
     // boxes for correcting.
-    return openedOnce.current ? NO_ADDRESS : initialAddress;
-  }, [review.pr, initialAddress]);
+    return openedOnce.current ? NO_ADDRESS : opened.address;
+  }, [review.pr, opened.address]);
 
   const controls = useMemo<ReviewControls>(
     () => ({
