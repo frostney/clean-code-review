@@ -127,7 +127,7 @@ brakes, outside in:
 
 | Brake | Setting |
 |---|---|
-| Vercel Firewall rate limits, per client IP | `POST /eve/v1/session` 30/10 min · `/api/github-pr` 20/10 min · `/eve/v1/*` 120/min |
+| Vercel Firewall rate limits, per client IP | `/eve/v1/session` 30/10 min · `/api/github-pr`, `/owner/repo/pull/N` and server actions 20/10 min each · `/eve/v1/*` 120/min |
 | AI Gateway budget on the project | $15 per week (`vercel ai-gateway budgets set project clean-code-review --limit 15 --refresh-period weekly`) |
 | Per-session spend cap | `maxTokenCostUsdPerSession` in `agent/agent.ts` |
 | In-agent per-address limit on new sessions | `agent/channels/eve.ts`, best effort, one instance's memory |
