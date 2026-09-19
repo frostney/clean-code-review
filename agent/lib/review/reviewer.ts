@@ -1,27 +1,14 @@
 /**
- * The reviewer: Luna writes the prose half of the review from Jev's findings.
+ * Luna writes the prose review from Jev's findings, one model call per part
+ * (an overall part, then file batches), all started at once but streamed in
+ * fixed order so the combined text is always a well-formed review.
  *
- * A review is split into parts — batches of files, plus one overall part with
- * the decision — and every part is one model call, all started at once
- * through the AI Gateway. The parts are streamed back to the caller in a
- * fixed order (overall first, then the batches), so the combined text is
- * always a well-formed review even while it is still arriving: a part that
- * finished early simply flushes when its turn comes. Each part is cached for
- * an hour on its own, but only once it has finished on its own: a part cut
- * off at its output ceiling is written once more with twice the room, and one
- * cut off even then is shown as far as it got, marked incomplete, and never
- * cached.
+ * Only parts that finished on their own are cached; a part cut off twice is
+ * shown as far as it got and marked incomplete.
  *
- * Every part that ran is paid for, finished or not. A part that reports its
- * cost adds that; one that fails or is cancelled first cannot say, and adds
- * what it plausibly used instead (`lunaFailedCallUsd` in `../spend/spend.ts`): its
- * prompt and what it had streamed, or nothing when it was never sent or was
- * turned away.
- *
- * The model's text never reaches the reader as it was written: a file part
- * has read someone else's code, so every line of it shaped like one of the
- * adapter's signal lines is dropped (`withoutSignalLines`), and so is every
- * section it was not asked for (`onlyOwnSections`).
+ * File parts read untrusted code, so their output is filtered: lines shaped
+ * like adapter signal lines are dropped (`withoutSignalLines`), as are
+ * sections the part was not asked for (`onlyOwnSections`).
  */
 import { streamText } from 'ai';
 
@@ -48,46 +35,35 @@ import {
   withoutSignalLines,
 } from './summary';
 
-/**
- * Bump when the reviewer's instructions change, so cached parts expire. 11:
- * parts cached before model text was stripped of signal lines.
- */
+/** Bump when the reviewer's instructions or output handling change, so cached parts expire. */
 const REVIEW_VERSION = 11;
 
-/** How much of a file a file part is shown; the findings carry the rest. */
+/** The findings cover the rest of the file. */
 const FILE_EXCERPT_CHARS = 8_000;
 
-/** How much of a pull request's body the overall part is shown. */
 const PR_BODY_CHARS = 2_000;
 
 /**
- * A ceiling on what one part may write, reasoning included, as a safety net
- * and never as a length control: the 300-character rule per file is the
- * prompt's to keep. A file part is fed up to 8,000 characters of someone
- * else's code per file, and without a ceiling that text could keep the model
- * writing. The most measured on real reviews, over few samples, was 816
- * tokens for a 6-file batch of a 24-file pull request and 183 for the overall
- * part, so these sit five and ten times above that. A part that reaches its
- * ceiling anyway is written again with `RETRY_CEILING_FACTOR` times the room.
+ * A safety net against untrusted code keeping the model writing, not a
+ * length control (the prompt owns that); reasoning counts against it.
+ * Measured peaks were 816 tokens for a 6-file batch and 183 for overall, so
+ * these sit 5x and 10x above.
  */
 const MAX_OUTPUT_TOKENS: Record<ReviewPart['role'], number> = {
   files: 4000,
   overall: 2000,
 };
 
-/** How much more room a part cut off at its ceiling is given for its one retry. */
 const RETRY_CEILING_FACTOR = 2;
 
-/** Jev's yes/no answers are odds; at even odds or better the smell is a finding. */
+/** Jev's yes/no answers are probabilities; at or above this, the smell is a finding. */
 const EVEN_ODDS = 0.5;
 
-/** The top of the five-level score scale the questions answer on. */
+/** Index of the top level on the five-level score scale. */
 const TOP_LEVEL = 4;
 
-/** How many findings the overall part is given per file: the strongest few. */
 const OVERALL_FINDINGS = 5;
 
-/** What the reviewer is told: Jev's findings per file, in words, and nothing else. */
 function reviewerMessage(
   input: SummarizeInput,
   mode: ReviewPart['role'],
@@ -126,7 +102,6 @@ function reviewerMessage(
         scales,
       };
     }
-    // A file part reads the file first, then applies the judge's findings to it.
     const code =
       file.content.length > FILE_EXCERPT_CHARS
         ? `${file.content.slice(0, FILE_EXCERPT_CHARS)}\n… (truncated)`
@@ -154,18 +129,15 @@ interface PlannedPart {
   key: string;
 }
 
-/** A part as a run starts it: from the cache, or to be written. */
 interface PlanEntry extends PlannedPart {
-  /** The cached text, or null when Luna has to write it. */
   hit: string | null;
 }
 
-/** A review about to run: every part, and which of them the cache already has. */
 export interface ReviewPlan {
   parts: PlanEntry[];
 }
 
-/** Overall first, then batches of files, in order. */
+/** Overall first; the stream order depends on it. */
 function planParts(input: SummarizeInput): PlannedPart[] {
   const parts: PlannedPart[] = [];
   const overall = {
@@ -203,7 +175,6 @@ function planParts(input: SummarizeInput): PlannedPart[] {
   return parts;
 }
 
-/** Plan a review: its parts, and a cache read for each. */
 export async function planReview(input: SummarizeInput): Promise<ReviewPlan> {
   const parts = await Promise.all(
     planParts(input).map(async (p) => ({
@@ -214,19 +185,14 @@ export async function planReview(input: SummarizeInput): Promise<ReviewPlan> {
   return { parts };
 }
 
-/** Everything one attempt at a part is sent. */
 const promptChars = (p: PlannedPart) =>
   p.message.length + REVIEWER_INSTRUCTIONS.length;
 
-/** What one attempt at a part is reserved at: its prompt, and its output at the full ceiling. */
 function attemptEstimateUsd(p: PlannedPart, ceiling: number): number {
   return lunaPartEstimateUsd(promptChars(p), ceiling);
 }
 
-/**
- * What running this plan is reserved at: one attempt at each part the cache
- * does not have, at its full ceiling. Zero when the whole review is cached.
- */
+/** Covers one attempt per uncached part; a ceiling retry is not reserved. */
 export function reviewEstimateUsd(plan: ReviewPlan): number {
   return plan.parts
     .filter((p) => p.hit === null)
@@ -240,11 +206,9 @@ export function reviewEstimateUsd(plan: ReviewPlan): number {
 export interface ReviewUsage {
   inputTokens: number;
   outputTokens: number;
-  /** What the parts that reported cost, by the gateway or, failing that, by their tokens. */
   costUsd: number;
-  /** What every attempt that never reported plausibly cost: failed, cancelled or timed out. */
+  /** Estimated cost of attempts that failed or were cancelled before reporting. */
   unreportedUsd: number;
-  /** True when every part came from the cache. */
   cached: boolean;
 }
 
@@ -258,16 +222,14 @@ export function emptyReviewUsage(): ReviewUsage {
   };
 }
 
-/** What a review is settled at: what reported, and what the rest plausibly cost. */
 export function reviewChargeUsd(usage: ReviewUsage): number {
   return usage.costUsd + usage.unreportedUsd;
 }
 
 /**
- * Why the other parts of a review were stopped: one part failed. They were
- * sent to the same gateway at the same moment, so a part stopped with nothing
- * written is charged as the failed one was: nothing when that one was turned
- * away (a bad key, a rate limit, no connection), its prompt otherwise.
+ * Abort reason for sibling parts when one fails. They hit the same gateway at
+ * the same moment, so a stopped sibling is charged as the failed one was:
+ * nothing if it was turned away, its prompt otherwise.
  */
 class PartFailed extends Error {
   readonly processed: boolean;
@@ -277,11 +239,7 @@ class PartFailed extends Error {
   }
 }
 
-/**
- * Read one attempt's stream to its end: its text to `text`, and every
- * character of output, answer and reasoning, counted in `seen`. Throws when
- * the call failed or was cancelled, which the stream reports as a part.
- */
+/** `seen` counts answer and reasoning characters. Failure and cancellation arrive as stream parts and are thrown. */
 async function readParts(
   parts: AsyncIterable<{ type: string; text?: string; error?: unknown }>,
   text: ReturnType<typeof withoutSignalLines>,
@@ -306,11 +264,8 @@ async function readParts(
 }
 
 /**
- * One attempt at a part: stream its text to `push`, without signal lines,
- * then add what it cost to `usage`. Resolves with why it stopped. An attempt
- * whose signal has already aborted is never sent, and costs nothing. One
- * that fails or is cancelled, which the SDK reports as an error part or by
- * throwing from its usage, adds what it plausibly used and throws.
+ * Resolves with the finish reason. An already-aborted signal means nothing is
+ * sent or charged; a failed attempt adds its estimated cost and rethrows.
  */
 async function attempt(
   p: PlannedPart,
@@ -327,7 +282,6 @@ async function attempt(
     prompt: p.message,
     system: REVIEWER_INSTRUCTIONS,
   });
-  // Signal lines first, then sections this part was not asked for.
   const sections = onlyOwnSections(push, p.part);
   const signals = withoutSignalLines(sections.write);
   const text = {
@@ -337,7 +291,6 @@ async function attempt(
     },
     write: signals.write,
   };
-  /** Output received, answer and reasoning both: what a failed call is charged for. */
   const seen = { chars: 0 };
   try {
     await readParts(stream.stream, text, seen, signal);
@@ -370,17 +323,15 @@ async function attempt(
   }
 }
 
-/** The section a part's own text stopped in: its last heading, or null when it wrote none. */
 function lastSection(text: string): string | null {
   const parsed = parseSummaryText(text);
   return parsed.files.at(-1)?.path ?? (parsed.overall ? OVERALL_SECTION : null);
 }
 
 /**
- * Write one part: one attempt, and one more with twice the room if the first
- * ran into its ceiling. Resolves true when the part finished on its own and
- * may be cached. A part cut off twice is left as far as it got, followed by a
- * `cutOffLine` for the section it stopped in and each one it never reached.
+ * Retries once with a larger ceiling if cut off. Resolves true when the part
+ * may be cached. A part cut off twice ends with a `cutOffLine` for the
+ * section it stopped in and each it never reached.
  */
 async function writePart(
   p: PlannedPart,
@@ -419,7 +370,6 @@ async function writePart(
   const cut = [
     ...(stopped === null ? [] : [stopped]),
     ...unreached,
-    // An overall part that wrote nothing at all is still the overall that is missing.
     ...(p.part.role === 'overall' && stopped === null ? [OVERALL_SECTION] : []),
   ];
   push(`\n${cut.map(cutOffLine).join('\n')}\n`);
@@ -429,12 +379,12 @@ async function writePart(
 interface StartedPart {
   kind: 'run';
   p: PlanEntry;
-  /** Settles when the part has stopped, with whether it may be cached. */
+  /** Resolves true when the part may be cached. */
   done: Promise<boolean>;
   attach(fn: (delta: string) => void): void;
 }
 
-/** Start one uncached part now; it buffers until it is its turn to stream. */
+/** Buffers until it is this part's turn to stream. */
 function startPart(
   p: PlanEntry,
   usage: ReviewUsage,
@@ -453,9 +403,8 @@ function startPart(
     }
   };
   const done = writePart(p, push, usage, signal);
-  // One part failing fails the review, so the others are stopped rather than
-  // paid for. Awaited in order below, and heard there; this handler is also
-  // what keeps a rejection nobody reached from ending the process.
+  // Stops sibling parts rather than paying for them. Also keeps a rejection
+  // that is never awaited from crashing the process.
   done.catch(onFailure);
   return {
     attach(fn) {
@@ -471,9 +420,8 @@ function startPart(
 }
 
 /**
- * Run a planned review. `emit` receives text in order. `usage` is filled in
- * place, so a caller whose run throws still knows what it cost; the promise
- * only settles once every part has stopped, so by then that figure is final.
+ * `usage` is filled in place so a caller whose run throws still knows the
+ * cost; it is final once the promise settles, since every part has stopped.
  */
 export async function runReview(
   plan: ReviewPlan,
@@ -485,7 +433,6 @@ export async function runReview(
   const combined = signal
     ? AbortSignal.any([signal, stop.signal])
     : stop.signal;
-  /** Stop every part, because one failed with `err`. */
   const stopFor = (err: unknown) => {
     if (!stop.signal.aborted) {
       stop.abort(
@@ -520,8 +467,6 @@ export async function runReview(
       run.attach(write);
       const complete = await run.done;
       write('\n');
-      // Cache this part on its own, from its own text: everything written
-      // since it started. Never a part that was cut off.
       const own = complete
         ? partText(chunks.slice(from).join(''), run.p.part)
         : null;
@@ -541,7 +486,7 @@ function ensureTrailingNewline(s: string): string {
   return s.endsWith('\n') ? s : `${s}\n`;
 }
 
-/** A part's own text, re-serialised for the cache: only the sections it owns (`ownsSection`). */
+/** Keeps only sections the part owns, so a cached part cannot carry stray ones. */
 function partText(own: string, part: ReviewPart): string | null {
   const parsed = parseSummaryText(own);
   if (part.role === 'overall') {

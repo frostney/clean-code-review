@@ -1,15 +1,10 @@
 /**
- * The questions, in one place. Jev's instructions, the payload the page reads
- * and the meters on screen all derive from this list, so adding a row here is
- * the whole change.
+ * Single source for Jev's questions, the page payload and the meters, so
+ * adding a row here is the whole change. Changing wording requires bumping
+ * `QUESTIONS_VERSION` in `./judge.ts`.
  *
- * Every smell is a yes/no ("noul") phrased so that **yes is a finding**: a lit
- * row is a problem. Three scales sit alongside (size, nesting, verdict). The
- * groups follow the chapters of Robert C. Martin's *Clean Code* (2008).
- *
- * Answer types are TypeSafe's:
- *  - noul:   probability that the statement is true (0–1)
- *  - score:  a position on a five-level scale (0–4, fractions welcome)
+ * Every noul is phrased so that yes is a finding. Scores are 0–4 and may be
+ * fractional.
  */
 
 export type GroupId =
@@ -24,16 +19,14 @@ export type GroupId =
   | 'smells'
   | 'verdict';
 
-/** Rows that only make sense for some files. */
 type AppliesTo = 'all' | 'patch' | 'test';
 
 interface Base {
   id: string;
   label: string;
   group: GroupId;
-  /** The instruction Jev receives, phrased so a "yes" is a finding. */
   ask: string;
-  /** Default "all". "patch": only diffs. "test": only files whose path looks like a test. */
+  /** Defaults to "all". */
   appliesTo?: AppliesTo;
 }
 
@@ -342,12 +335,10 @@ export const QUESTIONS: readonly Question[] = [
 
 export const QUESTION_COUNT = QUESTIONS.length;
 
-/** Ids of the yes/no smell rows (everything that is not a scale). */
 export const SMELL_IDS: readonly string[] = QUESTIONS.filter(
   (q) => q.type === 'noul',
 ).map((q) => q.id);
 
-/** True for paths that look like tests. */
 function isTestPath(path: string): boolean {
   return (
     /(^|\/)(__tests__|tests?|specs?)\//i.test(path) ||
@@ -356,7 +347,6 @@ function isTestPath(path: string): boolean {
   );
 }
 
-/** The rows that apply to one file: all rows, minus patch-only rows for whole files and test-only rows for non-test paths. */
 export function questionsFor(file: {
   path: string;
   patch?: boolean;

@@ -1,7 +1,5 @@
 /**
- * Ask Jev directly (no eve in the loop) to judge one preset, or a file given
- * on the command line, and print the raw answers with timing. Proves gateway
- * access and shows what a single evaluation looks like.
+ * Calls Jev directly, bypassing eve, to prove gateway access.
  *
  *   bun run jev [preset-index | path/to/file]
  */
@@ -28,10 +26,8 @@ if (/^\d+$/.test(arg)) {
     : [{ content: text, path: arg }];
 }
 
-/** Dollars per file are printed fine enough to see a fraction of a cent. */
 const COST_DIGITS = 6;
 
-/** How wide the question-id column is. */
 const ID_WIDTH = 26;
 
 for (const file of files) {

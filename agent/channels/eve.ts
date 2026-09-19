@@ -8,18 +8,14 @@ import {
 import { eveChannel } from 'eve/channels/eve';
 
 /**
- * Best-effort brake for a public demo: at most SESSIONS_PER_WINDOW new
- * sessions per client address per window, counted in this instance's memory.
- * Fluid Compute keeps an instance warm across requests, so this catches a
- * loop hammering session creation; it is not a substitute for an AI Gateway
- * spend cap or a Vercel Firewall rate-limit rule, which are the real bounds.
+ * Best effort: counted per address in this instance's memory, which Fluid
+ * Compute keeps warm enough to catch a loop. The real bounds are the global
+ * spend brake and the Vercel Firewall.
  */
 const SESSIONS_PER_WINDOW = 30;
-/** Ten minutes: the window new sessions are counted over. */
 const WINDOW_MS = 600_000;
-/** How many addresses the map holds before it is thrown away wholesale. */
 const MAX_TRACKED_ADDRESSES = 10_000;
-const created = new Map<string, number[]>();
+const sessionStartsByAddress = new Map<string, number[]>();
 
 function sessionCreationBrake(): AuthFn<Request> {
   return (request) => {
@@ -29,8 +25,8 @@ function sessionCreationBrake(): AuthFn<Request> {
     if (!isCreate) {
       return null;
     }
-    // Vercel sets x-vercel-forwarded-for from the connection itself; a plain
-    // x-forwarded-for can be prefixed by the client, so take its last hop.
+    // x-vercel-forwarded-for comes from the connection itself; a client can
+    // prefix x-forwarded-for, so only its last hop is trusted.
     const forwarded =
       request.headers
         .get('x-forwarded-for')
@@ -41,12 +37,13 @@ function sessionCreationBrake(): AuthFn<Request> {
       request.headers.get('x-vercel-forwarded-for')?.split(',')[0]?.trim() ||
       request.headers.get('x-real-ip') ||
       forwarded.at(-1);
-    // Without an address there is nothing fair to count against.
     if (!ip) {
       return null;
     }
     const now = Date.now();
-    const recent = (created.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
+    const recent = (sessionStartsByAddress.get(ip) ?? []).filter(
+      (t) => now - t < WINDOW_MS,
+    );
     if (recent.length >= SESSIONS_PER_WINDOW) {
       throw new ForbiddenError({
         message:
@@ -54,24 +51,19 @@ function sessionCreationBrake(): AuthFn<Request> {
       });
     }
     recent.push(now);
-    created.set(ip, recent);
-    if (created.size > MAX_TRACKED_ADDRESSES) {
-      created.clear();
+    sessionStartsByAddress.set(ip, recent);
+    if (sessionStartsByAddress.size > MAX_TRACKED_ADDRESSES) {
+      sessionStartsByAddress.clear();
     }
     return null; // Not an identity: fall through to the real auth entries.
   };
 }
 
 /**
- * This is a public demo: the browser talks to the agent directly, with no
- * account in front of it. `none()` admits anonymous traffic explicitly, which
- * eve requires before it serves production browser requests. Anyone can
- * create sessions; the per-session cost cap in agent.ts bounds one tab, and
- * the brake above slows a loop. Before promoting the URL, add an AI Gateway
- * spend cap or a Vercel Firewall rate limit on POST /eve/v1/session.
+ * Public demo with no accounts. eve requires `none()` to be explicit before it
+ * serves anonymous production browser traffic.
  */
 export default eveChannel({
-  // Authenticated callers (Vercel OIDC, the local TUI) skip the brake; only
-  // anonymous traffic is counted.
+  // Order matters: authenticated callers (OIDC, local TUI) skip the brake.
   auth: [vercelOidc(), localDev(), sessionCreationBrake(), none()],
 });

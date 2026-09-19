@@ -10,9 +10,8 @@ import {
 } from './review';
 
 /**
- * The agent's standing instructions. Jev never reads a system prompt — each
- * question carries its own — so this describes the agent to eve's tooling
- * (Agent Runs, `eve info`) and to whoever opens the project.
+ * Jev never reads a system prompt (each question carries its own), so this is
+ * only for eve's tooling (Agent Runs, `eve info`) and human readers.
  */
 export function buildInstructions(): string {
   return [
@@ -28,18 +27,15 @@ export function buildInstructions(): string {
   ].join('\n');
 }
 
-/** A judge turn: the review as JSON. */
 export function judgeMessage(input: ReviewInput): string {
   return JSON.stringify({ kind: 'judge', ...clampReview(input) });
 }
 
 export interface SummarizeInput extends ReviewInput {
-  /** Jev's answers per path, as the page holds them. */
   judgments: Record<string, Answers>;
   pr?: { title: string; body?: string; url?: string };
 }
 
-/** A summarize turn: files, their judgments, and the pull request if there is one. */
 export function summarizeMessage(input: SummarizeInput): string {
   const clamped = clampReview(input);
   return JSON.stringify({
@@ -55,18 +51,10 @@ export type ParsedMessage =
   | { kind: 'summarize'; input: SummarizeInput }
   | { kind: 'other'; text: string };
 
-/**
- * Read a user message back. JSON with a `kind` is the page's format; plain
- * text (the eve TUI, curl) is judged as one file, or as a diff when it looks
- * like one. Anything else — framework notifications about background tasks,
- * for instance — is "other" and gets a bare acknowledgement.
- */
-/** The answers the page already has, when it sent any. */
 function readJudgments(raw: unknown): Record<string, Answers> {
   return raw && typeof raw === 'object' ? (raw as Record<string, Answers>) : {};
 }
 
-/** The pull request a review came from, when the message names one. */
 function readPullRequest(raw: unknown): SummarizeInput['pr'] {
   return raw &&
     typeof raw === 'object' &&
@@ -75,11 +63,7 @@ function readPullRequest(raw: unknown): SummarizeInput['pr'] {
     : undefined;
 }
 
-/**
- * The page's own format: a JSON object naming a `kind` and the files. Null
- * when the text is not that — not JSON at all, or JSON without usable files —
- * which is what sends the caller on to the plain-text readings.
- */
+/** Null when not JSON or without usable files, so the caller tries the plain-text readings. */
 function parseJsonMessage(trimmed: string): ParsedMessage | null {
   let raw: {
     kind?: unknown;
@@ -90,7 +74,6 @@ function parseJsonMessage(trimmed: string): ParsedMessage | null {
   try {
     raw = JSON.parse(trimmed) as typeof raw;
   } catch {
-    /* not JSON: fall through */
     return null;
   }
   const files = readFiles(raw.files);
@@ -113,6 +96,10 @@ function parseJsonMessage(trimmed: string): ParsedMessage | null {
   return null;
 }
 
+/**
+ * Plain text (eve TUI, curl) is judged as a snippet or diff. Anything else,
+ * such as framework notifications about background tasks, is `other`.
+ */
 export function parseMessage(text: string): ParsedMessage {
   const trimmed = text.trim();
   if (trimmed.startsWith('{')) {
@@ -151,12 +138,11 @@ function readFiles(raw: unknown): ReviewFile[] | null {
       path: f.path as string,
       ...(f.patch === true ? { patch: true } : {}),
     }));
-  // The page applies the same rule; this is the guard for any other caller.
-  // Prose the page shows beside the code is not judged, so it is not read.
+  // Guards callers other than the page; prose is dropped because it is never judged.
   return partitionJudgeable(files).judgeable;
 }
 
-/** A rough tell for code versus prose, so a framework notification is not judged as a snippet. */
+/** Keeps framework notifications from being judged as snippets. */
 function looksLikeCode(text: string): boolean {
   if (/^(\[Task state\]|Background task)/.test(text)) {
     return false;

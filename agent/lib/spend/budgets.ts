@@ -1,63 +1,38 @@
 /**
- * The model budgets, in a module that imports nothing: the eve adapter and the
- * MCP endpoint enforce them through `./spend.ts`, and the page, the FAQ,
- * /privacy, llms.txt and the Markdown twins quote them, so a cap cannot change
- * in one place and still be promised in another. It also holds the one reply
- * a refused page turn gives, because the agent writes it and the browser reads
- * it, and the browser must not import the cache.
+ * Imports nothing, so the browser can use it without pulling in the cache.
+ * The page, FAQ, /privacy, llms.txt and Markdown twins quote these caps, so
+ * change them only here.
  *
- * Two scopes, each counted on its own, per clock hour and per UTC day, across
- * every function instance. A per-address count cannot protect the project's
- * $15 weekly AI Gateway budget: one address looping at its full share, or many
- * addresses at once, would drain it in hours. Together the two days come to
- * $14 a week, under that budget. Once a scope's hour or day is spent, work
- * that needs a model is refused until the window turns; work answered entirely
- * from the cache is still served.
+ * Caps are global rather than per address because per-address limits cannot
+ * protect the $15 weekly AI Gateway budget; both daily caps total $14 a week.
  */
 
-/**
- * The page: every browser tab's judge and summarize turns together. A fresh
- * 24-file review measured about $0.02, so the hour holds about twenty of them.
- */
+/** All browser tabs together. A fresh 24-file review measured about $0.02. */
 export const PAGE_HOURLY_BUDGET_USD = 0.4;
 export const PAGE_DAILY_BUDGET_USD = 1;
 
-/**
- * The MCP endpoint: every caller together. At the worst call measured, about
- * $0.06, the hour holds four such calls and the day about sixteen.
- */
+/** All MCP callers together. The worst call measured about $0.06. */
 export const MCP_HOURLY_BUDGET_USD = 0.25;
 export const MCP_DAILY_BUDGET_USD = 1;
 
-/** A budget as the docs and the refusals print it: `$0.25`. */
 export const dollars = (usd: number) => `$${usd.toFixed(2)}`;
 
-/**
- * Which window of a budget ran out, or `unavailable` when the count could not
- * be read and uncached work is refused until it can be.
- */
+/** `unavailable`: the counter could not be read, so uncached work is refused. */
 export type BudgetWindow = 'hour' | 'day' | 'unavailable';
 
 const WINDOWS: readonly BudgetWindow[] = ['hour', 'day', 'unavailable'];
 
-/** A page turn's whole reply when the page's budget is spent: no model ran. */
 export interface PausedReply {
   kind: 'paused';
   window: BudgetWindow;
-  /** ISO time the window turns, and reviews come back. */
   resetsAt: string;
-  /**
-   * Milliseconds from the reply to `resetsAt`, by the server's clock. A
-   * browser whose clock runs ahead would otherwise read a reset that is still
-   * to come as one already past, and ask again straight away.
-   */
+  /** By the server's clock, so a browser with a fast clock does not retry at once. */
   waitMs: number;
 }
 
 /** Every paused reply starts with this, and no review or judgment does. */
 const PAUSED_PREFIX = '{"kind":"paused"';
 
-/** The reply the agent sends in place of a turn it refused. */
 export function pausedReply(
   window: BudgetWindow,
   resetsAt: Date,
@@ -69,11 +44,10 @@ export function pausedReply(
     waitMs: Math.max(0, resetsAt.getTime() - now.getTime()),
     window,
   };
-  // Written in key order `kind` first, so `PAUSED_PREFIX` recognises it.
+  // `kind` must stay the first key for `PAUSED_PREFIX` to match.
   return JSON.stringify(reply);
 }
 
-/** A turn's reply read as a paused reply, or null when it is anything else. */
 export function parsePaused(
   text: string | null | undefined,
 ): PausedReply | null {
@@ -105,7 +79,7 @@ export function parsePaused(
   }
 }
 
-/** True while a streamed reply so far could still be a paused one, so it is never painted as a review. */
+/** True while a partial stream could still become a paused reply, so it is not painted as a review. */
 export function mayBePaused(text: string): boolean {
   const head = text.trimStart();
   return head.length < PAUSED_PREFIX.length

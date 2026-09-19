@@ -1,11 +1,8 @@
 /**
- * Smoke test: send every preset review to the running agent and print one
- * line per judged file — turn latency, tokens, cost, and headline answers.
- * One session, cleared between turns, exactly as the page does it.
+ * Smoke test against a running agent, reusing one session cleared between
+ * turns as the page does.
  *
- *   bun run judge [host]
- *
- * Defaults to the local eve dev server (`npx eve dev --no-ui`).
+ *   bun run judge [host]   # defaults to `npx eve dev --no-ui`
  */
 import { Client, type MessageResponse } from 'eve/client';
 
@@ -14,20 +11,17 @@ import { type Answers, parseReview } from '../agent/lib/judging/schema';
 import { judgeMessage } from '../agent/lib/review/prompt';
 import { PRESETS } from '../examples/presets';
 
-/** Probabilities are stored 0–1 and printed as whole percents. */
 const PERCENT = 100;
 
-/** How wide each column of the one-line-per-file report is. */
 const LABEL_WIDTH = 15;
 const STATUS_WIDTH = 8;
 const MS_WIDTH = 5;
 const PATH_WIDTH = 24;
 const FILE_MS_WIDTH = 4;
 
-/** Dollars are printed to the cent Jev actually charges in. */
 const COST_DIGITS = 5;
 
-/** One judge turn is one evaluation: more steps means the agent looped. */
+/** More steps means the agent looped. */
 const STEPS_PER_TURN = 1;
 
 const host = process.argv[2] ?? 'http://127.0.0.1:2000';

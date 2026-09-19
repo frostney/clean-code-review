@@ -3,13 +3,7 @@ import { z } from 'zod';
 import type { ReviewResult } from '../review/review';
 import { QUESTIONS } from './questions';
 
-/**
- * What the meters render, in TypeSafe's own answer vocabulary: a noul carries
- * the probability of "yes", a score its position on the levels (with the
- * distribution behind it), a choice the winner plus a probability per option.
- * `confidence` is TypeSafe's per-question certainty for scores and choices;
- * nouls do not carry one.
- */
+/** TypeSafe's vocabulary: `noul` is the probability of "yes"; nouls carry no `confidence`. */
 export type Answer =
   | { type: 'noul'; noul: number }
   | {
@@ -66,7 +60,6 @@ const resultSchema = z.object({
   usage: usageSchema,
 });
 
-/** Keep the answers that match their question; drop the rest quietly. */
 function validAnswers(raw: Record<string, unknown>): Answers {
   const answers: Answers = {};
   for (const q of QUESTIONS) {
@@ -83,7 +76,6 @@ function validAnswers(raw: Record<string, unknown>): Answers {
   return answers;
 }
 
-/** Read the assistant's text as a review result. Null when it is not one. */
 export function parseReview(
   text: string | null | undefined,
 ): ReviewResult | null {

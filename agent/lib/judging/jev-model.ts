@@ -1,30 +1,12 @@
 /**
- * Jev in eve's model slot.
+ * Jev does not chat, but eve's `model` slot takes an AI SDK language model,
+ * so this adapter dispatches two turn kinds: judge (JSON result) and
+ * summarize (streamed Luna review). Anything else gets a bare ack.
  *
- * Jev evaluates state against typed questions; it does not chat. eve's
- * `model` takes AI SDK language models, so this is the smallest thing that
- * satisfies that contract. It handles two kinds of turn:
- *
- *  - judge:     run judge.ts on the review in the message; reply with the
- *               result as JSON text.
- *  - summarize: run reviewer.ts — parallel Luna calls, one per batch of files
- *               plus one for the decision — and stream the combined review
- *               text as this turn's reply. The page reads the turn's own
- *               stream; cancelling the turn aborts the calls.
- *
- * Anything else gets a bare acknowledgement. Sessions, streaming, limits and
- * Agent Runs all work as for any other model.
- *
- * Both kinds of turn answer to the page's model budget (`../spend/budgets.ts`), every
- * tab together. This is the one place every page turn passes through, and the
- * only place that knows both what a turn is about to run and what it cost,
- * which is why the brake sits here rather than in a channel or a route: a
- * turn reserves an estimate for the work the cache cannot answer before it
- * starts, and settles to what it plausibly cost once it stops, whether it
- * finished, failed or was cancelled (`../spend/spend.ts`). A refused turn is not a
- * failure: its whole reply is a `pausedReply`, which the page shows as a
- * notice. The MCP endpoint calls the same judge and reviewer without this
- * adapter, and counts against a budget of its own.
+ * The page's spend brake lives here, not in a channel or route, because this
+ * is the only place that knows both what a turn will run and what it cost. A
+ * refused turn is not a failure; its reply is a `pausedReply`. The MCP
+ * endpoint bypasses this adapter and has its own budget.
  */
 import type {
   LanguageModelV4,
@@ -58,17 +40,11 @@ import {
   judgeReview,
 } from './judge';
 
-/** Every page turn, in every tab and every instance, counted together. */
 const pageSpend = createSpendBrake('page', {
   dayUsd: PAGE_DAILY_BUDGET_USD,
   hourUsd: PAGE_HOURLY_BUDGET_USD,
 });
 
-/**
- * Reserve `estimateUsd` for a turn about to start, or the reply for a turn the
- * budget refuses. A turn whose work is all in the cache estimates nothing and
- * is never refused.
- */
 async function admit(
   estimateUsd: number,
 ): Promise<{ hold: Hold } | { paused: string }> {
@@ -78,10 +54,7 @@ async function admit(
     : { paused: pausedReply(admission.window, admission.resetsAt) };
 }
 
-/**
- * Run a planned review against its reservation, and settle it with whatever
- * the run cost, finished, failed or cancelled.
- */
+/** Settles the hold whether the run finishes, fails or is cancelled. */
 async function reviewWithin(
   hold: Hold,
   plan: Awaited<ReturnType<typeof planReview>>,
@@ -96,7 +69,6 @@ async function reviewWithin(
   }
 }
 
-/** Plan a review and reserve for its uncached parts. */
 async function admitReview(input: SummarizeInput) {
   const plan = await planReview(input);
   return { plan, ...(await admit(reviewEstimateUsd(plan))) };
@@ -121,7 +93,7 @@ const usageOf = (input: number, output: number): LanguageModelV4Usage => ({
 });
 const finished = { raw: 'stop', unified: 'stop' as const };
 
-/** Metadata the page reads off `step.completed`: the gateway's cost for eve's budget, and what the review was. */
+/** The page reads this off `step.completed`; eve's budget reads `gateway.cost`. */
 function reviewMetadata(usage: ReviewUsage) {
   return {
     gateway: { cost: String(usage.costUsd) },
@@ -155,9 +127,7 @@ async function judge(
   try {
     judged = await judgeReview(input, options.abortSignal);
   } catch (err) {
-    // Every file failed or was cancelled: settled at what those attempts
-    // plausibly cost, which is nothing for a gateway that turned them away.
-    // Anything else is a fault here, and keeps the reservation.
+    // Any error other than `JudgeFailedError` is our fault and keeps the full reservation.
     if (err instanceof JudgeFailedError) {
       await admitted.hold.settle(err.spentUsd);
     }
@@ -166,15 +136,14 @@ async function judge(
   await admitted.hold.settle(judgeChargeUsd(judged));
   const { result, cost, warnings, errors } = judged;
   return textResult(JSON.stringify({ kind: 'judged', ...result }), {
-    // eve's per-session cost limit and the page footer read the gateway's cost from here.
+    // eve's per-session cost limit and the page footer read this.
     providerMetadata: {
       gateway: { cost: String(cost) },
       judge: { kind: 'judged', model: result.model },
     },
     response: { modelId: result.model, timestamp: new Date() },
     usage: usageOf(result.usage.input_tokens, result.usage.output_tokens),
-    // A file Jev could not judge is absent from the result; say why in the
-    // step's warnings so Agent Runs shows it.
+    // Surfaces why a file is missing from the result in Agent Runs.
     warnings: [
       ...warnings,
       ...errors.map((message) => ({ message, type: 'other' as const })),
@@ -200,7 +169,7 @@ async function generate(
     admitted.hold,
     admitted.plan,
     () => {
-      /* A generate call has nobody to stream to; the whole text is the result. */
+      // Nothing to stream to; the whole text is the result.
     },
     options.abortSignal,
   );
@@ -217,7 +186,6 @@ export function jev(): LanguageModelV4 {
     async doStream(options) {
       const parsed = parseMessage(lastUserText(options));
       if (parsed.kind !== 'summarize') {
-        // Judge turns and acknowledgements arrive whole.
         const r = await generate(options);
         const text = r.content[0]?.type === 'text' ? r.content[0].text : '';
         const parts: LanguageModelV4StreamPart[] = [
@@ -244,25 +212,24 @@ export function jev(): LanguageModelV4 {
           }),
         };
       }
-      // A review streams as it is written.
       const admitted = await admitReview(parsed.input);
-      /** Stops the review when the reader goes away without a cancel reaching the signal. */
-      const dropped = new AbortController();
+      // The reader can go away without a cancel reaching `options.abortSignal`.
+      const readerGone = new AbortController();
       const signal = options.abortSignal
-        ? AbortSignal.any([options.abortSignal, dropped.signal])
-        : dropped.signal;
+        ? AbortSignal.any([options.abortSignal, readerGone.signal])
+        : readerGone.signal;
       return {
         stream: new ReadableStream<LanguageModelV4StreamPart>({
           cancel() {
-            dropped.abort();
+            readerGone.abort();
           },
           async start(controller) {
-            /** Enqueue unless the reader has gone: a closed stream must not fail the review, which still has to settle. */
+            // A closed stream must not fail the review, which still has to settle.
             const send = (part: LanguageModelV4StreamPart) => {
               try {
                 controller.enqueue(part);
               } catch {
-                dropped.abort();
+                readerGone.abort();
               }
             };
             send({ type: 'stream-start', warnings: [] });
@@ -288,8 +255,6 @@ export function jev(): LanguageModelV4 {
               return;
             }
             try {
-              // Every part is charged, finished or not: `reviewWithin`
-              // settles with what reported and what the rest plausibly used.
               const { usage } = await reviewWithin(
                 admitted.hold,
                 admitted.plan,

@@ -1,36 +1,26 @@
 /**
- * One retry for a model call, and how long to wait before it.
- *
- * Every attempt gets its own timeout. What went wrong decides the wait, and
- * the caller's signal decides whether there is a retry at all: our timeout and
- * the caller's cancel both surface as an `AbortError`, so the error's shape
- * cannot tell them apart, but the two signals can.
+ * Our timeout and the caller's cancel both surface as `AbortError`, so the
+ * signals, not the error, tell them apart.
  */
-/** The longest `retry-after` worth waiting for: a longer one is a limit that one retry will not outlast, so it is not retried. */
+/** A longer `retry-after` is a limit one retry will not outlast, so it is not retried. */
 const MAX_RETRY_AFTER_MS = 3000;
 
-/** With no `retry-after`, a pause somewhere in here, so parallel calls do not retry in step. */
+/** Without `retry-after`, jitter keeps parallel calls from retrying in step. */
 const JITTER_MIN_MS = 300;
 const JITTER_SPREAD_MS = 600;
 
 const MS_PER_SECOND = 1000;
 
-/**
- * The client errors worth trying again: a request timeout (the gateway reports
- * a connection that timed out below it as one) and too many requests.
- */
+/** The gateway reports an upstream connection timeout as 408. */
 const REQUEST_TIMEOUT = 408;
 const TOO_MANY_REQUESTS = 429;
 const RETRYABLE_CLIENT_ERRORS: readonly number[] = [
   REQUEST_TIMEOUT,
   TOO_MANY_REQUESTS,
 ];
-/** From here up the fault is the server's, and a second try may land. */
 const SERVER_ERROR = 500;
-/** From here to `SERVER_ERROR`, the request itself is wrong and will be wrong again. */
 const CLIENT_ERROR = 400;
 
-/** The HTTP status an AI SDK or AI Gateway error carries, if any. */
 function statusOf(err: unknown): number | undefined {
   const status = (err as { statusCode?: unknown } | null)?.statusCode;
   return typeof status === 'number' ? status : undefined;
@@ -38,7 +28,6 @@ function statusOf(err: unknown): number | undefined {
 
 type ResponseHeaders = Record<string, string>;
 
-/** An error's own response headers, as the AI SDK's `APICallError` carries them. */
 function ownHeaders(err: unknown): ResponseHeaders | undefined {
   const headers = (err as { responseHeaders?: unknown } | null)
     ?.responseHeaders;
@@ -47,18 +36,13 @@ function ownHeaders(err: unknown): ResponseHeaders | undefined {
     : undefined;
 }
 
-/**
- * The response headers of a failed call. `APICallError` carries them; the
- * AI Gateway's own errors wrap one as their `cause`, which is where the SDK's
- * own backoff looks too.
- */
+/** AI Gateway errors wrap the `APICallError` as `cause`, where the SDK's own backoff looks too. */
 function headersOf(err: unknown): ResponseHeaders | undefined {
   return (
     ownHeaders(err) ?? ownHeaders((err as { cause?: unknown } | null)?.cause)
   );
 }
 
-/** The wait a `retry-after-ms` or `retry-after` header asks for, in milliseconds. */
 function retryAfterMs(headers: ResponseHeaders | undefined) {
   const ms = Number.parseFloat(headers?.['retry-after-ms'] ?? '');
   if (Number.isFinite(ms)) {
@@ -75,18 +59,9 @@ function retryAfterMs(headers: ResponseHeaders | undefined) {
   return Number.isFinite(wait) ? wait : undefined;
 }
 
-/** What to do after a failed first attempt: give up, or wait this long and try once more. */
 type RetryDecision = { retry: false } | { retry: true; waitMs: number };
 
-/**
- * The decision, from the failure and from which of the two signals fired.
- * A cancel never retries. A timeout of ours was a stuck call, and goes again
- * at once. A rate limit, a timeout below us or a server error waits what the
- * server asked, or a jittered moment when it asked nothing; one that asks for
- * more than three seconds is not retried at all. Any other client
- * error would fail the same way twice. A failure with no status at all, a
- * dropped connection or a reply that did not parse, gets the jittered moment.
- */
+/** Our own timeout means a stuck call, so it retries immediately. */
 function retryDecision(
   err: unknown,
   { cancelled, timedOut }: { cancelled: boolean; timedOut: boolean },
@@ -119,7 +94,6 @@ function retryDecision(
   };
 }
 
-/** Sleep for `ms`, or reject as soon as `signal` aborts. */
 function pause(ms: number, signal?: AbortSignal): Promise<void> {
   if (ms <= 0) {
     return Promise.resolve();
@@ -142,10 +116,9 @@ function pause(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /**
- * Run `call` with a signal that aborts on the caller's cancel or after
- * `timeoutMs`, and run it once more when `retryDecision` says so. The SDK's
- * own retries must be off inside `call`: its backoff would sleep inside our
- * timeout, and a timeout firing mid-sleep is the stuck call this retry is for.
+ * Each attempt gets its own `timeoutMs`. Disable the SDK's retries inside
+ * `call`: its backoff would sleep inside our timeout and be mistaken for a
+ * stuck call.
  */
 export async function withOneRetry<T>(
   call: (signal: AbortSignal) => Promise<T>,

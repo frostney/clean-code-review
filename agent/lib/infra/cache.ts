@@ -1,31 +1,22 @@
 /**
- * A one-hour cache for judgments and reviews keyed by what was judged. On
- * Vercel this is the Runtime Cache (per region, shared across function
- * instances, survives deploys); anywhere else it is this process's memory.
- * Same code (and same question set) in, same answers out — Jev is
- * deterministic enough that a repeat is pure waste.
+ * Vercel Runtime Cache on a deploy (per region, shared across instances,
+ * survives deploys); process memory elsewhere. Jev is deterministic enough
+ * that re-judging identical input is pure waste.
  */
 import { createHash } from 'node:crypto';
 
-/** One hour, in seconds. */
 const CACHE_TTL_SECONDS = 3_600;
 
-/** Seconds are what the cache is configured in; milliseconds are what it stores. */
 const MS_PER_SECOND = 1_000;
 
-/** How many entries the in-memory fallback holds before it is emptied. */
 const MAX_MEMORY_ENTRIES = 5_000;
 
-/** How much of the digest names a key: enough that a collision is unthinkable. */
 const KEY_DIGEST_CHARS = 40;
 
 /**
- * What one item may hold: the Runtime Cache's own limit, two megabytes.
- * A `set` past it fails where nobody is listening — the catch below is the
- * only thing that hears it — so a caller whose value can be that big says how
- * big this one is, and an oversized value is computed, returned and not
- * stored. The memory fallback holds to the same limit rather than to none, so
- * that a deploy and a laptop skip the same values.
+ * The Runtime Cache's item limit. An oversized `set` fails silently, so
+ * callers with large values pass `sizeOf` and oversized values are not
+ * stored. Applied to the memory fallback too, so local runs match deploys.
  */
 const MAX_ITEM_BYTES = 2_000_000;
 
@@ -63,12 +54,10 @@ const memoryCache: CacheLike = {
 };
 
 /**
- * Where the Runtime Cache client sends a call, mirroring `getCache` in
- * `@vercel/functions` 3.9.8 (`cache/index.js`): the request context's own
- * cache when the platform put one there, the cache endpoint when both of its
- * variables are set and parse, and otherwise a memory of this instance's own,
- * with nothing more than one console warning. Asked on every strict call,
- * because the request context is per request.
+ * Mirrors the backend selection in `getCache` of `@vercel/functions` 3.9.8
+ * (`cache/index.js`), which silently falls back to per-instance memory with
+ * only a console warning. Checked per call because the request context is
+ * per request.
  */
 function runtimeCacheIsShared(): boolean {
   const context = (
@@ -95,17 +84,11 @@ function runtimeCacheIsShared(): boolean {
   }
 }
 
-/**
- * The store, and whether it is the one it should be. On Vercel a store that
- * is really this instance's memory is `shared: false`: fine for a judgment
- * cache, which only repeats work, and wrong for a counter every instance
- * must see (`../spend/spend.ts`).
- */
-let backend: Promise<CacheLike | null> | null = null;
+let runtimeClient: Promise<CacheLike | null> | null = null;
 
-/** The Runtime Cache client, or null when it could not be loaded. */
+/** Null when `@vercel/functions` could not be loaded. */
 function runtimeOf(): Promise<CacheLike | null> {
-  backend ??= (async () => {
+  runtimeClient ??= (async () => {
     try {
       const { getCache } = await import('@vercel/functions');
       const runtime = getCache({ namespace: 'clean-code-judge' });
@@ -117,12 +100,16 @@ function runtimeOf(): Promise<CacheLike | null> {
       return null;
     }
   })();
-  return backend;
+  return runtimeClient;
 }
 
+/**
+ * `shared: false` on Vercel means per-instance memory: fine for judgments,
+ * which only repeat work, wrong for spend counters every instance must see.
+ */
 async function backendOf(): Promise<{ store: CacheLike; shared: boolean }> {
   if (!process.env.VERCEL) {
-    // Off Vercel there is one process, and its memory is the whole store.
+    // Off Vercel there is one process, so its memory is the whole store.
     return { shared: true, store: memoryCache };
   }
   const runtime = await runtimeOf();
@@ -135,10 +122,8 @@ async function cache(): Promise<CacheLike> {
   return (await backendOf()).store;
 }
 
-/** Why a strict read or write did not happen: the store threw, or it is not the shared one. */
 class CacheUnavailableError extends Error {}
 
-/** The shared store, or a `CacheUnavailableError` when this instance only has its own memory. */
 async function sharedCache(): Promise<CacheLike> {
   const { store, shared } = await backendOf();
   if (!shared) {
@@ -150,14 +135,10 @@ async function sharedCache(): Promise<CacheLike> {
 }
 
 /**
- * Read a key from the shared store: undefined when it is not there, and a
- * throw when this instance has no shared store or the store threw.
- *
- * Undefined is not proof of a missing key. The Runtime Cache client catches
- * every failed read, a 5xx, a network error or its own 500 ms timeout, logs
- * it and answers null, exactly as it answers for a key that is not there. A
- * caller that must tell the two apart has to do it itself, as `../spend/spend.ts`
- * does with a key it knows is present.
+ * Throws when there is no shared store or it throws. Undefined does not prove
+ * a missing key: the Runtime Cache client swallows 5xx, network errors and
+ * its 500 ms timeout and answers null. See `../spend/spend.ts` for telling
+ * them apart.
  */
 export async function cacheGetStrict(key: string): Promise<unknown> {
   const store = await sharedCache();
@@ -169,11 +150,7 @@ export async function cacheGetStrict(key: string): Promise<unknown> {
   }
 }
 
-/**
- * Write a key to the shared store, and throw when this instance has none or
- * the store threw. As with a read, the Runtime Cache client catches a failed
- * write itself, so no throw is no proof that it landed.
- */
+/** Throws when there is no shared store, but the client swallows failed writes, so no throw does not prove it landed. */
 export async function cacheSetStrict(
   key: string,
   value: unknown,
@@ -188,18 +165,13 @@ export async function cacheSetStrict(
   }
 }
 
-/** A stable key for any JSON-serialisable description of the work. */
 export function cacheKey(kind: string, input: unknown): string {
   return `${kind}:${createHash('sha256').update(JSON.stringify(input)).digest('hex').slice(0, KEY_DIGEST_CHARS)}`;
 }
 
 /**
- * Read through: return the cached value or compute, store and return it.
- * Reports whether it was a hit. `ttl` is in seconds, and is the hour above
- * unless the caller has a reason for a shorter one — a pull request moves
- * while a judgment of fixed text does not. `sizeOf` measures a value the
- * store might refuse, in the bytes it would be stored as; without it every
- * value is assumed to fit, which is true of everything but a diff.
+ * `ttl` is in seconds. `sizeOf` returns stored bytes; omit it only when the
+ * value cannot approach `MAX_ITEM_BYTES`.
  */
 export async function cached<T>(
   key: string,
@@ -215,14 +187,14 @@ export async function cached<T>(
       return { hit: true, value: hit as T };
     }
   } catch {
-    /* a cache failure is never a judging failure */
+    // A cache failure must never fail judging.
   }
   const value = await compute();
   if (!sizeOf || sizeOf(value) <= MAX_ITEM_BYTES) {
     try {
       await store.set(key, value, { name, ttl });
     } catch {
-      /* same */
+      // Same.
     }
   }
   return { hit: false, value };
@@ -237,7 +209,7 @@ export async function cacheGet<T>(key: string): Promise<T | undefined> {
   }
 }
 
-/** Store a value for the hour above, or for `ttl` seconds when a caller needs longer. */
+/** `ttl` is in seconds. */
 export async function cacheSet(
   key: string,
   value: unknown,

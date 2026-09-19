@@ -1,10 +1,6 @@
-/**
- * Which files of a pull request to judge. Kept free of server-only code so the
- * page can import it: no fetch, no tokens.
- */
+/** Imported by the page, so it must stay free of server-only code. */
 import { partitionJudgeable, REVIEW_LIMITS } from '../review/review';
 
-/** Added plus removed lines in one file's diff section. */
 function changedLines(patch: string): number {
   let n = 0;
   for (const line of patch.split('\n')) {
@@ -19,11 +15,8 @@ function changedLines(patch: string): number {
 }
 
 /**
- * The files worth showing from a pull request: generated and non-code files
- * skipped; the code ordered by how much changed and capped at the review
- * limit; the prose — READMEs, docs — kept in its own, smaller allowance, since
- * it is read and not judged. Keeps the diff's own order among the kept files
- * so the page reads top-down. `dropped` is every file the caps left out.
+ * Code is capped to the most-changed files; prose has its own allowance.
+ * Kept files stay in diff order. `dropped` lists what the caps left out.
  */
 export function selectReviewFiles<T extends { path: string; content: string }>(
   files: readonly T[],

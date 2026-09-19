@@ -1,8 +1,5 @@
 /**
- * Exercise the summarize turn end to end: judge a preset (or a GitHub PR),
- * send the judgments back for a review, and read the review as it streams on
- * the turn's own response, exactly as the page does. Prints timings, the
- * parsed result, and whether it came from the cache.
+ * End-to-end judge then summarize, streaming the review as the page does.
  *
  *   bun run review [host] [preset-index | github PR url]
  */
@@ -17,10 +14,8 @@ import { isProsePath } from '../agent/lib/review/review';
 import { parseSummaryText } from '../agent/lib/review/summary';
 import { PRESETS } from '../examples/presets';
 
-/** Dollars are printed to the cent Jev actually charges in. */
 const COST_DIGITS = 5;
 
-/** How much of the review's prose the smoke test echoes. */
 const OVERALL_PREVIEW_CHARS = 200;
 const FILE_PREVIEW_CHARS = 100;
 
@@ -64,8 +59,8 @@ await session.clear();
 const resp = await session.send(summarizeMessage({ files, judgments, pr }));
 let buffer = '';
 let deltas = 0;
-let first = 0;
-let last = 0;
+let firstDeltaMs = 0;
+let lastDeltaMs = 0;
 let final = '';
 let meta: { cached?: boolean; model?: string } | undefined;
 let cost = 0;
@@ -74,10 +69,10 @@ for await (const e of resp) {
   if (e.type === 'message.appended') {
     buffer += String(e.data.messageDelta ?? '');
     deltas++;
-    if (!first) {
-      first = ms();
+    if (!firstDeltaMs) {
+      firstDeltaMs = ms();
     }
-    last = ms();
+    lastDeltaMs = ms();
   }
   if (e.type === 'step.completed') {
     meta = (
@@ -101,7 +96,7 @@ for await (const e of resp) {
   }
 }
 console.log(
-  `summarize: ${status}; deltas=${deltas} first=${first} ms last=${last} ms done=${ms()} ms; cached=${meta?.cached ?? '?'} model=${meta?.model ?? '?'} cost=$${cost.toFixed(COST_DIGITS)}`,
+  `summarize: ${status}; deltas=${deltas} first=${firstDeltaMs} ms last=${lastDeltaMs} ms done=${ms()} ms; cached=${meta?.cached ?? '?'} model=${meta?.model ?? '?'} cost=$${cost.toFixed(COST_DIGITS)}`,
 );
 const summary = parseSummaryText(final || buffer);
 console.log('decision:', summary.decision);

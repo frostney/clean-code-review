@@ -2,24 +2,16 @@ import { filesFromPatch } from '../agent/lib/judging/patch';
 import type { ReviewFile } from '../agent/lib/review/review';
 
 /**
- * The sample reviews behind the example chips. Each one is a real review: a
- * pull request, a small codebase, or a single file. They are deliberately
- * uneven in quality — a preset whose files all score the same teaches nothing
- * about what Jev is reading.
+ * Deliberately uneven in quality: a preset whose files all score the same
+ * shows nothing about what Jev is reading.
  */
 export interface Preset {
   label: string;
-  /** One line under the label: what this example is for. */
   blurb: string;
   files: ReviewFile[];
 }
 
-/**
- * A four-file pull request against a TypeScript billing service: one tidy
- * extraction, one new module that earns every smell it has, the tests that
- * came with it, and a config bump. Stored as the diff a reviewer would
- * actually be handed, and split per file the way the agent splits a paste.
- */
+/** Stored as a raw diff and split with the same code the agent uses for a pasted diff. */
 const REFUND_PR = `diff --git a/src/billing/refund-service.ts b/src/billing/refund-service.ts
 index 3c1a2f9..8b7d410 100644
 --- a/src/billing/refund-service.ts

@@ -1,10 +1,5 @@
 import { type ReviewFile, skipReason } from '../review/review';
 
-/**
- * Split a unified diff (`git diff` / a GitHub `.patch`) into one ReviewFile
- * per touched file. Each file keeps only its own headers and hunks, so Jev
- * judges the change to that file and nothing else.
- */
 export function filesFromPatch(patch: string): ReviewFile[] {
   const files: ReviewFile[] = [];
   const text = patch.replace(/\r\n?/g, '\n');
@@ -15,12 +10,11 @@ export function filesFromPatch(patch: string): ReviewFile[] {
     : /^(?=--- (?:a\/|\S))(?=[^\n]*\n\+\+\+ )/m;
   const sections = text.split(splitter).filter((s) => s.trim());
   for (const section of sections) {
-    // Nothing to judge without a hunk: binary files, pure renames, mode changes.
+    // No hunk: binary files, pure renames, mode changes.
     if (!/^@@ /m.test(section)) {
       continue;
     }
     const target = /^\+\+\+ (?:b\/)?([^\t\n]+)/m.exec(section)?.[1]?.trim();
-    // A deleted file has no "after" to judge.
     if (target === '/dev/null') {
       continue;
     }
@@ -34,7 +28,6 @@ export function filesFromPatch(patch: string): ReviewFile[] {
       patch: true,
       path: path.trim(),
     };
-    // Images, binaries and generated files are not code to judge.
     if (skipReason(file) !== null) {
       continue;
     }
@@ -43,7 +36,6 @@ export function filesFromPatch(patch: string): ReviewFile[] {
   return files;
 }
 
-/** True when the text looks like a unified diff rather than a source file. */
 export function looksLikePatch(text: string): boolean {
   return (
     /^diff --git /m.test(text) ||
@@ -52,10 +44,8 @@ export function looksLikePatch(text: string): boolean {
 }
 
 /**
- * The file as it reads after the change, as far as the hunks show it: context
- * and added lines, without the diff markers. Hunks are separated by a blank
- * line; no marker, since a marker in any one language's comment syntax would
- * read as foreign in the others.
+ * Hunks are separated by a blank line rather than a marker, since any comment
+ * syntax would be foreign to most languages.
  */
 export function afterImage(patch: string): string {
   const out: string[] = [];
@@ -79,7 +69,6 @@ export function afterImage(patch: string): string {
     } else if (line.startsWith(' ') || line === '') {
       out.push(line.slice(1));
     }
-    // '-' lines are the old code: not part of the after-image.
   }
   return out.join('\n');
 }
