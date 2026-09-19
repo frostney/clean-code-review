@@ -10,15 +10,8 @@ import { fileVerdict, smellCount, verdictFill, verdictScore } from './display';
 import { FilePath, LangChip, ProseChip, SmellCount } from './FileCard';
 import { PendingDot } from './PendingDot';
 
-/** The bar's fill is a fraction, and CSS wants it as a percentage. */
 const PERCENT = 100;
 
-/**
- * The files in this review, the way a review tool lists them: a row per file,
- * its verdict in one word, and a hairline of a bar so the shape of the review
- * is readable before a single card is. A row is also how a folded card is
- * reopened: clicking one expands that file and scrolls the page to it.
- */
 export function FileList({
   files,
   judgments,
@@ -31,16 +24,12 @@ export function FileList({
 }: {
   files: readonly ReviewFile[];
   judgments: Record<string, FileJudgment>;
-  /** Paths Jev was asked about twice and answered for neither. */
   failed: Record<string, true>;
-  /** Paths the site's model budget refused, each waiting for it to reset. */
   paused: Record<string, true>;
-  /** Paths the last turn failed for, not asked about again until Retry. */
   stalled: (path: string) => boolean;
-  /** Every card in the review is folded to its header. */
   allCollapsed: boolean;
   onToggleAll: () => void;
-  /** Expand that file's card and bring it into view. */
+  /** Expands that file's card and scrolls to it. */
   onSelect: (path: string) => void;
 }) {
   return (
@@ -62,17 +51,12 @@ export function FileList({
           {allCollapsed ? 'Expand all' : 'Collapse all'}
         </button>
       </div>
-      {/* Below the two-column breakpoint the list is a strip: one card per
-          file, scrolled sideways, with the next card's edge showing under a
-          fade so the row reads as scrollable rather than as a cut-off list.
-          The wrapper disappears at `lg`, where the strip becomes the sidebar
-          the sticky `nav` was written for. */}
+      {/* Below lg a sideways strip; the fade over the next card's edge
+          signals it scrolls. At lg the wrapper dissolves into the sidebar. */}
       <div className="relative lg:contents">
         <ul className="flex gap-2 overflow-x-auto pb-2 lg:block lg:gap-0 lg:overflow-visible lg:pb-0">
           {files.map((file) => {
-            // Prose is listed but not judged, so the row says what the file is
-            // and stops: a verdict word and a bar at zero would both read as a
-            // judgment nobody made.
+            // No verdict or bar for prose: both would read as a judgment.
             const prose = isProsePath(file.path);
             const answers = judgments[file.path]?.answers;
             const score = prose ? null : verdictScore(answers);

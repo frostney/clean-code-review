@@ -6,18 +6,11 @@ import { createJavaScriptRegexEngine } from 'shiki/engine/javascript';
 import type { HighlightReply, HighlightRequest, Token } from './highlight';
 
 /**
- * Where the page's code is coloured: off the main thread, one file per
- * message, so a fifty-file pull request is fifty short tasks here rather than
- * one long one in front of the reader's scroll.
- *
- * The JavaScript regex engine rather than the Oniguruma one. Measured on real
- * pull requests in a worker at a phone's CPU, it is as fast or faster on the
- * first pass — which is the only pass most files get — and it has no WASM to
- * fetch: Oniguruma's is 230 KB gzipped, a second and more on a slow phone
- * connection before the first card could be coloured.
- *
- * It starts with no grammars at all: a review is written in one or two
- * languages, and shiki ships more than two hundred.
+ * JavaScript regex engine, not Oniguruma: measured on real pull requests at
+ * phone CPU it is as fast or faster on the first pass (the only one most files
+ * get), and it avoids Oniguruma's 230 KB gzipped WASM, over a second on a slow
+ * phone connection. No grammars preloaded: a review uses one or two of shiki's
+ * 200+.
  */
 let ready: Promise<HighlighterCore> | null = null;
 
@@ -30,25 +23,20 @@ function highlighter(): Promise<HighlighterCore> {
       import('shiki/themes/github-dark.mjs'),
     ],
   });
-  // A highlighter that would not start — a theme chunk that did not arrive —
-  // is tried again by the next file rather than remembered as broken.
+  // Do not cache a failed start (e.g. a theme chunk that did not arrive).
   ready.catch(() => {
     ready = null;
   });
   return ready;
 }
 
-/** Grammars already fetched or in flight, so ten cards of one language fetch once. */
+/** Fetched or in flight, so cards sharing a language fetch it once. */
 const grammars = new Map<string, Promise<void>>();
 
 /**
- * Make `lang` safe to tokenise with. "text" is shiki's own no-op grammar and
- * is always there; everything else is fetched on first use and kept.
- *
- * Shiki's registry is imported here, on first use, rather than at the top:
- * it is a loader for every grammar shiki bundles, which is what lets the
- * bundler give each grammar a chunk of its own and this fetch only the ones a
- * review is written in.
+ * "text" is shiki's built-in no-op grammar. The registry is imported lazily so
+ * the bundler splits each grammar into its own chunk and only the ones a
+ * review uses are fetched.
  */
 function loadLanguage(shiki: HighlighterCore, lang: string): Promise<void> {
   if (lang === 'text') {
@@ -63,19 +51,16 @@ function loadLanguage(shiki: HighlighterCore, lang: string): Promise<void> {
         await shiki.loadLanguage(grammar());
       }
     })();
-    // A grammar that failed to arrive should be retried by the next card
-    // that needs it, not remembered as a permanently broken language.
+    // Not cached on failure: the next file in this language fetches it again.
+    // The file that failed stays plain.
     pending.catch(() => grammars.delete(lang));
     grammars.set(lang, pending);
   }
   return pending;
 }
 
-/**
- * Only what a line is drawn with crosses back: the text and its colour. Shiki's
- * offsets and font styles are never rendered, and every field left behind is
- * one fewer to copy for a file of several thousand tokens.
- */
+// Only text and colour are rendered, so only they are copied back; a file can
+// have thousands of tokens.
 async function tokenise({
   code,
   id,
@@ -84,8 +69,7 @@ async function tokenise({
 }: HighlightRequest): Promise<Token[][]> {
   const shiki = await highlighter();
   await loadLanguage(shiki, lang);
-  // Everything this file needed has arrived; what follows is the one part
-  // that can run away with a pathological grammar, and the page times it.
+  // Loading is done; the page times what follows (see FILE_TIMEOUT_MS).
   const started: HighlightReply = { id, tokenising: true };
   self.postMessage(started);
   const { tokens } = shiki.codeToTokens(code, { lang, theme });
@@ -100,8 +84,7 @@ async function tokenise({
 
 self.addEventListener('message', (event: MessageEvent<HighlightRequest>) => {
   const request = event.data;
-  // Shiki itself would not start: the page's failure to handle, with its
-  // pause before the next try, not a file to leave plain for good.
+  // Shiki would not start: the page replaces the worker and requeues the file.
   highlighter().then(
     () => answer(request),
     () => {
@@ -118,7 +101,7 @@ function answer(request: HighlightRequest) {
       self.postMessage(reply);
     },
     () => {
-      // A grammar that will not load is not worth a broken card.
+      // The grammar would not load, or shiki threw: the page leaves it plain.
       const reply: HighlightReply = { id: request.id, lines: null };
       self.postMessage(reply);
     },

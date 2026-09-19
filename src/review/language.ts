@@ -2,31 +2,14 @@ import type { BundledLanguage } from 'shiki/langs';
 
 import { isProsePath } from '@/agent/lib/review/review';
 
-/**
- * What language a file is written in, named the way shiki names it.
- *
- * The grammars are shiki's whole bundled registry — every language it ships,
- * fetched on first use in `src/review/highlight.worker.ts` — so nothing here is a list of
- * languages we support. What is written down is the one thing shiki does not
- * know: which file extension means which of its languages. "text" is shiki's
- * own no-op grammar and the answer whenever nothing places a file, so an
- * unknown extension renders as plain monospace rather than as the wrong
- * language.
- */
+/** "text" is shiki's no-op grammar, used when nothing places a file. */
 export type Lang = BundledLanguage | 'text';
 
 /**
- * Shiki's own name and aliases for every language a file here can be placed
- * in, copied out of `bundledLanguagesInfo` rather than imported from it.
- * That registry carries a loader for each of its two hundred grammars, and
- * importing it put the whole list on every page — the landing page included,
- * which only needs to know that `.ts` is "TypeScript". The grammars
- * themselves are still shiki's, fetched by the highlighting worker.
- *
- * Keyed by shiki's ids, so a language shiki drops is a type error here, and
- * the tables below may only name a language that has a row, so a language
- * added there without one is a type error too. Names and aliases are checked
- * against shiki's own registry by `language.test.ts` (`bun test`).
+ * Copied from shiki's `bundledLanguagesInfo` rather than imported: that module
+ * carries a loader for all 200+ grammars and would put them in every page's
+ * bundle. Keyed by shiki's ids so a dropped language is a type error;
+ * `language.test.ts` checks names and aliases against the registry.
  */
 export const SHIKI_NAMES = {
   astro: {
@@ -293,10 +276,9 @@ export const SHIKI_NAMES = {
   Record<BundledLanguage, { aliases: readonly string[]; name: string }>
 >;
 
-/** A language this page can place a file in: one with a name above. */
-type Named = keyof typeof SHIKI_NAMES;
+type KnownLang = keyof typeof SHIKI_NAMES;
 
-/** Every id and alias above, pointing at the name shiki prints for itself. */
+/** Ids and aliases → display name. */
 const NAME_BY_ID = new Map<string, string>(
   Object.entries(SHIKI_NAMES).flatMap(([id, info]) => [
     [id, info.name] as [string, string],
@@ -307,17 +289,12 @@ const NAME_BY_ID = new Map<string, string>(
   ]),
 );
 
-/** A language's own alternative names, for the fence names derived below. */
 const ALIASES_BY_ID = new Map<string, readonly string[]>(
   Object.entries(SHIKI_NAMES).map(([id, info]) => [id, info.aliases]),
 );
 
-/**
- * Extension → language. The list is what a code review realistically meets
- * rather than everything shiki can colour: a grammar nothing here points at is
- * still in the registry, it just needs a file named for it to be reached.
- */
-const BY_EXTENSION: Record<string, Named> = {
+// What a code review realistically meets, not everything shiki can colour.
+const BY_EXTENSION: Record<string, KnownLang> = {
   astro: 'astro',
   bash: 'shellscript',
   bat: 'bat',
@@ -414,12 +391,8 @@ const BY_EXTENSION: Record<string, Named> = {
   zsh: 'shellscript',
 };
 
-/**
- * The files a repository names rather than extends. `Dockerfile` and
- * `Makefile` carry no extension at all, and both turn up in almost every
- * change that touches how a project is built.
- */
-const BY_FILENAME: Record<string, Named> = {
+// Lower-cased basenames of files that have no extension.
+const BY_FILENAME: Record<string, KnownLang> = {
   dockerfile: 'docker',
   gnumakefile: 'make',
   makefile: 'make',
@@ -436,18 +409,17 @@ export function langOf(path: string): Lang {
   return BY_EXTENSION[extensionOf(path)] ?? BY_FILENAME[base] ?? 'text';
 }
 
-/** What the chip on a file header says: shiki's own name for the grammar. */
 export function langLabel(lang: Lang): string {
   return lang === 'text' ? 'Text' : (NAME_BY_ID.get(lang) ?? 'Text');
 }
 
-/** `src/billing/refund.ts` → `["src/billing/", "refund.ts"]`, for the two-tone path. */
+/** `src/billing/refund.ts` → `["src/billing/", "refund.ts"]`. */
 export function splitPath(path: string): [string, string] {
   const cut = path.lastIndexOf('/');
   return cut < 0 ? ['', path] : [path.slice(0, cut + 1), path.slice(cut + 1)];
 }
 
-/** The shortest of a language's extensions, alphabetical between equals. */
+/** Ties break alphabetically. */
 function shortestExtension(extensions: readonly string[]): string {
   return extensions.reduce((best, extension) =>
     extension.length < best.length ||
@@ -458,12 +430,9 @@ function shortestExtension(extensions: readonly string[]): string {
 }
 
 /**
- * Fence name → the extension a paste of that language is named after.
- *
- * Derived from the table above and shiki's own aliases rather than written a
- * second time: ```` ```c++ ```` places a paste because `cpp` is in the table
- * and `c++` is what shiki calls it, and a language added to the table is a
- * fence name the same day.
+ * Fence name → extension, derived from `BY_EXTENSION` and shiki's aliases so a
+ * language added to the table is a fence name too (```` ```c++ ```` works via
+ * `cpp`'s alias).
  */
 function fenceExtensions(): Record<string, string> {
   const byLang = new Map<Lang, string[]>();
@@ -486,7 +455,7 @@ function fenceExtensions(): Record<string, string> {
       names[name] = extension;
     }
   }
-  // The one fence name shiki does not carry as an alias of its own.
+  // Not a shiki alias.
   names.golang = 'go';
   return names;
 }
@@ -509,9 +478,8 @@ export function extensionFromHint(firstLine: string): string | null {
   if (/^#!.*\b(ba|z|k)?sh\b/.test(line)) {
     return 'sh';
   }
-  // A first-line comment that names a file: `// src/thing.ts`, `# thing.py`.
-  // Never a prose name: `// README.md — usage` above code is a comment about
-  // the README, and taking it as the file's name would make the paste unjudged.
+  // e.g. `// src/thing.ts`. Prose names are ignored: `// README.md — usage`
+  // above code is about the README, and would make the paste unjudged.
   const named = /^(?:\/\/|#|\/\*)\s*\S*?\.([A-Za-z0-9]+)\b/.exec(line);
   if (named) {
     const extension = named[1].toLowerCase();
@@ -522,20 +490,13 @@ export function extensionFromHint(firstLine: string): string | null {
   return null;
 }
 
-/**
- * How much of a paste is read when the language has to be guessed from the
- * code. The opening of a file is what places it; a whole paste is needless work.
- */
+/** The opening of a file is enough to place it. */
 const CONTENT_SAMPLE_CHARS = 4_000;
 
 /**
- * The guesses, in the order they are tried.
- *
- * Most-specific first — Go, Rust and Java have keywords nothing else uses,
- * while `const` and `=>` are shared, so TypeScript has to be ruled in (types,
- * `import … from`) before JavaScript is the answer. PHP and Swift are ruled in
- * ahead of the JavaScript rules for the same reason: `function name($a)` and
- * `let x: Int` would otherwise be read as a `function`/`let` declaration.
+ * Order matters, most specific first: `const` and `=>` are shared, so
+ * TypeScript must be ruled in before JavaScript, and PHP and Swift before the
+ * JavaScript rules would read `function name($a)` or `let x: Int` as JS.
  */
 const CONTENT_RULES: readonly {
   extension: string;
@@ -557,8 +518,6 @@ const CONTENT_RULES: readonly {
       /\bpublic\s+(?:final\s+|abstract\s+)?class\b/.test(t) ||
       /\bSystem\.out\b/.test(t),
   },
-  // PHP: the open tag settles it; otherwise `$variables` plus `->` or a
-  // function whose parameters are variables.
   { extension: 'php', matches: (t) => /<\?php\b/.test(t) },
   {
     extension: 'php',
@@ -566,8 +525,6 @@ const CONTENT_RULES: readonly {
       /\$\w+/.test(t) &&
       (/->\s*\w/.test(t) || /\bfunction\s+\w+\s*\([^)]*\$/.test(t)),
   },
-  // Swift: a Foundation-family import, a returning `func`, a typed binding, or
-  // a guard statement — none of which read as anything else here.
   {
     extension: 'swift',
     matches: (t) =>
@@ -611,9 +568,8 @@ const CONTENT_RULES: readonly {
 ];
 
 /**
- * The extension the code itself implies, when nothing names the file. Crude on
- * purpose: this only has to beat "txt", and a wrong grammar colours a few
- * keywords oddly rather than breaking anything.
+ * Crude on purpose: it only has to beat "txt", and a wrong grammar only
+ * colours a few keywords oddly.
  */
 export function extensionFromContent(code: string): string | null {
   const text = code.slice(0, CONTENT_SAMPLE_CHARS);

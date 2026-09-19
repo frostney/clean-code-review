@@ -1,7 +1,4 @@
-/**
- * The one moving part of "still working": a dot that pulses beside words that
- * hold still, so the words never fade below what can be read.
- */
+// The dot pulses rather than the words, so text never fades below legibility.
 export function PendingDot({ tone = 'bg-muted' }: { tone?: string }) {
   return (
     <span

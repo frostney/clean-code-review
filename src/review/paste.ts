@@ -3,17 +3,9 @@ import type { ReviewFile } from '@/agent/lib/review/review';
 
 import { extensionFromContent, extensionFromHint } from './language';
 
-/** `// file: src/a.ts` or `# file: src/a.ts` on a line of its own. */
 const FILE_MARKER = /^(?:\/\/|#)\s*file:\s*(.+?)\s*$/;
 
-/**
- * Turn whatever was pasted into a review.
- *
- * Three shapes, in the order they are recognised: a unified diff (split per
- * file, judged as a change), a multi-file paste marked up with `// file:`
- * lines, and anything else — one snippet, named after whatever the first line
- * gives away about its language.
- */
+/** A unified diff, a multi-file paste with `// file:` lines, or one snippet, tried in that order. */
 export function filesFromPaste(text: string): ReviewFile[] {
   if (looksLikePatch(text)) {
     return uniquePaths(filesFromPatch(text));
@@ -26,23 +18,21 @@ export function filesFromPaste(text: string): ReviewFile[] {
   const extension =
     extensionFromHint(text.split('\n', 1)[0] ?? '') ??
     extensionFromContent(body);
-  // No extension rather than `.txt` when nothing places it: `.txt` is a prose
-  // name, and a snippet named that way would be shown and never judged.
+  // Not `.txt`: that is a prose name, so the snippet would never be judged.
   return [
     { content: body, path: extension ? `snippet.${extension}` : 'snippet' },
   ];
 }
 
 /**
- * Two files cannot share a path: React keys, edits and judgments are all by
- * path, so a duplicate would hide one card and merge the other's answers.
- * A second `src/a.ts` becomes `src/a (2).ts`, a third `src/a (3).ts`.
+ * Keys, edits and judgments are all by path, so a duplicate would hide one
+ * card. A second `src/a.ts` becomes `src/a (2).ts`.
  */
 export function uniquePaths(files: readonly ReviewFile[]): ReviewFile[] {
   const taken = new Set<string>();
   return files.map((file) => {
     let path = file.path;
-    // A suffixed name can collide in turn, so keep counting until one is free.
+    // A suffixed name can itself collide.
     for (let n = 2; taken.has(path); n++) {
       path = suffixed(file.path, n);
     }
@@ -51,7 +41,7 @@ export function uniquePaths(files: readonly ReviewFile[]): ReviewFile[] {
   });
 }
 
-/** `src/a.ts` + 2 → `src/a (2).ts`. The extension stays put: it picks the grammar. */
+/** Keeps the extension last: it picks the grammar. */
 function suffixed(path: string, n: number): string {
   const base = path.lastIndexOf('/') + 1;
   const dot = path.lastIndexOf('.');
@@ -86,7 +76,6 @@ function filesFromMarkers(text: string): ReviewFile[] {
   return files.filter((f) => f.content.trim());
 }
 
-/** A pasted markdown fence is punctuation, not code. */
 function stripFence(text: string): string {
   const lines = text.split('\n');
   if (!/^```/.test(lines[0] ?? '')) {

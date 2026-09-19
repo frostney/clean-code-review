@@ -11,52 +11,35 @@ import {
 import { flushSync } from 'react-dom';
 
 /**
- * How many cards a review draws in full straight away — on the server, and so
- * in the first paint. Past this a card is its header and a space the size of
- * its body until the reader comes near it: a fifty-file pull request drawn in
- * full was a megabyte and a half of HTML and twenty thousand elements, almost
- * none of it on screen.
+ * Drawn in full on the server. The rest are header plus placeholder until
+ * near: a fifty-file pull request drawn in full measured 1.5 MB of HTML and
+ * 20,000 elements.
  */
 const EAGER_CARDS = 10;
 
-/**
- * How close a card has to come before it is drawn: a couple of phone screens
- * above and below, so a reader scrolling at an ordinary pace meets drawn
- * cards rather than blanks.
- */
+/** A couple of phone screens, so ordinary scrolling meets drawn cards. */
 const NEAR_MARGIN = '1600px 0px';
 
-/**
- * How long the page has to stop scrolling before a jump from the file list is
- * over, where the browser does not say so itself with `scrollend`.
- */
+/** Fallback where the browser lacks `scrollend`. */
 const SCROLL_SETTLE_MS = 200;
 
-/** Registers a card that is not drawn yet; returns how to stop watching it. */
+/** Returns an unwatch function. */
 export type WatchCard = (element: Element, path: string) => () => void;
 
 /**
- * Which cards past the first few are drawn, and the one observer that decides.
+ * A drawn card stays drawn: it holds the reader's state (folds, edits, caret).
  *
- * A card, once drawn, stays drawn: its state is the reader's (a folded
- * findings list, an edit in progress, a caret), and taking it away as it
- * scrolls off would lose that and redo the work on the way back.
+ * A jump from the file list draws its target at once, but cards it passes are
+ * not drawn until the scroll settles: their height change would move the
+ * target out from under the scroll. `KeepPlace` then holds the position.
  *
- * A jump from the file list draws its card at once and scrolls there. The
- * cards it passes on the way are left alone until the scroll is over: drawn
- * mid-flight they would change height above the card being scrolled to and
- * move it out from under the scroll. Once it has settled, whatever is near is
- * drawn as usual, and `KeepPlace` holds the card where the scroll left it.
- *
- * Cmd/Ctrl+F draws every card that is left, before the browser's find bar
- * opens: find-in-page searches the document, and a card that is only a header
- * and a space has no code in it to find. The keystroke itself is left alone,
- * so the find bar opens as it always does.
+ * Cmd/Ctrl+F draws every remaining card before the find bar opens, since a
+ * placeholder has no text to find. The keystroke is not prevented. A search
+ * opened another way (e.g. the browser menu) only finds drawn cards.
  */
 export function useCardWindow(reviewId: string, paths: readonly string[]) {
   const [drawn, setDrawn] = useState<Readonly<Record<string, true>>>({});
-  // Another review is another set of cards; reset in the render that carries
-  // it rather than an effect a frame later.
+  // Reset during render, not in an effect a frame later.
   const [drawnFor, setDrawnFor] = useState(reviewId);
   if (drawnFor !== reviewId) {
     setDrawnFor(reviewId);
@@ -74,8 +57,7 @@ export function useCardWindow(reviewId: string, paths: readonly string[]) {
       return;
     }
     const near = [...nearRef.current];
-    // A transition, so drawing a long card yields to the scroll that
-    // brought it near instead of holding up the next frame.
+    // Yields to the scroll that brought the card near.
     startTransition(() => {
       setDrawn((current) =>
         near.every((path) => current[path])
@@ -126,11 +108,7 @@ export function useCardWindow(reviewId: string, paths: readonly string[]) {
     };
   }, []);
 
-  /**
-   * Draw one card now, for a jump to it, and hold every other card as it is
-   * until the scroll that follows is over. The caller scrolls; this only has
-   * to know when that has stopped.
-   */
+  /** The caller scrolls; this only tracks when the scroll has stopped. */
   const jumpTo = useCallback(
     (path: string) => {
       jumpingRef.current = true;
@@ -151,22 +129,20 @@ export function useCardWindow(reviewId: string, paths: readonly string[]) {
       }
       window.addEventListener('scroll', onScroll, { passive: true });
       window.addEventListener('scrollend', done);
-      // A card already in place is a jump that never scrolls.
+      // For a jump that never scrolls.
       timer = window.setTimeout(done, SCROLL_SETTLE_MS);
     },
     [drawNear],
   );
 
-  // Drawn synchronously, inside the keystroke: the find bar opens as soon as
-  // the key is handled, and a search typed into it must already see the code.
+  // flushSync: the find bar opens as soon as the key is handled, and must
+  // already see the code.
   const pathsNowRef = useRef(paths);
   pathsNowRef.current = paths;
   useEffect(() => {
-    // The key the layout calls F — Dvorak's F is where QWERTY has Y — or,
-    // on a layout whose letters are not Latin, the key where F would be, as
-    // the browser itself reads the shortcut. With the platform's own
-    // modifier: Cmd on a Mac, where Ctrl+F moves the caret in an editor, and
-    // Ctrl everywhere else.
+    // Matches the browser's own reading of the shortcut: the layout's F (on
+    // Dvorak, QWERTY's Y), or the physical F key on non-Latin layouts. Cmd on
+    // Mac, where Ctrl+F moves the caret; Ctrl elsewhere.
     const mac = /Mac|iPhone|iPad/.test(navigator.platform);
     function isF(event: KeyboardEvent): boolean {
       return (
@@ -203,14 +179,10 @@ export function useCardWindow(reviewId: string, paths: readonly string[]) {
 }
 
 /**
- * Whether an element is on screen at all, for the order cards are coloured
- * in. One observer for every card that asks.
- *
- * A ref rather than state: it is read when the worker is free to take its next
- * file, and nothing on screen depends on it, so a card scrolling in and out of
- * view must not re-render the thousands of spans in its code to say so.
+ * Orders the highlight queue. A ref, not state: nothing rendered depends on
+ * it, and a re-render would repaint thousands of code spans.
  */
-const onScreen = new Map<Element, RefObject<boolean>>();
+const onScreenFlags = new Map<Element, RefObject<boolean>>();
 let screenObserver: IntersectionObserver | null = null;
 
 export function useOnScreen(
@@ -224,16 +196,16 @@ export function useOnScreen(
     }
     screenObserver ??= new IntersectionObserver((entries) => {
       for (const entry of entries) {
-        const flag = onScreen.get(entry.target);
+        const flag = onScreenFlags.get(entry.target);
         if (flag) {
           flag.current = entry.isIntersecting;
         }
       }
     });
-    onScreen.set(element, visible);
+    onScreenFlags.set(element, visible);
     screenObserver.observe(element);
     return () => {
-      onScreen.delete(element);
+      onScreenFlags.delete(element);
       screenObserver?.unobserve(element);
     };
   }, [ref]);

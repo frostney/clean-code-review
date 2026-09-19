@@ -7,24 +7,8 @@ import { plainReason } from './errors';
 import { PendingDot } from './PendingDot';
 
 /**
- * Luna's prose, styled as the one thing on this page that is not a meter: a
- * review comment. Who wrote it, what they concluded, what they said, and which
- * model said it.
- *
- * The same block does the whole change and one file, so the two read as the
- * same voice at two altitudes. What it concluded and who wrote it share the
- * bottom line: the decision on the left, then — for the review of the whole
- * change — Jev's own verdict, the smell count and what is running, with the
- * model on the right and the prose above them. Five states, all of them on
- * `data-summary`:
- * nothing written yet (a spinner where the text will be), the text arriving
- * word by word from the reviewer's own stream, the previous text held at half
- * opacity while a fresh one is written, the settled text, and the quiet
- * admission that there is none.
- *
- * The review is written from the judge's findings — the reviewer never sees the
- * code — so it names smells rather than lines, and its `code` spans are the
- * words it borrowed from the finding, not quotes from the file.
+ * One component for the whole-change and per-file reviews, so they read as
+ * one voice. The status is exposed on `data-summary`.
  */
 export function ReviewNote({
   status,
@@ -40,19 +24,15 @@ export function ReviewNote({
 }: {
   status: SummaryStatus;
   text: string | null | undefined;
-  /** Only the review of the whole change carries one. */
+  /** Only the whole-change review has one. */
   decision?: Decision | null;
-  /** A quiet last line inside the card, under the pills. */
   footnote?: ReactNode;
-  /** The review's own pills, immediately right of the decision badge. */
   pills?: ReactNode;
-  /** Why the review never arrived, when the agent said. */
   error?: string | null;
-  /** The model that wrote it, as the payload named it. */
   model?: string | null;
-  /** Luna was cut off in this block at its length limit: the text is as far as it got. */
+  /** Luna hit its length limit in this block. */
   incomplete?: boolean;
-  /** This is the block being written right now: the caret belongs at its end. */
+  /** Shows the streaming caret. */
   writing?: boolean;
   tone?: 'overall' | 'file';
 }) {
@@ -88,9 +68,7 @@ export function ReviewNote({
           </span>
         ) : null}
         {pills}
-        {/* Four pills and an attribution do not share one phone-width line, so
-            below the two-column breakpoint the attribution takes a line of its
-            own under them rather than wrapping to a lonely right margin. */}
+        {/* Own line on phones: four pills and this do not fit one line. */}
         <p
           className="w-full text-xs text-subtle lg:ml-auto lg:w-auto lg:text-right"
           data-generated-by={true}
@@ -103,7 +81,7 @@ export function ReviewNote({
   );
 }
 
-/** As much of a failure as belongs on one quiet line. */
+/** Fits one line. */
 const ERROR_CHARS = 120;
 
 function Body({
@@ -129,8 +107,6 @@ function Body({
       </p>
     );
   }
-  // Still quiet — a review that did not arrive is not an error banner — but
-  // with the reason on it when there is one.
   if (!text && incomplete) {
     return (
       <p className="text-base text-muted lg:text-sm" data-incomplete="true">
@@ -165,9 +141,7 @@ function Body({
 }
 
 /**
- * `` `code` `` spans as code. The reviewer is asked for backticks around
- * identifiers and paths, and this is the whole of the markdown the page reads:
- * the text is split on the ticks and rendered as React nodes, so nothing the
+ * The only markdown the page reads. Rendered as React nodes, so nothing the
  * model writes can become markup.
  */
 function ticked(text: string): ReactNode[] {
@@ -175,8 +149,7 @@ function ticked(text: string): ReactNode[] {
     part.length > 2 && part.startsWith('`') && part.endsWith('`') ? (
       <code
         className="rounded bg-track px-1 py-px font-mono text-xs text-ink lg:text-[0.9em]"
-        // A span's identity is where it sits in the text and what it says: the
-        // position alone would keep a stale node while the review streams in.
+        // Index alone would keep a stale node while the text streams in.
         key={`${i}:${part}`}
       >
         {part.slice(1, -1)}

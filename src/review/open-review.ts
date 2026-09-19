@@ -16,69 +16,49 @@ import type { PullRequestPayload } from '@/src/pull-request/actions';
 import { splitPatchHeader } from './diff';
 import { filesFromPaste, uniquePaths } from './paste';
 
-/** The pull request a review came from, as the page holds it. */
 interface OpenPullRequest {
   title: string;
   url: string;
-  /** The owner's avatar, for the line above the title. Empty when there is none. */
+  /** Empty when there is none. */
   avatarUrl: string;
-  /** The description, rendered on the server. Null when there is none. */
+  /** Rendered on the server. */
   body: ReactNode;
-  /** The same description as text, for the prompt that reaches Luna. */
+  /** For Luna's prompt. */
   bodyText: string;
 }
 
 export interface OpenReview {
   /** Changes whenever a different set of files is opened, never on an edit. */
   id: string;
-  /** The example this came from, for the chip that stays lit. */
+  /** Preset label. */
   preset: string | null;
-  /** Set when these files came from a GitHub pull request. */
   pr: OpenPullRequest | null;
-  /** A patch file holds only its hunks here; its headers wait in `headers`. */
+  /** A patch file holds only its hunks here; its headers are in `headers`. */
   files: ReviewFile[];
-  /** Path → the `diff --git`/`index`/`---`/`+++` run lifted off that patch. */
+  /** Path → the `diff --git`/`index`/`---`/`+++` lines lifted off that patch. */
   headers: Record<string, string>;
-  /**
-   * How many files of each kind the paste or preset had before the caps. The
-   * two are counted apart because they are capped apart: a review can lose
-   * code, prose or both, and a single total cannot say which.
-   */
+  /** Counts before the caps, per kind because each kind is capped separately. */
   total: { code: number; prose: number };
-  /** Paths whose text was cut to what one judgment reads. */
   truncated: Record<string, true>;
-  /** Files that are not code, and why. Never rendered, always reported. */
+  /** Not code; reported, never rendered as cards. */
   skipped: { path: string; reason: SkipReason }[];
   /**
-   * Files a pull request had that never reached `skipped` because the diff
-   * splitter dropped them first — binaries with no hunk, generated paths,
-   * pure deletions. Counted against what GitHub said the PR touches.
+   * Files the diff splitter dropped before `skipped` (no hunk, generated,
+   * deleted), counted against GitHub's changed-file total.
    */
   skippedCount: number;
 }
 
 /**
- * What a review actually shows. Only what will be judged, and the prose that
- * goes with it, makes it onto the page: unique paths, because every key, edit
- * and judgment is by path; at most `maxFiles` code files, because a turn
- * judges no more than that, plus at most `maxProseFiles` of writing, which is
- * shown for context and never sent; and no more characters per file than one
- * is judged on, so the code on screen is the code Jev read.
- *
- * A patch file is split here as well: the headers are the file's name in
- * machine and are not on screen, so they are not edited either — they wait in
- * `headers` and go back on the moment the file is sent.
- *
- * Images, binaries and generated files never become a card. A judgment about a
- * PNG or a lockfile is noise, and the agent drops them on its side too — so
- * every way in goes through the same partition, and what it left out is said
- * out loud rather than silently missing.
+ * Paths are made unique because every key, edit and judgment is by path.
+ * Content is truncated to what one judgment reads, so the code on screen is
+ * the code Jev read. Patch headers are lifted into `headers` so they are not
+ * edited, and go back on when the file is sent.
  */
 function opened(
   files: readonly ReviewFile[],
 ): Omit<OpenReview, 'id' | 'preset' | 'pr' | 'skippedCount'> {
   const { skipped } = partitionJudgeable(files);
-  // Code and prose in the order they came: a README pasted first stays first.
   const unique = uniquePaths(files.filter((f) => skipReason(f) === null));
   const truncated: Record<string, true> = {};
   const headers: Record<string, string> = {};
@@ -109,7 +89,6 @@ function opened(
   };
 }
 
-/** How many of these files are code and how many are writing. */
 function countKinds(files: readonly ReviewFile[]): {
   code: number;
   prose: number;
@@ -118,12 +97,7 @@ function countKinds(files: readonly ReviewFile[]): {
   return { code: files.length - prose, prose };
 }
 
-/**
- * The first `maxFiles` code files and the first `maxProseFiles` prose files,
- * in the order they came. Two caps rather than one, so a change that is
- * mostly documentation does not spend the review's turn on files nobody is
- * asked about.
- */
+// Two caps, so mostly-documentation changes do not crowd out code.
 function withinCaps(files: readonly ReviewFile[]): ReviewFile[] {
   let code = 0;
   let prose = 0;
@@ -147,7 +121,6 @@ export function fromPreset(preset: Preset, id: string): OpenReview {
   };
 }
 
-/** A paste: a diff, a file, or several files marked up with `// file:` lines. */
 export function fromPaste(text: string, id: string): OpenReview | null {
   const files = filesFromPaste(text);
   if (!files.length) {
@@ -162,12 +135,7 @@ export function fromPaste(text: string, id: string): OpenReview | null {
   };
 }
 
-/**
- * A pull request is a paste the page fetched for you. The diff is split per
- * file the same way a pasted one is, and then loses whatever is not worth a
- * judgment — lockfiles, bundles, images — before the review opens. Null when
- * nothing is left to judge.
- */
+/** Null when nothing is left to judge. */
 export function fromPullRequest(
   payload: PullRequestPayload,
   id: string,
@@ -188,31 +156,22 @@ export function fromPullRequest(
       url: payload.url,
     },
     preset: null,
-    // What GitHub counted as touched, minus what survived the splitter.
     skippedCount: Math.max(0, payload.changedFiles - judgeable.length),
     ...review,
-    // The diff splitter drops what is not code before this point, so the pull
-    // request's own skip list and the partition's are the same list seen
-    // twice; count each path once.
+    // Both lists can name the same path; count it once.
     skipped: [
       ...review.skipped,
       ...skipped
         .filter((path) => !review.skipped.some((s) => s.path === path))
         .map((path) => ({ path, reason: 'generated' as const })),
     ],
-    // The caps were applied before `opened` saw the list, so the totals it
-    // counted are the shown files; count the whole pull request instead, so
-    // the notice can say how many of each kind were left out.
+    // `selectReviewFiles` already capped the list `opened` counted, so
+    // recount from the whole pull request.
     total: countKinds(judgeable.filter((f) => skipReason(f) === null)),
   };
 }
 
-/**
- * "Skipped 3 images or binaries and 2 generated files" — what never became a
- * card, in words. A pull request's diff is already filtered by the agent's own
- * splitter, so those files arrive as a bare count with no reason attached;
- * they are still worth saying, just less precisely.
- */
+// Files the diff splitter dropped arrive only as `count`, with no reason.
 export function skippedText(
   skipped: readonly { reason: SkipReason }[],
   count: number,
@@ -237,11 +196,6 @@ export function skippedText(
   return parts.length ? `Skipped ${parts.join(' and ')}` : null;
 }
 
-/**
- * "Showing 24 of 30 code files and 10 of 12 prose files" — what the two caps
- * left out, counted apart. Null when nothing was cut: a review that fits says
- * nothing about fitting.
- */
 export function cappedText(review: OpenReview): string | null {
   const shownProse = review.files.filter((f) => isProsePath(f.path)).length;
   const shown = { code: review.files.length - shownProse, prose: shownProse };

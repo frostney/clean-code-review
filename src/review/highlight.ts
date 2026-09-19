@@ -13,12 +13,8 @@ import { useTheme } from '@/src/theme/useTheme';
 
 import type { Lang } from './language';
 
-/**
- * One theme per paper, and no third: the page is a review, not a colour
- * scheme. Shiki writes its colours into inline `style` attributes, which is
- * the one part of the page a CSS variable cannot reach — so the theme has to
- * be chosen here and the code re-tokenised when it changes.
- */
+// Shiki writes colours as inline styles, which CSS variables cannot reach, so
+// the theme is picked here and code is re-tokenised when it changes.
 const THEMES: Record<Theme, ShikiTheme> = {
   dark: 'github-dark',
   light: 'github-light',
@@ -26,16 +22,13 @@ const THEMES: Record<Theme, ShikiTheme> = {
 
 type ShikiTheme = 'github-dark' | 'github-light';
 
-/** One piece of a highlighted line: its text, and the colour shiki gave it. */
 export interface Token {
   content: string;
   color?: string;
 }
 
-/** One line of highlighted code: the tokens shiki produced for it. */
 export type TokenLine = readonly Token[];
 
-/** What the page asks the worker for: one file, one language, one theme. */
 export interface HighlightRequest {
   id: number;
   code: string;
@@ -44,10 +37,10 @@ export interface HighlightRequest {
 }
 
 /**
- * What comes back: first word that the file is being tokenised — everything
- * it needed has been fetched — then its lines, or null when its grammar would
- * not load. `unavailable` is the worker saying shiki itself would not start,
- * which is the worker's failure rather than the file's.
+ * `tokenising` comes first, once everything the file needs has loaded; the
+ * file timeout starts there. `lines: null` means the grammar would not load
+ * and the file stays plain. `unavailable` means shiki would not start; the
+ * page handles it as a load failure (see `loadFailed`).
  */
 export type HighlightReply =
   | { id: number; tokenising: true }
@@ -56,56 +49,42 @@ export type HighlightReply =
 
 interface Job {
   request: HighlightRequest;
-  /** On screen, so it goes before anything that is only rendered. */
   urgent: () => boolean;
   done: (lines: Token[][] | null) => void;
-  /** The card no longer wants it. */
   cancelled: boolean;
-  /** The worker has everything it needs and is inside shiki with this file. */
+  /** Loaded and inside shiki: a crash now is the file's fault. */
   tokenising: boolean;
-  /** Workers that failed to get this file started. */
   loadFailures: number;
 }
 
 /**
- * How many workers may fail to get one file started before the file is left
- * plain. A worker that cannot load is the connection's fault, not the
- * file's, but a file that is always the one in hand when it happens should
- * not keep the rest of the queue waiting on it.
+ * Load failures a file may be in hand for before it is left plain. They are
+ * usually the connection's fault, but a file that is always in hand when one
+ * happens must not hold up the queue.
  */
 const LOAD_TRIES = 3;
 
 /**
- * The one worker every card shares, and the queue in front of it.
- *
- * Highlighting a file is the most expensive thing this page does, and a pull
- * request's worth of it in one go was a single three-second task on a phone.
- * In the worker it costs the main thread nothing but the copy of the result;
- * the queue is what decides the order, and it hands the worker one file at a
- * time so that a card scrolled into view jumps ahead of every card that is
- * merely rendered.
+ * One worker shared by every card, fed one file at a time so a card scrolled
+ * into view jumps ahead of off-screen ones. On the main thread, a whole pull
+ * request measured as a single 3 s task on a phone.
  */
 let worker: Worker | null = null;
-/** Jobs not yet handed to the worker, oldest first. */
 const queue: Job[] = [];
-/** The job the worker is on, which cannot be recalled. */
+/** Already posted to the worker; cannot be recalled. */
 let running: Job | null = null;
 let nextId = 1;
 
 /**
- * How long one file may take to tokenise, counted from the worker saying it
- * has started — after the engine, the themes and the file's grammar have
- * arrived, so a slow connection is never mistaken for a slow file. The
- * slowest real file measured, at a phone's CPU, took a tenth of a second; a
- * file still going after five has hit a grammar's pathological case and would
- * hold every card behind it forever.
+ * Counted from the `tokenising` reply, so network time is excluded. The
+ * slowest real file measured at phone CPU took 0.1 s; one still going after
+ * 5 s has hit a grammar's pathological case and would block the queue forever.
  */
 const FILE_TIMEOUT_MS = 5_000;
 /**
- * How long the worker may take to get a file started: to load itself, shiki
- * and the file's grammar. A connection that has not managed that in a minute
- * has stalled, and the worker is started again after the usual pause; it is
- * never the file's fault, so the file is tried again too.
+ * For the worker to load itself, shiki and the grammar. On expiry the worker
+ * is replaced after the retry pause, and the stall counts toward the file's
+ * `LOAD_TRIES`.
  */
 const LOAD_TIMEOUT_MS = 60_000;
 let watchdog: ReturnType<typeof setTimeout> | null = null;
@@ -118,9 +97,9 @@ function stopWatchdog() {
 }
 
 /**
- * Files that ran out of time, so an edit or a theme switch does not hand the
- * same file back to a fresh worker to hang it again. Kept short: it only has
- * to outlive the review they were in.
+ * Files that timed out or crashed the worker, so an edit or theme switch does
+ * not hang a fresh worker on them again. Short: it only has to outlive one
+ * review.
  */
 const HUNG_KEEP = 20;
 const hung: string[] = [];
@@ -129,18 +108,13 @@ function hungKey({ code, lang }: HighlightRequest): string {
   return `${lang}\u0000${code}`;
 }
 
-/**
- * The worker would not start: the chunk failed to arrive, or the browser
- * refused it. Every card stays plain meanwhile, which is what a card shows
- * before its colours arrive anyway, and the worker is tried again after a
- * pause that doubles each time, up to a minute, while there is anything to
- * colour. A worker that answers resets the count.
- */
+// Backoff between worker restarts: doubles from 2 s up to 1 min, reset by any
+// reply other than `unavailable`. Cards stay plain meanwhile.
 const RETRY_FIRST_MS = 2_000;
 const RETRY_MOST_MS = 60_000;
 let failures = 0;
 let retryAt = 0;
-/** A retry is already scheduled, so a second wait does not stack another. */
+/** So a second wait does not stack another timer. */
 let retryPending = false;
 
 function drop(w: Worker) {
@@ -151,12 +125,13 @@ function drop(w: Worker) {
 }
 
 /**
- * The worker failed before it got to the file it had — it would not load, or
- * shiki, the themes or the grammar would not arrive: wait, then try a new
- * one. The file goes to the back of the queue, so the files behind it are not
- * held up by it, and after `LOAD_TRIES` workers it is left plain.
+ * The worker failed before tokenising: it crashed while loading, shiki would
+ * not start, or loading stalled past `LOAD_TIMEOUT_MS`. The file goes to the
+ * back of the queue and is left plain after `LOAD_TRIES`. A grammar that fails
+ * to load does not come here: the worker replies `lines: null` and the file
+ * stays plain without a retry.
  */
-function failed(w: Worker) {
+function loadFailed(w: Worker) {
   drop(w);
   const job = running;
   running = null;
@@ -210,7 +185,7 @@ function spawn(): Worker | null {
     }
     stopWatchdog();
     if ('unavailable' in reply) {
-      failed(w);
+      loadFailed(w);
       return;
     }
     failures = 0;
@@ -224,9 +199,8 @@ function spawn(): Worker | null {
     job.done(reply.lines);
     pump();
   });
-  // A worker that dies inside shiki died of the file it had — out of memory
-  // on a pathological file, say — and would die of it again: that file is
-  // treated as one that ran out of time. Dying any earlier is the worker's.
+  // Dying inside shiki (e.g. out of memory on a pathological file) would recur
+  // for that file, so it counts as a timeout; dying earlier is a load failure.
   w.addEventListener('error', () => {
     if (worker !== w) {
       return;
@@ -235,18 +209,15 @@ function spawn(): Worker | null {
     if (running?.tokenising) {
       timedOut(w);
     } else {
-      failed(w);
+      loadFailed(w);
     }
   });
   return w;
 }
 
 /**
- * The file in the worker ran out of time, or took the worker down with it.
- * The worker cannot be interrupted mid-file, so it is thrown away with the
- * grammars it had loaded; the file stays plain — and so does any copy of it
- * still waiting, a theme switch's say — and the next one goes to a new
- * worker.
+ * A worker cannot be interrupted mid-file, so it is discarded. The file, and
+ * any queued copy of it (e.g. from a theme switch), stays plain.
  */
 function timedOut(w: Worker) {
   watchdog = null;
@@ -283,11 +254,10 @@ function pump() {
   );
   const [job] = queue.splice(at, 1);
   running = job;
-  watchdog = setTimeout(() => failed(w), LOAD_TIMEOUT_MS);
+  watchdog = setTimeout(() => loadFailed(w), LOAD_TIMEOUT_MS);
   w.postMessage(job.request);
 }
 
-/** A file in the queue: what a card holds so it can drop it. */
 interface Ticket {
   cancel: () => void;
 }
@@ -319,34 +289,21 @@ function highlight(
       if (at >= 0) {
         queue.splice(at, 1);
       }
-      // Already with the worker: let it finish, and drop what it says.
+      // Already posted: let it finish and ignore the result.
       job.cancelled = true;
       job.done = () => undefined;
     },
   };
 }
 
-/** Every line as one plain token — what a card shows before its colours land. */
 function plainLines(code: string): TokenLine[] {
   return code.split('\n').map((line) => (line ? [{ content: line }] : []));
 }
 
 /**
- * Tokenise `code` as `lang`. Returns plain lines until the worker has coloured
- * it, so a card never renders empty and never waits on a grammar that is still
- * being fetched. A plain line is the same text on the same line as its
- * coloured one, so the colours arriving moves nothing.
- *
- * `debounceMs` is for the editor: re-tokenising on every keystroke is what
- * makes an overlay editor feel heavy, and 50 ms is below the threshold where
- * the colours look like they lag the caret.
- *
- * `onScreen` says whether the card is in view: a file in view is the next one
- * the worker takes, ahead of every card that is rendered but out of sight.
- *
- * The active theme is a dependency like the code is: switching the page to
- * dark re-tokenises every card, because shiki's colours are inline styles and
- * nothing else can repaint them.
+ * Returns plain lines until the colours arrive, so a card never renders empty;
+ * plain and coloured lines hold the same text, so nothing moves. `onScreen`
+ * puts the file ahead of off-screen cards in the queue.
  */
 export function useTokens(
   code: string,
@@ -367,8 +324,8 @@ export function useTokens(
         THEMES[theme],
         () => onScreen?.current === true,
         (result) => {
-          // Drawing a file's colours is a render of every span in it; as a
-          // transition it yields to a scroll or a keystroke in between.
+          // Renders every span in the file; as a transition it yields to
+          // scrolling and typing.
           startTransition(() => {
             setLines(result);
             setForCode(code);
@@ -389,8 +346,7 @@ export function useTokens(
 
   const plain = useMemo(() => plainLines(code), [code]);
 
-  // Between a keystroke and the next tokenisation the highlighted layer would
-  // otherwise show the previous text under the caret. Plain lines for the new
-  // text are wrong in colour for a few frames; stale text is wrong in content.
+  // Mid-edit, stale tokens would show the old text under the caret; plain lines
+  // are only wrong in colour for a few frames.
   return lines && forCode === code ? lines : plain;
 }
