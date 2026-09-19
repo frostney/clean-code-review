@@ -1,7 +1,7 @@
 import { ChevronRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import { FAQ, FAQ_LINK_PATTERN, FAQ_LINKS } from '@/src/site/faq';
+import { FAQ, FAQ_LINK_PATTERN, FAQ_LINKS } from './faq-content';
 
 const LINK_CLASS =
   'text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent';

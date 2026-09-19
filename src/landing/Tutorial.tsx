@@ -51,12 +51,12 @@ const LAST = LINES.length - 1;
 interface Tutorial {
   line: ReactNode | null;
   /** False once there is nothing left to advance, so the duck stops being a button. */
-  more: boolean;
+  canAdvance: boolean;
   step: number;
   next: () => void;
   nudging: boolean;
   /** Where focus goes when the last press removes both buttons. */
-  said: RefObject<HTMLParagraphElement | null>;
+  focusTarget: RefObject<HTMLParagraphElement | null>;
 }
 
 const TutorialContext = createContext<Tutorial | null>(null);
@@ -80,7 +80,7 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
   const { open, prError } = useReviewView();
   const [step, setStep] = useState(0);
   const [over, setOver] = useState(false);
-  const said = useRef<HTMLParagraphElement>(null);
+  const focusTarget = useRef<HTMLParagraphElement>(null);
 
   if (open && !over) {
     setOver(true);
@@ -96,11 +96,11 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<Tutorial>(
     () => ({
+      canAdvance: speaking && step < LAST,
+      focusTarget,
       line: speaking ? (LINES[step] ?? null) : null,
-      more: speaking && step < LAST,
       next,
       nudging: speaking && step === LAST,
-      said,
       step,
     }),
     [speaking, step, next],
@@ -119,17 +119,17 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
  * the morph starts from.
  */
 export function TutorialDuck({ children }: { children: ReactNode }) {
-  const { more, next, said, step } = useTutorial();
+  const { canAdvance, next, focusTarget, step } = useTutorial();
 
   const advance = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
-      keepFocus(event.currentTarget, step, said);
+      keepFocus(event.currentTarget, step, focusTarget);
       next();
     },
-    [next, said, step],
+    [next, focusTarget, step],
   );
 
-  if (!more) {
+  if (!canAdvance) {
     return children;
   }
 
@@ -345,17 +345,17 @@ const PIXEL_BUTTON = `${pixel.className} inline-flex min-h-6 min-w-6 cursor-poin
  * last sentence removes both buttons, so focus moves to the sentence.
  */
 export function TutorialBubble() {
-  const { line, more, next, said, step } = useTutorial();
+  const { line, canAdvance, next, focusTarget, step } = useTutorial();
   const { prError } = useReviewView();
   const { fetching } = useReviewControls();
   const floor = useBubbleFloor(fetching, prError);
 
   const advance = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
-      keepFocus(event.currentTarget, step, said);
+      keepFocus(event.currentTarget, step, focusTarget);
       next();
     },
-    [next, said, step],
+    [next, focusTarget, step],
   );
 
   if (!(line || prError)) {
@@ -399,14 +399,14 @@ export function TutorialBubble() {
             aria-live="polite"
             className={`${pixel.className} text-[12px] leading-[21px] opacity-100 [font-variant-ligatures:none] starting:opacity-0 motion-safe:transition-opacity motion-safe:duration-200`}
             key={step}
-            ref={said}
+            ref={focusTarget}
             tabIndex={-1}
           >
             {line}
           </p>
           {/* Same pixel face as the sentence, arrow included; 8px is the
             face's grid, and the padding keeps a finger-sized target. */}
-          {more ? (
+          {canAdvance ? (
             <div className="-mb-1 flex justify-end">
               <button
                 className={PIXEL_BUTTON}
@@ -441,7 +441,7 @@ function DuckTrouble({ message }: { message: string }) {
         key={message}
         role="alert"
       >
-        {trouble.duck}
+        {trouble.duckLine}
       </p>
       <div className="-mb-1 flex justify-end gap-3">
         {trouble.retry ? (

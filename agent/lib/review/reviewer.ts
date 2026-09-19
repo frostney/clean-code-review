@@ -15,7 +15,7 @@ import { streamText } from 'ai';
 import { cacheGet, cacheKey, cacheSet } from '../infra/cache';
 import { questionById, SMELL_IDS } from '../judging/questions';
 import {
-  failureWasProcessed,
+  failureMayHaveBilled,
   lunaCostUsd,
   lunaFailedCallUsd,
   lunaPartEstimateUsd,
@@ -222,7 +222,7 @@ export function emptyReviewUsage(): ReviewUsage {
   };
 }
 
-export function reviewChargeUsd(usage: ReviewUsage): number {
+export function reviewSettleUsd(usage: ReviewUsage): number {
   return usage.costUsd + usage.unreportedUsd;
 }
 
@@ -232,10 +232,10 @@ export function reviewChargeUsd(usage: ReviewUsage): number {
  * nothing if it was turned away, its prompt otherwise.
  */
 class PartFailed extends Error {
-  readonly processed: boolean;
-  constructor(cause: unknown, processed: boolean) {
+  readonly mayHaveBilled: boolean;
+  constructor(cause: unknown, mayHaveBilled: boolean) {
     super('another part of the review failed', { cause });
-    this.processed = processed;
+    this.mayHaveBilled = mayHaveBilled;
   }
 }
 
@@ -312,11 +312,11 @@ async function attempt(
   } catch (err) {
     const stoppedFor = signal.aborted ? signal.reason : undefined;
     usage.unreportedUsd += lunaFailedCallUsd(promptChars(p), {
-      outputChars: seen.chars,
-      processed:
+      mayHaveBilled:
         stoppedFor instanceof PartFailed
-          ? stoppedFor.processed
-          : failureWasProcessed(err, signal.aborted),
+          ? stoppedFor.mayHaveBilled
+          : failureMayHaveBilled(err, signal.aborted),
+      outputChars: seen.chars,
       sent: true,
     });
     throw err;
@@ -438,7 +438,7 @@ export async function runReview(
       stop.abort(
         err instanceof PartFailed
           ? err
-          : new PartFailed(err, failureWasProcessed(err, combined.aborted)),
+          : new PartFailed(err, failureMayHaveBilled(err, combined.aborted)),
       );
     }
   };

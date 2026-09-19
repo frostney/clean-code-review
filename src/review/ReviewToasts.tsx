@@ -85,14 +85,14 @@ function nextPhase(
 }
 
 function useJudgeToast(retryable: boolean): ToastItem | null {
-  const { judge } = useReviewView();
+  const { reviewState } = useReviewView();
   const { retryJudging } = useReviewControls();
-  const raised = useRaised(judge.error);
+  const raised = useRaised(reviewState.error);
 
   // The toast stays up, busy, from the press until the retried turn settles,
   // so the button under the reader's finger never disappears.
   const [retry, setRetry] = useState<RetryPhase>(null);
-  const phase = nextPhase(retry, judge, retryable);
+  const phase = nextPhase(retry, reviewState, retryable);
   if (phase !== retry) {
     setRetry(phase);
   }
@@ -102,13 +102,13 @@ function useJudgeToast(retryable: boolean): ToastItem | null {
   // render, unseen by `useRaised`, so presses count too.
   const [presses, setPresses] = useState(0);
 
-  const error = judge.error ?? (phase ? raised.last : null);
+  const error = reviewState.error ?? (phase ? raised.last : null);
   if (!error || (phase === null && raised.count === dismissed)) {
     return null;
   }
   const trouble = describeTurnError(error);
   // The budget-spent notice supersedes a retryable failure.
-  if (trouble.retry && judge.budgetSpent) {
+  if (trouble.retry && reviewState.budgetSpent) {
     return null;
   }
   const canRetry = trouble.retry && (retryable || phase !== null);

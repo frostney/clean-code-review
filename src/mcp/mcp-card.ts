@@ -7,7 +7,7 @@ import {
   MCP_SERVER_CARD_PATH,
   MCP_SERVER_NAME,
   MCP_SERVER_VERSION,
-} from './mcp-limits';
+} from './mcp-facts';
 
 /**
  * Server card proposal (SEP-2127, github.com/modelcontextprotocol/

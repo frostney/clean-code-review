@@ -3,8 +3,8 @@
  * why it is a best-effort brake and not a quota.
  */
 /** Exported for the /privacy page. */
-export const REQUESTS_PER_WINDOW = 20;
-export const WINDOW_MS = 600_000;
+export const GITHUB_FETCHES_PER_WINDOW = 20;
+export const GITHUB_FETCH_WINDOW_MS = 600_000;
 /** Least recently seen addresses are evicted past this. */
 const MAX_TRACKED_ADDRESSES = 10_000;
 
@@ -100,7 +100,10 @@ export function createThrottle(
 }
 
 /** Shared by the server action and `/api/github-pr`, so both count one window. */
-export const throttled = createThrottle(REQUESTS_PER_WINDOW, WINDOW_MS);
+export const githubFetchThrottled = createThrottle(
+  GITHUB_FETCHES_PER_WINDOW,
+  GITHUB_FETCH_WINDOW_MS,
+);
 
 export function callerIp(headers: Headers): string | null {
   return (

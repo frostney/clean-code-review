@@ -1,7 +1,7 @@
 import type { Question } from '@/agent/lib/judging/questions';
 import type { Answer } from '@/agent/lib/judging/schema';
 
-import { detail, headline, levelsOf } from './display';
+import { answerDetail, answerHeadline, levelsOf } from './display';
 
 const PERCENT = 100;
 
@@ -90,12 +90,14 @@ export function Meter({
         {changed && delta ? (
           <span className="truncate text-xs text-muted">{delta}</span>
         ) : (
-          <span className="truncate text-xs text-subtle">{detail(answer)}</span>
+          <span className="truncate text-xs text-subtle">
+            {answerDetail(answer)}
+          </span>
         )}
         <span
           className={`shrink-0 text-sm font-semibold ${headlineClass(finding, quiet)}`}
         >
-          {headline(meta, answer)}
+          {answerHeadline(meta, answer)}
         </span>
       </span>
       <div

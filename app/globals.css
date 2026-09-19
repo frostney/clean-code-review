@@ -420,10 +420,6 @@ body {
   letter-spacing: 0.06em;
 }
 
-.markdown > :first-child {
-  margin-top: 0;
-}
-
 .markdown ul,
 .markdown ol {
   padding-left: 1.4em;

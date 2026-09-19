@@ -13,7 +13,7 @@ import {
 import {
   callerIp,
   createThrottle,
-  WINDOW_MS,
+  GITHUB_FETCH_WINDOW_MS,
 } from '@/src/pull-request/throttle';
 
 import {
@@ -21,7 +21,7 @@ import {
   MCP_CALLS_PER_WINDOW,
   MCP_TOOLS,
   MCP_WINDOW_MINUTES,
-} from './mcp-limits';
+} from './mcp-facts';
 import {
   type ReviewOutput,
   renderReviewText,
@@ -33,7 +33,10 @@ import { ReviewError, reviewPaste, reviewPullRequest } from './mcp-review';
 const MAX_URL_CHARS = 500;
 
 /** Separate from the page's brake, so neither spends the other's share. */
-const throttled = createThrottle(MCP_CALLS_PER_WINDOW, WINDOW_MS);
+const mcpCallThrottled = createThrottle(
+  MCP_CALLS_PER_WINDOW,
+  GITHUB_FETCH_WINDOW_MS,
+);
 
 const CAPS = `At most ${REVIEW_LIMITS.maxFiles} code files are judged, the largest changes first, each read up to ${REVIEW_LIMITS.maxCharsPerFile.toLocaleString('en-US')} characters; up to ${REVIEW_LIMITS.maxProseFiles} prose files (Markdown, plain text) are listed and never judged; images, binaries, lockfiles and generated files are skipped. Every file left out is listed with the reason.`;
 
@@ -76,7 +79,7 @@ async function guarded(
   ip: string | null,
   run: () => Promise<ReviewOutput>,
 ): Promise<ReturnType<typeof success> | ReturnType<typeof failure>> {
-  if (throttled(ip)) {
+  if (mcpCallThrottled(ip)) {
     return failure(
       `Too many reviews from this address: ${MCP_CALLS_PER_WINDOW} calls per ${MCP_WINDOW_MINUTES} minutes. Wait a few minutes and call again; the same input will come back from the cache.`,
     );

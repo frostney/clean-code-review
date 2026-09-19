@@ -13,7 +13,7 @@ import {
   MCP_PATH,
   MCP_SERVER_CARD_PATH,
   MCP_WINDOW_MINUTES,
-} from '@/src/mcp/mcp-limits';
+} from '@/src/mcp/mcp-facts';
 
 import { SITE } from './site';
 

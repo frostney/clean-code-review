@@ -13,7 +13,7 @@ import {
 import { cached, cacheKey } from '@/agent/lib/infra/cache';
 
 import { PullRequestBody } from './PullRequestBody';
-import { callerIp, throttled } from './throttle';
+import { callerIp, githubFetchThrottled } from './throttle';
 
 /**
  * `body` is rendered on the server so react-markdown stays out of the client
@@ -64,7 +64,7 @@ export const loadPullRequest = cache(
         cacheKey('pull-request', ref.url),
         'pull request',
         async () => {
-          if (throttled(callerIp(await headers()))) {
+          if (githubFetchThrottled(callerIp(await headers()))) {
             throw new Error(THROTTLE_MESSAGE);
           }
           return fetchPullRequest(ref.url);

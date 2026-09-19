@@ -1,5 +1,5 @@
 import { fetchPullRequest } from '@/agent/lib/github/github';
-import { callerIp, throttled } from '@/src/pull-request/throttle';
+import { callerIp, githubFetchThrottled } from '@/src/pull-request/throttle';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +21,7 @@ function statusFor(message: string): number {
  * server action instead (it renders the description on the server).
  */
 export async function GET(request: Request) {
-  if (throttled(callerIp(request.headers))) {
+  if (githubFetchThrottled(callerIp(request.headers))) {
     return Response.json(
       {
         error:

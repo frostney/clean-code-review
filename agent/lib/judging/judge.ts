@@ -9,7 +9,7 @@ import type {
   ReviewResult,
 } from '../review/review';
 import {
-  failureWasProcessed,
+  failureMayHaveBilled,
   JEV_FILE_ESTIMATE_USD,
   jevCostUsd,
   jevFailedCallUsd,
@@ -83,7 +83,7 @@ export async function judgeEstimateUsd(files: readonly ReviewFile[]) {
   return misses.filter(Boolean).length * JEV_FILE_ESTIMATE_USD;
 }
 
-export function judgeChargeUsd(judged: { cost: number; failedUsd: number }) {
+export function judgeSettleUsd(judged: { cost: number; failedUsd: number }) {
   return judged.cost + judged.failedUsd;
 }
 
@@ -125,8 +125,8 @@ export async function judgeFile(file: ReviewFile, signal?: AbortSignal) {
       return await evaluateFile(file, attempt);
     } catch (err) {
       failedUsd += jevFailedCallUsd(stateChars(file), {
+        mayHaveBilled: failureMayHaveBilled(err, attempt.aborted),
         outputChars: 0,
-        processed: failureWasProcessed(err, attempt.aborted),
         sent: true,
       });
       throw err;

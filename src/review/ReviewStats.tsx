@@ -3,17 +3,18 @@
 import { useReviewView } from './ReviewProvider';
 
 export function ReviewStats() {
-  const { open, review, judge, lineCount } = useReviewView();
+  const { open, review, reviewState, lineCount } = useReviewView();
   if (!open) {
     return null;
   }
   const fileCount = review.files.length;
-  const cached = judge.cached || judge.summary.cached;
+  const cached = reviewState.cached || reviewState.summary.cached;
 
   return (
     <p className="mt-2 text-xs text-muted">
       {fileCount} {fileCount === 1 ? 'file' : 'files'} · {lineCount} lines ·
-      last turn {judge.ms === null ? '—' : `${judge.ms} ms`}
+      last turn{' '}
+      {reviewState.lastTurnMs === null ? '—' : `${reviewState.lastTurnMs} ms`}
       {cached ? (
         <>
           {' '}

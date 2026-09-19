@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 
-import { FAQ } from '@/src/site/faq';
+import { Faq } from '@/src/site/Faq';
+import { FAQ } from '@/src/site/faq-content';
 import { SITE } from '@/src/site/site';
-import { Faq } from '@/src/ui/Faq';
 import { Footer } from '@/src/ui/Footer';
 import { PageHeader } from '@/src/ui/PageHeader';
 

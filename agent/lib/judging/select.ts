@@ -16,13 +16,13 @@ function changedLines(patch: string): number {
 
 /**
  * Code is capped to the most-changed files; prose has its own allowance.
- * Kept files stay in diff order. `dropped` lists what the caps left out.
+ * Kept files stay in diff order. `overCap` lists what the caps left out.
  */
 export function selectReviewFiles<T extends { path: string; content: string }>(
   files: readonly T[],
   limit = REVIEW_LIMITS.maxFiles,
   proseLimit = REVIEW_LIMITS.maxProseFiles,
-): { kept: T[]; skipped: string[]; dropped: string[] } {
+): { kept: T[]; skipped: string[]; overCap: string[] } {
   const { judgeable, prose, skipped } = partitionJudgeable(files);
   const ranked = [...judgeable].sort(
     (a, b) => changedLines(b.content) - changedLines(a.content),
@@ -35,8 +35,8 @@ export function selectReviewFiles<T extends { path: string; content: string }>(
     (f) => !skipped.some((s) => s.path === f.path),
   );
   return {
-    dropped: candidates.filter((f) => !keep.has(f.path)).map((f) => f.path),
     kept: candidates.filter((f) => keep.has(f.path)),
+    overCap: candidates.filter((f) => !keep.has(f.path)).map((f) => f.path),
     skipped: skipped.map((s) => s.path),
   };
 }

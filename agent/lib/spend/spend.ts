@@ -175,7 +175,10 @@ const SERVER_ERROR = 500;
  * timeouts, 5xx and unexplained failures count; 4xx rejections and
  * connection failures do not.
  */
-export function failureWasProcessed(err: unknown, cancelled: boolean): boolean {
+export function failureMayHaveBilled(
+  err: unknown,
+  cancelled: boolean,
+): boolean {
   if (cancelled) {
     return true;
   }
@@ -189,14 +192,14 @@ export function failureWasProcessed(err: unknown, cancelled: boolean): boolean {
 export interface FailedCall {
   /** False when the signal had already aborted before sending. */
   sent: boolean;
-  /** See `failureWasProcessed`. */
-  processed: boolean;
+  /** See `failureMayHaveBilled`. */
+  mayHaveBilled: boolean;
   /** Answer plus reasoning characters received before it stopped. */
   outputChars: number;
 }
 
 export function lunaFailedCallUsd(promptChars: number, call: FailedCall) {
-  if (!call.sent || (call.outputChars === 0 && !call.processed)) {
+  if (!call.sent || (call.outputChars === 0 && !call.mayHaveBilled)) {
     return 0;
   }
   return (
@@ -207,7 +210,7 @@ export function lunaFailedCallUsd(promptChars: number, call: FailedCall) {
 }
 
 export function jevFailedCallUsd(stateChars: number, call: FailedCall) {
-  if (!(call.sent && call.processed)) {
+  if (!(call.sent && call.mayHaveBilled)) {
     return 0;
   }
   return (

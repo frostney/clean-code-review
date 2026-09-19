@@ -4,7 +4,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
   type RefObject,
-  useEffect,
+  type UIEvent,
   useMemo,
   useRef,
 } from 'react';
@@ -49,21 +49,12 @@ function Overlay({
   children: ReactNode;
 }) {
   const preRef = useRef<HTMLPreElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) {
-      return;
+  function onScroll(e: UIEvent<HTMLTextAreaElement>) {
+    if (preRef.current) {
+      preRef.current.scrollLeft = e.currentTarget.scrollLeft;
     }
-    function sync() {
-      if (preRef.current && textarea) {
-        preRef.current.scrollLeft = textarea.scrollLeft;
-      }
-    }
-    textarea.addEventListener('scroll', sync, { passive: true });
-    return () => textarea.removeEventListener('scroll', sync);
-  }, []);
+  }
 
   /** Tab indents instead of moving focus; Shift+Tab still leaves. */
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -113,7 +104,7 @@ function Overlay({
             maxLength={REVIEW_LIMITS.maxCharsPerFile}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={onKeyDown}
-            ref={textareaRef}
+            onScroll={onScroll}
             spellCheck={false}
             value={content}
             wrap="off"

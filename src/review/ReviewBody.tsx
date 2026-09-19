@@ -19,7 +19,7 @@ import { useCardWindow } from './useCardWindow';
 import type { LocalPause } from './useReview';
 
 export function ReviewBody() {
-  const { review, judge, edit } = useReviewView();
+  const { review, reviewState, edit } = useReviewView();
   const [collapsed, setCollapsed] = useState<Record<string, true>>({});
   /** `at` makes a repeat click on the same card a new value. */
   const [revealed, setRevealed] = useState<{
@@ -34,7 +34,7 @@ export function ReviewBody() {
     review.files.length > 0 &&
     review.files.every((file) => collapsed[file.path]);
 
-  const judged = Object.keys(judge.judgments).length > 0;
+  const judged = Object.keys(reviewState.judgments).length > 0;
 
   // When no answer can ever arrive (no code, budget spent before the first
   // answer, every file given up on), the pill must settle, not pulse forever.
@@ -43,17 +43,17 @@ export function ReviewBody() {
     .map((file) => file.path);
   const judgeable =
     codePaths.length > 0 &&
-    !(judge.budgetSpent && !judged) &&
-    !codePaths.every((path) => judge.failed[path] === true);
+    !(reviewState.budgetSpent && !judged) &&
+    !codePaths.every((path) => reviewState.givenUp[path] === true);
 
   // Budget-paused files show as paused instead. The hook prunes emptied and
   // removed files from `stalled`.
   const stalled = (path: string) =>
-    judge.stalled[path] === true &&
-    judge.pending[path] !== true &&
-    judge.pausedFiles[path] !== true;
+    reviewState.stalled[path] === true &&
+    reviewState.pending[path] !== true &&
+    reviewState.pausedFiles[path] !== true;
   // Retry is offered only while one of these is left.
-  const anyStalled = Object.keys(judge.stalled).some(stalled);
+  const anyStalled = Object.keys(reviewState.stalled).some(stalled);
 
   const proseOnly =
     review.files.length > 0 && review.files.every((f) => isProsePath(f.path));
@@ -112,22 +112,22 @@ export function ReviewBody() {
       <div className="mb-4">
         {judged ? (
           <ReviewNote
-            decision={judge.summary.decision}
-            error={judge.summary.error}
+            decision={reviewState.summary.decision}
+            error={reviewState.summary.error}
             footnote={footnote}
-            incomplete={judge.summary.incomplete.overall === true}
-            model={judge.summary.model}
+            incomplete={reviewState.summary.incomplete.overall === true}
+            model={reviewState.summary.model}
             pills={
               <ReviewPills
                 judgeable={judgeable}
-                review={judge}
+                review={reviewState}
                 stalled={anyStalled}
               />
             }
-            status={overallSummaryStatus(judge.summary)}
-            text={judge.summary.overall}
+            status={overallSummaryStatus(reviewState.summary)}
+            text={reviewState.summary.overall}
             tone="overall"
-            writing={isWriting(judge.summary, 'overall')}
+            writing={isWriting(reviewState.summary, 'overall')}
           />
         ) : (
           // Keeps the verdict pills in place before there is a review.
@@ -138,7 +138,7 @@ export function ReviewBody() {
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <ReviewPills
                 judgeable={judgeable}
-                review={judge}
+                review={reviewState}
                 stalled={anyStalled}
               />
             </div>
@@ -147,9 +147,9 @@ export function ReviewBody() {
         )}
       </div>
 
-      {judge.budgetSpent ? <BudgetSpent /> : null}
-      {judge.paused && !judge.budgetSpent ? (
-        <ReviewsPaused paused={judge.paused} />
+      {reviewState.budgetSpent ? <BudgetSpent /> : null}
+      {reviewState.paused && !reviewState.budgetSpent ? (
+        <ReviewsPaused paused={reviewState.paused} />
       ) : null}
       {proseOnly ? <NothingToJudge /> : null}
       <Paste />
@@ -159,9 +159,9 @@ export function ReviewBody() {
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
         <FileList
           allCollapsed={allCollapsed}
-          failed={judge.failed}
+          failed={reviewState.givenUp}
           files={review.files}
-          judgments={judge.judgments}
+          judgments={reviewState.judgments}
           onSelect={reveal}
           onToggleAll={() =>
             setCollapsed(
@@ -172,7 +172,7 @@ export function ReviewBody() {
                   ),
             )
           }
-          paused={judge.pausedFiles}
+          paused={reviewState.pausedFiles}
           stalled={stalled}
         />
         <KeepPlace className="flex min-w-0 flex-col gap-4" drawn={cards.drawn}>
@@ -180,10 +180,10 @@ export function ReviewBody() {
             <FileCard
               collapsed={collapsed[file.path] === true}
               deferred={!cards.isDrawn(index, file.path)}
-              failed={judge.failed[file.path] === true}
+              failed={reviewState.givenUp[file.path] === true}
               file={file}
               index={index}
-              judgment={judge.judgments[file.path]}
+              judgment={reviewState.judgments[file.path]}
               key={file.path}
               onChange={(content) => edit(file.path, content)}
               onToggle={() =>
@@ -198,11 +198,11 @@ export function ReviewBody() {
                 })
               }
               paused={
-                judge.pausedFiles[file.path] === true &&
-                judge.pending[file.path] !== true
+                reviewState.pausedFiles[file.path] === true &&
+                reviewState.pending[file.path] !== true
               }
               stalled={stalled(file.path)}
-              summary={judge.summary}
+              summary={reviewState.summary}
               truncated={review.truncated[file.path] === true}
               watch={cards.watch}
             />

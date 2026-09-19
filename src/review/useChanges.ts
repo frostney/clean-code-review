@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Question } from '@/agent/lib/judging/questions';
 import type { Answer, Answers } from '@/agent/lib/judging/schema';
 
-import { deltaText, isMeaningful } from './display';
+import { deltaText, isMeaningfulChange } from './display';
 
 const HOLD_MS = 1800;
 
@@ -37,7 +37,7 @@ export function useChanges(
     for (const m of meta) {
       const before = prev.current[m.id];
       const after = answers[m.id];
-      if (!isMeaningful(before, after)) {
+      if (!isMeaningfulChange(before, after)) {
         continue;
       }
       changed.push(m.id);

@@ -72,7 +72,7 @@ interface ReviewView {
   review: OpenReview;
   /** False on the landing view. */
   open: boolean;
-  judge: ReviewState;
+  reviewState: ReviewState;
   lineCount: number;
   prError: string | null;
   /** `prError` stays shown while this is true. */
@@ -284,7 +284,11 @@ export function ReviewProvider({
     [review.pr],
   );
 
-  const { state: judge, actions: judging } = useReview(review.id, sent, prompt);
+  const { state: reviewState, actions: judging } = useReview(
+    review.id,
+    sent,
+    prompt,
+  );
 
   const lineCount = useMemo(
     () =>
@@ -554,16 +558,25 @@ export function ReviewProvider({
   const view = useMemo<ReviewView>(
     () => ({
       edit,
-      judge,
       lineCount,
       open: review.id !== NO_REVIEW.id,
       pasting,
       prError,
       retryingPr,
       review,
+      reviewState,
       stopPasting,
     }),
-    [review, judge, lineCount, prError, retryingPr, pasting, stopPasting, edit],
+    [
+      review,
+      reviewState,
+      lineCount,
+      prError,
+      retryingPr,
+      pasting,
+      stopPasting,
+      edit,
+    ],
   );
 
   return (

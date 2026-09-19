@@ -21,8 +21,8 @@ import {
   emptyReviewUsage,
   planReview,
   type ReviewUsage,
-  reviewChargeUsd,
   reviewEstimateUsd,
+  reviewSettleUsd,
   runReview,
 } from '../review/reviewer';
 import { REVIEWER_MODEL } from '../review/summary';
@@ -35,9 +35,9 @@ import { createSpendBrake, type Hold } from '../spend/spend';
 import {
   JEV,
   JudgeFailedError,
-  judgeChargeUsd,
   judgeEstimateUsd,
   judgeReview,
+  judgeSettleUsd,
 } from './judge';
 
 const pageSpend = createSpendBrake('page', {
@@ -65,7 +65,7 @@ async function reviewWithin(
   try {
     return await runReview(plan, emit, signal, usage);
   } finally {
-    await hold.settle(reviewChargeUsd(usage));
+    await hold.settle(reviewSettleUsd(usage));
   }
 }
 
@@ -133,7 +133,7 @@ async function judge(
     }
     throw err;
   }
-  await admitted.hold.settle(judgeChargeUsd(judged));
+  await admitted.hold.settle(judgeSettleUsd(judged));
   const { result, cost, warnings, errors } = judged;
   return textResult(JSON.stringify({ kind: 'judged', ...result }), {
     // eve's per-session cost limit and the page footer read this.

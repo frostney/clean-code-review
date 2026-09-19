@@ -20,7 +20,10 @@ function nearestLevel(levels: readonly string[], score: number): string {
   return levels[i];
 }
 
-export function headline(meta: Question, answer: Answer | undefined): string {
+export function answerHeadline(
+  meta: Question,
+  answer: Answer | undefined,
+): string {
   if (!answer) {
     return '—';
   }
@@ -39,7 +42,7 @@ export function headline(meta: Question, answer: Answer | undefined): string {
 }
 
 /** Confidence is optional for scores and choices, so this may be empty. */
-export function detail(answer: Answer | undefined): string {
+export function answerDetail(answer: Answer | undefined): string {
   if (!answer) {
     return '';
   }
@@ -57,7 +60,7 @@ const NOUL_SHIFT = 0.15;
 const SCORE_SHIFT = 0.75;
 
 // Deliberately coarse: a bar that twitches on every pause teaches nothing.
-export function isMeaningful(
+export function isMeaningfulChange(
   prev: Answer | undefined,
   next: Answer | undefined,
 ): boolean {
@@ -303,7 +306,7 @@ export interface SummaryView {
   /** Text is arriving; the fields above are a partial parse. */
   streaming: boolean;
   /** "overall", a path, or null. */
-  writing: string | null;
+  writingBlock: string | null;
   replacing: Record<string, true>;
   /** At least one summarize turn has settled for this review. */
   settled: boolean;
@@ -330,7 +333,7 @@ export const NO_SUMMARY: SummaryView = {
   running: false,
   settled: false,
   streaming: false,
-  writing: null,
+  writingBlock: null,
 };
 
 export function overallSummaryStatus(summary: SummaryView): SummaryStatus {
@@ -366,5 +369,5 @@ export function fileSummaryStatus(
 
 /** Whether the streaming caret belongs at the end of this block. */
 export function isWriting(summary: SummaryView, block: string): boolean {
-  return summary.streaming && summary.writing === block;
+  return summary.streaming && summary.writingBlock === block;
 }

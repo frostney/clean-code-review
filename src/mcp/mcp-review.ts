@@ -14,9 +14,9 @@ import {
 import { cached, cacheKey } from '@/agent/lib/infra/cache';
 import {
   JudgeFailedError,
-  judgeChargeUsd,
   judgeEstimateUsd,
   judgeReview,
+  judgeSettleUsd,
 } from '@/agent/lib/judging/judge';
 import { filesFromPatch } from '@/agent/lib/judging/patch';
 import { GROUPS, questionById } from '@/agent/lib/judging/questions';
@@ -31,8 +31,8 @@ import {
 import {
   emptyReviewUsage,
   planReview,
-  reviewChargeUsd,
   reviewEstimateUsd,
+  reviewSettleUsd,
   runReview,
 } from '@/agent/lib/review/reviewer';
 import { parseSummaryText, REVIEWER_MODEL } from '@/agent/lib/review/summary';
@@ -206,7 +206,7 @@ async function openPullRequest(input: string): Promise<Opened> {
   );
   const split = filesFromPatch(pr.diff);
   const { dropped, sections } = droppedFromDiff(pr.diff, split);
-  const capped = selectReviewFiles(split).dropped.map((path) => ({
+  const capped = selectReviewFiles(split).overCap.map((path) => ({
     path,
     reason: isProsePath(path)
       ? ('over_prose_cap' as const)
@@ -362,7 +362,7 @@ async function writeReview(
         : `Luna could not write the review: the model call failed. ${retry}`,
     };
   } finally {
-    await admission.hold.settle(reviewChargeUsd(usage));
+    await admission.hold.settle(reviewSettleUsd(usage));
   }
 }
 
@@ -410,7 +410,7 @@ async function reviewOpened(
       'Jev could not judge any of these files. Try again in a minute.',
     );
   }
-  await admission.hold.settle(judgeChargeUsd(judged));
+  await admission.hold.settle(judgeSettleUsd(judged));
   // Parsed as the page parses a judge turn, so review-part cache keys match.
   const answers =
     parseReview(JSON.stringify({ kind: 'judged', ...judged.result }))?.files ??

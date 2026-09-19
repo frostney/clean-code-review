@@ -1,6 +1,6 @@
 import { createMcpHandler } from 'mcp-handler';
 
-import { MCP_SERVER_NAME, MCP_SERVER_VERSION } from '@/src/mcp/mcp-limits';
+import { MCP_SERVER_NAME, MCP_SERVER_VERSION } from '@/src/mcp/mcp-facts';
 import { registerReviewTools } from '@/src/mcp/mcp-server';
 import { SITE } from '@/src/site/site';
 

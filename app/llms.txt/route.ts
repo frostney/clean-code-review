@@ -12,7 +12,7 @@ import {
   MCP_SERVER_CARD_PATH,
   MCP_TOOLS,
   MCP_WINDOW_MINUTES,
-} from '@/src/mcp/mcp-limits';
+} from '@/src/mcp/mcp-facts';
 import { SITE } from '@/src/site/site';
 
 const LLMS_TXT = `# ${SITE.name}

@@ -20,10 +20,10 @@ import {
   MCP_PATH,
   MCP_TOOLS,
   MCP_WINDOW_MINUTES,
-} from '@/src/mcp/mcp-limits';
+} from '@/src/mcp/mcp-facts';
 import { pullRequestUrl } from '@/src/pull-request/address';
 
-import { answerMarkdown, FAQ } from './faq';
+import { answerMarkdown, FAQ } from './faq-content';
 import { SITE } from './site';
 
 export const MARKDOWN_TYPE = 'text/markdown; charset=utf-8';

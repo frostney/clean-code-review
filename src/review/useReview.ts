@@ -28,7 +28,7 @@ import {
   parsePaused,
 } from '@/agent/lib/spend/budgets';
 
-import { isMeaningful, NO_SUMMARY, type SummaryView } from './display';
+import { isMeaningfulChange, NO_SUMMARY, type SummaryView } from './display';
 
 type TurnRuntime = typeof import('./turn-runtime')['turnRuntime'];
 
@@ -83,11 +83,11 @@ export interface ReviewState {
   /** Paths with a request in flight or queued behind one. */
   pending: Record<string, true>;
   /** Paths that came back unjudged twice and will not be asked about again. */
-  failed: Record<string, true>;
+  givenUp: Record<string, true>;
   asking: boolean;
   error: string | null;
   /** Duration of the last settled turn. */
-  ms: number | null;
+  lastTurnMs: number | null;
   /** Per tab session; survives opening another review. */
   spentUsd: number;
   /** The session hit the agent's per-session cost cap; permanent for the tab. */
@@ -115,9 +115,9 @@ const IDLE: ReviewState = {
   budgetSpent: false,
   cached: false,
   error: null,
-  failed: {},
+  givenUp: {},
   judgments: {},
-  ms: null,
+  lastTurnMs: null,
   paused: null,
   pausedFiles: {},
   pending: {},
@@ -222,7 +222,7 @@ function judgmentMoved(before: Answers | undefined, after: Answers): boolean {
     if (!prev || prev.type !== answer.type) {
       return true;
     }
-    if (isMeaningful(prev, answer)) {
+    if (isMeaningfulChange(prev, answer)) {
       return true;
     }
   }
@@ -381,7 +381,7 @@ function withStreamedSummary(
         ? without(s.summary.replacing, done)
         : s.summary.replacing,
       streaming: true,
-      writing: writingSection(parsed, asked),
+      writingBlock: writingSection(parsed, asked),
     },
   };
 }
@@ -417,12 +417,12 @@ function withSettledSummary(
       running: false,
       settled: true,
       streaming: false,
-      writing: null,
+      writingBlock: null,
     },
   });
 }
 
-/** Key for the overall block in `SummaryView['incomplete']` and `writing`. */
+/** Key for the overall block in `SummaryView['incomplete']` and `writingBlock`. */
 const OVERALL_BLOCK = 'overall';
 
 function settledIncomplete(
@@ -464,7 +464,7 @@ function withAbandonedSummary(
       replacing: {},
       running: false,
       streaming: false,
-      writing: null,
+      writingBlock: null,
     },
   });
 }
@@ -485,7 +485,7 @@ function withPausedSummary(
       replacing: {},
       running: false,
       streaming: false,
-      writing: null,
+      writingBlock: null,
     },
   };
 }
@@ -500,7 +500,7 @@ function withBudgetSpentSummary(s: ReviewState, costUsd: number): ReviewState {
       replacing: {},
       running: false,
       streaming: false,
-      writing: null,
+      writingBlock: null,
     },
   };
 }
@@ -603,12 +603,12 @@ function withJudgeTurn(s: ReviewState, turn: JudgeTurn): ReviewState {
     asking: false,
     cached: turn.cached,
     error: unjudgedError(turn.review, turn.unjudged),
-    failed: {
-      ...without(s.failed, turn.paths),
+    givenUp: {
+      ...without(s.givenUp, turn.paths),
       ...Object.fromEntries(turn.failed.map((p) => [p, true as const])),
     },
     judgments: { ...s.judgments, ...turn.fresh },
-    ms: turn.ms,
+    lastTurnMs: turn.ms,
     pausedFiles: without(s.pausedFiles, turn.paths),
     pending: without(s.pending, turn.paths),
     spentUsd: s.spentUsd + turn.costUsd,
@@ -632,7 +632,7 @@ function withoutStalePaths(
 ): ReviewState {
   const gone = Object.keys(s.judgments).filter(stale);
   const orphaned = Object.keys(s.pending).filter(stale);
-  const cleared = Object.keys(s.failed).filter(stale);
+  const cleared = Object.keys(s.givenUp).filter(stale);
   const notes = Object.keys(s.summary.files).filter(stale);
   const waiting = Object.keys(s.pausedFiles).filter(stale);
   const letGo = Object.keys(s.stalled).filter(stale);
@@ -651,7 +651,7 @@ function withoutStalePaths(
   }
   return withPauseReconciled({
     ...s,
-    failed: without(s.failed, cleared),
+    givenUp: without(s.givenUp, cleared),
     judgments,
     pausedFiles: without(s.pausedFiles, waiting),
     pending: without(s.pending, orphaned),
@@ -718,9 +718,9 @@ export function useReview(
       ...s,
       cached: false,
       error: null,
-      failed: {},
+      givenUp: {},
       judgments: {},
-      ms: null,
+      lastTurnMs: null,
       // A budget pause belonged to the last review; this one's first turn
       // finds out afresh, and a fully cached review is still served.
       paused: null,
@@ -954,7 +954,7 @@ export function useReview(
         replacing: Object.fromEntries(paths.map((p) => [p, true as const])),
         running: true,
         streaming: false,
-        writing: null,
+        writingBlock: null,
       },
     }));
     return judgments;

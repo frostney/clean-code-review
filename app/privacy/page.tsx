@@ -15,8 +15,11 @@ import {
   MCP_CALLS_PER_WINDOW,
   MCP_PATH,
   MCP_WINDOW_MINUTES,
-} from '@/src/mcp/mcp-limits';
-import { REQUESTS_PER_WINDOW, WINDOW_MS } from '@/src/pull-request/throttle';
+} from '@/src/mcp/mcp-facts';
+import {
+  GITHUB_FETCH_WINDOW_MS,
+  GITHUB_FETCHES_PER_WINDOW,
+} from '@/src/pull-request/throttle';
 import { SITE } from '@/src/site/site';
 import { Footer } from '@/src/ui/Footer';
 import { PageHeader } from '@/src/ui/PageHeader';
@@ -26,7 +29,7 @@ import { PageHeader } from '@/src/ui/PageHeader';
 // Vercel's linked documentation.
 
 const MS_PER_MINUTE = 60_000;
-const WINDOW_MINUTES = Math.round(WINDOW_MS / MS_PER_MINUTE);
+const WINDOW_MINUTES = Math.round(GITHUB_FETCH_WINDOW_MS / MS_PER_MINUTE);
 
 const WEB_ANALYTICS_PRIVACY =
   'https://vercel.com/docs/analytics/privacy-policy';
@@ -155,11 +158,12 @@ export default function PrivacyPage() {
             visitor would not have.
           </p>
           <p>
-            Fetching is rate limited per network address: {REQUESTS_PER_WINDOW}{' '}
-            pull requests per {WINDOW_MINUTES} minutes. That address is the one
-            thing about a visitor this site's own server holds at all. It is
-            held in one server instance's memory, for that window, to decide
-            whether to fetch again, and it is never written anywhere else.
+            Fetching is rate limited per network address:{' '}
+            {GITHUB_FETCHES_PER_WINDOW} pull requests per {WINDOW_MINUTES}{' '}
+            minutes. That address is the one thing about a visitor this site's
+            own server holds at all. It is held in one server instance's memory,
+            for that window, to decide whether to fetch again, and it is never
+            written anywhere else.
           </p>
         </Section>
 
