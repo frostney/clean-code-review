@@ -6,12 +6,8 @@ import { ImageResponse } from 'next/og';
 import { OG_CARD } from '@/src/site/og';
 import { SITE } from '@/src/site/site';
 
-/**
- * The link preview, drawn from the page's own palette: white paper, one ink,
- * one muted grey and the accent blue, the same four colours the review uses.
- * No screenshot — a card of meters at 1200×630 is unreadable, and the claim is
- * what the product is, not what it looks like.
- */
+// Light-theme token values as literals: Satori cannot read CSS variables. No
+// screenshot: a card of meters at 1200x630 is unreadable.
 export const alt = OG_CARD.alt;
 export const size = OG_CARD.size;
 export const contentType = OG_CARD.contentType;
@@ -22,7 +18,7 @@ const ACCENT = '#0969da';
 const LINE = '#d0d7de';
 
 export default async function Image() {
-  // The mascot, inlined: file-based metadata routes cannot reference /public by URL at build time.
+  // Inlined: metadata routes cannot reference /public by URL at build time.
   const duck = await readFile(
     join(process.cwd(), 'public', 'icons', 'icon-512.png'),
   );
@@ -106,7 +102,7 @@ export default async function Image() {
             {SITE.tagline}
           </div>
         </div>
-        {/* biome-ignore lint/performance/noImgElement: an ImageResponse is drawn by Satori, which renders a plain <img> and knows nothing of next/image */}
+        {/* biome-ignore lint/performance/noImgElement: Satori renders plain <img> only */}
         <img
           alt=""
           height={300}

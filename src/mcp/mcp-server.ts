@@ -1,12 +1,5 @@
-/**
- * The MCP server's two tools: a public pull request, or pasted code.
- *
- * Both run the review `src/mcp/mcp-review.ts` runs and return the same result, as
- * structured content under `reviewOutputSchema` and as Markdown text. Every
- * failure an agent can do something about comes back as a tool error in words;
- * anything else comes back as one generic sentence, never as a stack or as a
- * message from a dependency that was not written for a reader.
- */
+// Only `ReviewError`s reach the agent in their own words; any other failure
+// becomes one generic sentence, never a stack or a dependency's message.
 
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
@@ -36,10 +29,10 @@ import {
 } from './mcp-result';
 import { ReviewError, reviewPaste, reviewPullRequest } from './mcp-review';
 
-/** Long enough for any pull request URL GitHub writes, with a query string. */
+/** Any GitHub pull request URL, query string included. */
 const MAX_URL_CHARS = 500;
 
-/** A separate counter from the page's: calls here never spend the page's share, nor the other way round. */
+/** Separate from the page's brake, so neither spends the other's share. */
 const throttled = createThrottle(MCP_CALLS_PER_WINDOW, WINDOW_MS);
 
 const CAPS = `At most ${REVIEW_LIMITS.maxFiles} code files are judged, the largest changes first, each read up to ${REVIEW_LIMITS.maxCharsPerFile.toLocaleString('en-US')} characters; up to ${REVIEW_LIMITS.maxProseFiles} prose files (Markdown, plain text) are listed and never judged; images, binaries, lockfiles and generated files are skipped. Every file left out is listed with the reason.`;
@@ -65,7 +58,6 @@ const pasteInput = z.object({
     ),
 });
 
-/** The structured result and the same result in words. */
 function success(result: ReviewOutput) {
   return {
     content: [{ text: renderReviewText(result), type: 'text' as const }],
@@ -73,7 +65,6 @@ function success(result: ReviewOutput) {
   };
 }
 
-/** A tool error an agent can read and act on. */
 function failure(message: string) {
   return {
     content: [{ text: message, type: 'text' as const }],
@@ -81,7 +72,6 @@ function failure(message: string) {
   };
 }
 
-/** Run one review behind the brake, turning every failure into words. */
 async function guarded(
   ip: string | null,
   run: () => Promise<ReviewOutput>,
@@ -102,7 +92,6 @@ async function guarded(
   }
 }
 
-/** Register the two tools on one server instance. */
 export function registerReviewTools(server: McpServer): void {
   server.registerTool(
     MCP_TOOLS.pullRequest,

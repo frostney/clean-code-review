@@ -1,18 +1,8 @@
 /**
- * One Clean Code review, start to finish, for a caller without a browser.
- *
- * The page runs a review as two agent turns driven from a browser tab; the MCP
- * endpoint runs the same functions in one request. Every step is the page's
- * own: the pull request is fetched through the same one-minute cache under the
- * same key, the files are opened by `src/review/open-review.ts` exactly as the page
- * opens them, a patch gets its headers back the way `ReviewProvider` puts them
- * back, and the answers are read back through `parseReview` as the page reads
- * them. That is what makes the judge and review-part caches, which are keyed on
- * content, shared in both directions: a pull request reviewed here comes back
- * from the cache on the page, and the other way round.
- *
- * Nothing here imports `next/headers`, React's `cache` or `server-only`, so it
- * runs inside a route handler and from a script alike.
+ * The page's review pipeline in one request. Every step (PR cache key, file
+ * opening, patch headers, `parseReview`) matches the page's, so the
+ * content-keyed judge and review caches are shared in both directions.
+ * No `next/headers`, React `cache` or `server-only`: scripts import this too.
  */
 
 import {
@@ -70,23 +60,16 @@ export class ReviewError extends Error {
   override readonly name = 'ReviewError';
 }
 
-/**
- * The page's pull request cache: a minute, under `cacheKey('pull-request',
- * canonical URL)`. `src/pull-request/pull-request.tsx` holds the same two facts; they are
- * repeated here rather than imported because that module is server-only React.
- */
+// Same TTL and key as `src/pull-request/pull-request.tsx`, repeated because
+// that module is server-only.
 const PULL_REQUEST_CACHE_SECONDS = 60;
 
-/** What the pull request would weigh in the cache, as `src/pull-request/pull-request.tsx` measures it. */
 function storedBytes(pr: PullRequestReview): number {
   return Buffer.byteLength(JSON.stringify(pr));
 }
 
-/**
- * How long Luna may take over the written review. Jev has its own timeout and
- * retry per file; the reviewer has none of its own, and a call that waits on it
- * forever holds a function open until the platform ends it.
- */
+// The reviewer has no timeout of its own, and a hung call holds the function
+// open until the platform kills it.
 const REVIEW_TIMEOUT_MS = 60_000;
 const MS_PER_SECOND = 1000;
 const MS_PER_MINUTE = 60_000;
@@ -95,11 +78,8 @@ const MINUTES_PER_HOUR = 60;
 const CLOCK_FROM = 11;
 const CLOCK_TO = 16;
 
-/**
- * Every caller of this endpoint together, per hour and per UTC day, across
- * every instance: see `agent/lib/spend/spend.ts`. The page's reviews count against
- * a budget of their own, in `agent/lib/judging/jev-model.ts`.
- */
+// Shared by all MCP callers across instances; the page has its own budget in
+// `agent/lib/judging/jev-model.ts`.
 const spend = createSpendBrake('mcp', {
   dayUsd: MCP_DAILY_BUDGET_USD,
   hourUsd: MCP_HOURLY_BUDGET_USD,
@@ -120,7 +100,6 @@ function until(when: Date, now: Date): string {
   return `in ${parts.join(' ')}`;
 }
 
-/** Why the budget says no, and when to come back, in words an agent can act on. */
 function budgetSpent(check: SpendRefusal): string {
   const now = new Date();
   const at = check.resetsAt.toISOString().slice(CLOCK_FROM, CLOCK_TO);
@@ -132,11 +111,10 @@ function budgetSpent(check: SpendRefusal): string {
   return `This endpoint's model budget for ${window} is spent: ${dollars(check.capUsd)} ${per}, shared by every caller. It resets at ${at} UTC, ${until(check.resetsAt, now)}. Call again after that; a review whose answers are all cached is served even while the budget is spent.`;
 }
 
-/** The messages `fetchPullRequest` writes for a person. Anything else is a fault, not a reason. */
+/** `fetchPullRequest`'s user-facing messages; anything else is a fault and is not passed on. */
 const GITHUB_MESSAGES =
   /^(Pull request not found|GitHub rate limit|GitHub returned \d+|That pull request's diff is too large|That is not a GitHub pull request)/;
 
-/** Where the review comes from, and the files as the page opened them. */
 interface Opened {
   review: OpenReview;
   /** Paths a pull request's diff names that the splitter dropped, with the reason. */
@@ -147,7 +125,6 @@ interface Opened {
   unlistedFiles: number;
 }
 
-/** The pull request, from the page's own one-minute cache or from GitHub. */
 async function fetchCachedPullRequest(
   input: string,
 ): Promise<{ pr: PullRequestReview; hit: boolean; url: string }> {
@@ -183,7 +160,6 @@ function sectionPath(section: string): string | null {
     : target || header?.[2] || null;
 }
 
-/** Why the diff splitter left one section out. */
 function droppedReason(section: string, path: string): NotJudgedReason {
   if (/^\+\+\+ \/dev\/null/m.test(section)) {
     return 'deleted';
@@ -194,11 +170,7 @@ function droppedReason(section: string, path: string): NotJudgedReason {
   return skipReason({ content: section, path }) ?? 'generated';
 }
 
-/**
- * Every file the pull request's diff names that `filesFromPatch` did not turn
- * into a file, with the reason. The page reports these as a bare count; an
- * agent gets the paths.
- */
+// The page shows these as a count; an agent gets the paths.
 function droppedFromDiff(
   diff: string,
   kept: readonly ReviewFile[],
@@ -218,7 +190,6 @@ function droppedFromDiff(
   return { dropped, sections: sections.length };
 }
 
-/** A public pull request, opened the way the page opens one. */
 async function openPullRequest(input: string): Promise<Opened> {
   const { pr, hit, url } = await fetchCachedPullRequest(input);
   const review = fromPullRequest(
@@ -262,7 +233,6 @@ async function openPullRequest(input: string): Promise<Opened> {
   };
 }
 
-/** A paste, opened the way the page's paste dialog opens one. */
 function openPaste(text: string): Opened {
   const review = fromPaste(text, 'mcp');
   if (!review) {
@@ -292,11 +262,7 @@ function openPaste(text: string): Opened {
   };
 }
 
-/**
- * The files as they reach the agent: a patch with its headers put back on, as
- * `ReviewProvider` sends it, so the judge sees byte for byte what the page's
- * judge turn would have sent.
- */
+// Headers restored as `ReviewProvider` does, so the judge sees the page's bytes.
 function sentFiles(review: OpenReview): ReviewFile[] {
   return review.files.map((file) => {
     const header = review.headers[file.path];
@@ -307,12 +273,10 @@ function sentFiles(review: OpenReview): ReviewFile[] {
   });
 }
 
-/** The top of each scale, so a fractional score names a level. */
 const TOP_LEVEL = 4;
 
 type LabelledAnswer = ReviewOutput['files'][number]['answers'][string];
 
-/** One of Jev's answers, labelled as the page labels its row. Null for a row no question owns. */
 function labelledAnswer(id: string, a: Answers[string]): LabelledAnswer | null {
   const q = questionById(id);
   if (!q) {
@@ -337,7 +301,6 @@ function labelledAnswer(id: string, a: Answers[string]): LabelledAnswer | null {
   };
 }
 
-/** Jev's answers for one file, keyed by question id. */
 function labelled(answers: Answers): Record<string, LabelledAnswer> {
   const out: Record<string, LabelledAnswer> = {};
   for (const [id, a] of Object.entries(answers)) {
@@ -349,15 +312,13 @@ function labelled(answers: Answers): Record<string, LabelledAnswer> {
   return out;
 }
 
-/** Rounded to the precision the gateway reports costs in. */
+/** The gateway reports costs to six decimals. */
 const COST_PRECISION = 1e6;
 const usd = (n: number) => Math.round(n * COST_PRECISION) / COST_PRECISION;
 
 /**
- * Luna's written review, or the reason there is none. Reserved for separately,
- * because Luna is most of a call's cost and Jev's answers may have spent the
- * rest of the budget; Jev's answers are returned either way. Whatever the
- * parts cost, finished, failed or cut off by the timeout, is settled.
+ * Reserved separately: Luna is most of a call's cost, and Jev's answers are
+ * returned even when the budget cannot cover her. Spend is settled on every path.
  */
 async function writeReview(
   input: Parameters<typeof planReview>[0],
@@ -382,7 +343,7 @@ async function writeReview(
     const written = await runReview(
       plan,
       () => {
-        /* One request, one reply: the whole text is read once it is done. */
+        /* Not streamed: the text is read once complete. */
       },
       AbortSignal.any([signal, timeout]),
       usage,
@@ -405,7 +366,6 @@ async function writeReview(
   }
 }
 
-/** What a cut-off notice names: the file paragraphs, the overall paragraph, or both. */
 function cutOffWhat(files: number, overall: boolean): string {
   const paragraphs = `the paragraphs marked reviewIncomplete (${files})`;
   if (files && overall) {
@@ -414,14 +374,13 @@ function cutOffWhat(files: number, overall: boolean): string {
   return files ? `${paragraphs} are` : 'the overall paragraph is';
 }
 
-/** Judge the opened files, write the review, and put it all in one result. */
 async function reviewOpened(
   opened: Opened,
   signal: AbortSignal,
   started: number,
 ): Promise<ReviewOutput> {
   const sent = sentFiles(opened.review);
-  // What the page's judge turn sends: code, never prose, never an empty file.
+  // As the page's judge turn: no prose, no empty files.
   const code = sent
     .filter((f) => !isProsePath(f.path) && f.content.trim())
     .slice(0, REVIEW_LIMITS.maxFiles);
@@ -432,8 +391,7 @@ async function reviewOpened(
     throw new ReviewError('Nothing in that input is code to judge.');
   }
 
-  // Reserved before any model work, for the files the cache has no answers
-  // for. A review that is wholly cached reserves nothing and is always served.
+  // Estimates uncached files only, so a fully cached review is always served.
   const admission = await spend.reserve(await judgeEstimateUsd(code));
   if (!admission.ok) {
     throw new ReviewError(budgetSpent(admission));
@@ -443,9 +401,8 @@ async function reviewOpened(
   try {
     judged = await judgeReview({ files: code }, signal);
   } catch (err) {
-    // Every file failed: settled at what those attempts plausibly cost, which
-    // is nothing for a gateway that turned them away. Anything else is a
-    // fault here, and keeps the reservation.
+    // Only a JudgeFailedError settles at its real (often zero) cost; any other
+    // fault keeps the reservation.
     if (err instanceof JudgeFailedError) {
       await admission.hold.settle(err.spentUsd);
     }
@@ -454,8 +411,7 @@ async function reviewOpened(
     );
   }
   await admission.hold.settle(judgeChargeUsd(judged));
-  // Read back exactly as the page reads a judge turn's reply, so the answers
-  // Luna is given, and the review-part cache keys made from them, match.
+  // Parsed as the page parses a judge turn, so review-part cache keys match.
   const answers =
     parseReview(JSON.stringify({ kind: 'judged', ...judged.result }))?.files ??
     {};

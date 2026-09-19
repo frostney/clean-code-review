@@ -2,16 +2,9 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 /**
- * A pull request's description, as GitHub renders it: headings, lists, task
- * lists, tables, code and links.
- *
- * It renders on the server — the `openPullRequest` action returns the finished
- * node — so the markdown pipeline never reaches the browser. The browser's
- * share is `PullRequestBodyToggle`, which folds this node and nothing more.
- *
- * Raw HTML stays off: `rehype-raw` is not installed and react-markdown escapes
- * what it finds, so a `<script>` or an `<img onerror>` in a description from a
- * repository nobody here controls is text on the page and nothing else.
+ * Rendered on the server so the markdown pipeline never ships to the browser.
+ * Raw HTML stays escaped (no `rehype-raw`): descriptions come from repositories
+ * nobody here controls.
  */
 /** The part of a hast node this file reads and rewrites. */
 interface HastNode {
@@ -27,15 +20,10 @@ function walk(node: HastNode, visit: (node: HastNode) => void): void {
 }
 
 /**
- * Ids and code-block classes, stripped of the author's words.
- *
- * GitHub-style footnotes get ids made from their labels (`[^rollout-plan]`
- * becomes `user-content-fn-rollout-plan`), and a fenced block's info string
- * becomes a `language-` class. Speed Insights describes the element a timing
- * concerns as a selector of ids and classes, so either would carry a phrase
- * from the description to Vercel. Ids are renumbered, with the links and
- * `aria-describedby` that point at them, and `language-` classes are dropped:
- * nothing here styles them.
+ * Speed Insights reports elements as id/class selectors, so footnote ids
+ * (`user-content-fn-<label>`) and `language-<info>` classes would send the
+ * author's words to Vercel. Ids are renumbered with their references; the
+ * unstyled `language-` classes are dropped.
  */
 function rehypeNeutralIds() {
   return (tree: HastNode) => {
@@ -80,8 +68,7 @@ export function PullRequestBody({ body }: { body: string }) {
   return (
     <Markdown
       components={{
-        // Someone else's repository wrote these: a new tab, and no window
-        // handle back to this one. A footnote's `#` link stays on the page.
+        // Untrusted links get a new tab with no opener; footnote `#` links stay.
         a: ({ node: _node, ...props }) =>
           props.href?.startsWith('#') ? (
             <a {...props} />

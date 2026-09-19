@@ -2,7 +2,7 @@
 
 import { useReviewControls } from '@/src/review/ReviewProvider';
 
-/** Opens the paste dialog, and is where focus lands again when it closes. */
+/** Also the focus-return target when the paste dialog closes. */
 export function PasteButton() {
   const { startPasting, pasteButtonRef } = useReviewControls();
 

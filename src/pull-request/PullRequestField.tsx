@@ -12,41 +12,19 @@ import {
 } from './address';
 
 /**
- * The way in: the address is on screen with only its two variable parts left
- * to type — `owner/repo` and the number — and Enter in either box judges it.
- * A whole URL pasted into the first box is taken apart rather than rejected,
- * because pasting one is what anyone coming from GitHub will do.
- *
- * Public repositories only — the action carries nobody's token, and a private
- * pull request comes back as "not found" rather than as an invitation to sign in.
- *
- * The two fixed labels are drawn here rather than handed in from the server:
- * they are inside the field's own focus ring and its own flex row, and moving
- * two spans across the boundary would buy nothing — this component ships
- * either way, and the markup would only move from its bundle to every request.
- *
- * `duck` is the mascot, rendered on the server and handed in: in the code view
- * it stands at the left of this row and is the way back out of the review, and
- * on the landing view it renders nothing, because there it is the large one
- * above. It is a node rather than an import so that `next/image` stays out of
- * this component's bundle.
+ * A whole URL pasted into the first box is taken apart, not rejected.
+ * `duck` is a server-rendered node so `next/image` stays out of this bundle.
  */
 export function PullRequestField({ duck }: { duck?: ReactNode }) {
   const { address, openPullRequest, fetching } = useReviewControls();
-  // A permalink arrives with the request already named, and the field is where
-  // that name belongs: the URL and the boxes say the same thing from the first
-  // paint, so editing one digit is how you get to the next pull request.
   const [repo, setRepo] = useState(address.repo);
   const [number, setNumber] = useState(address.number);
   const repoRef = useRef<HTMLInputElement>(null);
   const numberRef = useRef<HTMLInputElement>(null);
-  /** What the boxes were last filled from, so a re-render is not a refill. */
   const filled = useRef(`${address.repo}${PULL_INFIX}${address.number}`);
 
-  // Back and Forward open another pull request without going through this
-  // form, and the boxes are part of the address: they follow it. What they do
-  // not do is take it away from whoever is using them — a review closing names
-  // nothing, and a cursor in either box means that box is being typed in.
+  // Follow Back/Forward, but never overwrite a box that has focus, and keep the
+  // boxes when a review closes.
   useEffect(() => {
     const next = `${address.repo}${PULL_INFIX}${address.number}`;
     if (next === filled.current || !address.repo) {
@@ -65,7 +43,6 @@ export function PullRequestField({ duck }: { duck?: ReactNode }) {
 
   const ready = repo.trim() !== '' && number.trim() !== '';
 
-  /** A pasted address fills both boxes and moves on to the button. */
   function takeApart(text: string): boolean {
     const parts = splitPullRequest(text);
     if (!parts) {
@@ -86,18 +63,9 @@ export function PullRequestField({ duck }: { duck?: ReactNode }) {
         openPullRequest(pullRequestUrl(repo, number));
       }}
     >
-      {/* The duck, the address, the button: one line, at every width. The
-          address is what it is on GitHub — a single line — and it stays one
-          here even on a phone, because an address broken over two rows stops
-          being an address and becomes a form. What gives instead is the type
-          in the fixed parts (twelve pixels, which is a label, not an input)
-          and the padding around them; what never gives is the sixteen pixels
-          in the two boxes that are typed into, below which iOS zooms the page
-          in on focus and never zooms back out.
-          Only the button leaves the row, and only under 480px, where a compact
-          one beside the field would take the last of the space `owner/repo`
-          has. `flex-wrap` and a full width are the whole mechanism: at that
-          size the button cannot share the line, so it takes its own. */}
+      {/* One line at every width. The typed boxes stay 16px (text-lg) below
+          `lg`: under 16px iOS zooms in on focus and never zooms back out. Under
+          480px the button wraps to its own full-width row. */}
       <div className="flex flex-wrap items-center gap-2">
         {duck}
         <div className="flex min-h-11 min-w-0 flex-1 items-stretch rounded-md border border-line-strong bg-page focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent lg:min-h-0 lg:min-w-[12rem]">
@@ -107,11 +75,11 @@ export function PullRequestField({ duck }: { duck?: ReactNode }) {
           <input
             aria-label="GitHub owner and repository"
             autoComplete="off"
+            // `min-w-0`: an input's intrinsic width would push the page sideways.
             className="w-full min-w-0 flex-1 bg-transparent px-2 font-mono text-lg text-ink outline-none placeholder:text-subtle lg:px-2.5 lg:py-2 lg:text-sm"
             data-pr-repo={true}
             onChange={(e) => {
-              // A paste lands here as a change too (keyboard, menu or drop),
-              // so the whole URL is taken apart wherever it came from.
+              // Menu paste and drop arrive only as a change.
               if (!takeApart(e.target.value)) {
                 setRepo(e.target.value);
               }
@@ -126,9 +94,6 @@ export function PullRequestField({ duck }: { duck?: ReactNode }) {
             ref={repoRef}
             spellCheck={false}
             type="text"
-            // `min-w-0` is what keeps the row a row: without it an input's
-            // default intrinsic width is the floor the line cannot go under,
-            // and the field would push the page sideways on a phone.
             value={repo}
           />
           <span className="flex shrink-0 items-center border-l border-line pr-0.5 pl-2 font-mono text-xs text-muted select-none lg:text-sm">
@@ -157,10 +122,7 @@ export function PullRequestField({ duck }: { duck?: ReactNode }) {
           disabled={!ready || fetching}
           type="submit"
         >
-          {/* Both labels hold the one cell, the idle one hidden, so the
-              button is as wide as the longer of them all along: a label
-              swapping when the answer lands would move the field beside it
-              with nothing pressed. */}
+          {/* Both labels share one grid cell, so the button never resizes. */}
           <span className="grid">
             <span className={`[grid-area:1/1] ${fetching ? 'invisible' : ''}`}>
               Judge

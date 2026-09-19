@@ -6,34 +6,15 @@ import { Faq } from '@/src/ui/Faq';
 import { Footer } from '@/src/ui/Footer';
 import { PageHeader } from '@/src/ui/PageHeader';
 
-/**
- * The questions, at an address of their own.
- *
- * They used to sit under the address field on `/`, which made the front page
- * two documents at once: a tool nobody has used yet, and an explanation of it.
- * Here they are the whole page, so a link can point at one and a search result
- * can quote one.
- *
- * The frame is this route's rather than `Shell`'s. `Shell` is the review: the
- * address field, the examples, the provider that holds a review's state. None
- * of that belongs on a page of prose, and dragging the field onto it would
- * invite someone to paste a pull request into a page that cannot open one.
- * What is shared is what should be: the duck, the questions and the footer.
- */
+// Not wrapped in `Shell`: an address field on a page of prose would invite a
+// paste into a page that cannot open a review.
 
-/** The title and the description this route has instead of the site's. */
 const TITLE = 'Questions about this page';
 const DESCRIPTION = `What ${SITE.name} judges, which models do the work, what happens to your code and what it costs.`;
 
 /**
- * The Open Graph block names this page rather than the site. A route that
- * writes one replaces the layout's whole block, so everything the card needs
- * is written again here, with one exception: `images` stays unset, which is
- * what keeps the picture `app/opengraph-image.tsx` draws. Without this, every
- * share of these answers announced itself as the front page.
- *
- * Unlike a permalinked review, these answers are this site's own to be found
- * by, so this page is indexed.
+ * A child's openGraph replaces the layout's whole block; `images` stays unset
+ * so the file-convention card is kept. Indexed, unlike review permalinks.
  */
 export const metadata: Metadata = {
   alternates: { canonical: '/faq' },
@@ -54,7 +35,7 @@ export const metadata: Metadata = {
   },
 };
 
-/** The five answers, in the shape an answer engine reads. This URL and no other. */
+/** Emitted on this URL only. */
 const FAQ_LD = {
   '@context': 'https://schema.org',
   '@type': 'FAQPage',

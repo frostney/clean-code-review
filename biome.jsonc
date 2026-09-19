@@ -23,8 +23,7 @@
     },
     "enabled": true
   },
-  // Tailwind 4 writes `@theme` and `@apply` in app/globals.css; without this
-  // the stylesheet does not parse at all.
+  // Tailwind 4's `@theme` in app/globals.css does not parse without this.
   "css": {
     "parser": {
       "tailwindDirectives": true
@@ -201,9 +200,8 @@
                   "PascalCase",
                   "CONSTANT_CASE"
                 ],
-                // Data keys stay as the payload writes them (`input_tokens`,
-                // `does_more_than_one_thing`), and the leading `__` is React's
-                // own, as in `dangerouslySetInnerHTML={{ __html }}`.
+                // Payload keys keep their wire names (`input_tokens`); `__` is
+                // React's (`{ __html }`).
                 "match": "_{0,2}(.+)",
                 "selector": { "kind": "objectLiteralProperty" }
               },
@@ -306,9 +304,8 @@
       }
     },
     {
-      // The two JSON-LD <script> tags: injecting a serialised object is the
-      // only way to emit structured data, and every byte of both objects is
-      // written a few lines above in this same file.
+      // The JSON-LD <script>: the only way to emit structured data, and the
+      // object is written in this file.
       "includes": ["app/page.tsx"],
       "linter": {
         "rules": {
@@ -321,8 +318,7 @@
       }
     },
     {
-      // Code rows are a positional list: a row's identity *is* its index, and
-      // a token span or a gutter cell has nothing else to be keyed by.
+      // Code rows are positional: a row's identity is its index.
       "includes": ["src/review/CodeView.tsx", "src/review/Editor.tsx"],
       "linter": {
         "rules": {

@@ -2,12 +2,7 @@
 
 import { useReviewControls } from '@/src/review/ReviewProvider';
 
-/**
- * One example, as a chip. The server renders the line these sit on and the
- * label inside each one; this is the click and the lit state, and nothing
- * else — which is the whole reason the examples line is not a client
- * component.
- */
+// The only client part of the examples row; the row and labels are server-rendered.
 export function PresetChip({ label, blurb }: { label: string; blurb: string }) {
   const { activePreset, openPreset } = useReviewControls();
   const active = activePreset === label;

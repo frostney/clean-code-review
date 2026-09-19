@@ -5,19 +5,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useReviewControls, useReviewView } from '@/src/review/ReviewProvider';
 
 /**
- * The other way in: paste a diff, a file, or several files marked up with
- * `// file:` lines. Judging happens on submit rather than on every pause —
- * a paste arrives all at once, and there is nothing to coalesce.
- *
- * It is a modal, because pasting is a detour from reading a review rather than
- * a panel to keep open beside one: the native `<dialog>` brings its own
- * backdrop, its own Escape, and its own promise to hand focus back to whatever
- * opened it. The element stays mounted and is opened and closed imperatively,
- * which is what makes that promise keepable.
- *
- * It takes no props: whether it is open, what a judged paste does and where
- * focus goes afterwards are all the review's, and reading them here is what
- * lets the button that opens it stay a three-line island of its own.
+ * A native `<dialog>`, kept mounted and opened imperatively, for its backdrop,
+ * Escape and focus return.
  */
 export function Paste() {
   const { pasting: open, stopPasting } = useReviewView();
@@ -33,19 +22,16 @@ export function Paste() {
     }
     if (open && !dialog.open) {
       dialog.showModal();
-      // `autofocus` inside a dialog picks the first focusable thing, which is
-      // the close button; the textarea is what this is for.
+      // `autofocus` in a dialog would land on the close button.
       textareaRef.current?.focus();
     } else if (!open && dialog.open) {
       dialog.close();
     }
   }, [open]);
 
-  /** The dialog closed, whichever of its three ways was used. */
   function onClose() {
     stopPasting();
-    // A `<dialog>` hands focus back on its own, but only while it stays
-    // mounted and focused; saying so is what makes it certain.
+    // A dialog's own focus return is not reliable once focus has moved.
     pasteButtonRef.current?.focus();
   }
 
@@ -53,10 +39,10 @@ export function Paste() {
     // biome-ignore lint/a11y/useKeyWithClickEvents: the keyboard way out of a <dialog> is Escape, and it arrives on onCancel below
     <dialog
       aria-label="Paste code or a diff"
+      // `dvh`: on a phone the URL bar counts, and Judge must stay on screen.
       className="m-auto max-h-[calc(100dvh-2rem)] w-[min(48rem,calc(100vw-2rem))] overflow-auto overscroll-contain rounded-md border border-line bg-page p-0 text-ink backdrop:bg-scrim"
       data-paste={true}
-      // Escape, the close button and a click on the backdrop all end here, so
-      // the dialog's own state and the page's stay in step whichever was used.
+      // Escape, Close and a backdrop click all end here.
       onCancel={onClose}
       onClick={(e) => {
         if (e.target === dialogRef.current) {
@@ -64,9 +50,6 @@ export function Paste() {
         }
       }}
       onClose={onClose}
-      // 16px of margin on every side, and never taller than the viewport, so
-      // the Judge button is always on screen without scrolling the page under
-      // the modal. `dvh` rather than `vh`: on a phone the URL bar counts.
       ref={dialogRef}
     >
       <div className="flex items-center gap-3 border-b border-line bg-surface px-3 py-2">
@@ -92,8 +75,6 @@ export function Paste() {
         ref={textareaRef}
         spellCheck={false}
         value={text}
-        // Two fifths of the screen on a phone, where the dialog is the screen;
-        // the fixed height it always had once there is a page around it.
         wrap="off"
       />
       <div className="flex items-center gap-3 border-t border-line px-3 py-2">
@@ -102,8 +83,6 @@ export function Paste() {
           data-paste="judge"
           disabled={!text.trim()}
           onClick={() => {
-            // Close first: the review that opens behind it is the answer, and
-            // a modal over it would only be in the way.
             dialogRef.current?.close();
             judgePasted(text);
           }}

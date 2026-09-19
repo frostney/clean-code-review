@@ -2,23 +2,11 @@ import Link from 'next/link';
 
 import { SITE } from '@/src/site/site';
 
-/** The footer's one shape, worn by every link. */
 const LINK_SHAPE = 'inline-flex min-h-10 items-center lg:min-h-0';
 const LINK_CLASS = `${LINK_SHAPE} underline hover:text-ink`;
-/** The page the reader is on: in ink and not underlined, so it reads as "here". */
 const CURRENT_CLASS = `${LINK_SHAPE} text-ink`;
 
-/**
- * Who did the work, where it came from, and where the questions about it are
- * answered. Everything here is the same on every visit, so the whole line is
- * rendered on the server and none of it reaches the browser as JavaScript.
- *
- * The first link is the way to `/faq`, phrased as the question someone would
- * actually be asking at the bottom of a page they have not used yet, and the
- * second is what happens to the code. They come first because they are the
- * two that stay on this site. `current` marks the page the reader is on, which
- * stays a link but says so, and loses its underline so it reads as "here".
- */
+// On-site links first; the current page stays a link with `aria-current`.
 export function Footer({ current }: { current?: 'faq' | 'privacy' }) {
   const here = (page: 'faq' | 'privacy') =>
     current === page

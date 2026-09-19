@@ -1,42 +1,24 @@
 /**
- * Best-effort brakes on how often one address may do something expensive.
- *
- * Each brake is its own counter. The page's GitHub brake is shared by the route
- * handler and the page's own server action, so that both ways in count against
- * the same window; the MCP endpoint has a brake of its own, because a call
- * there fetches, judges and writes a whole review, and its share is smaller.
- *
- * This instance's memory only: a serverless deploy runs many of these and none
- * of them agree, which is why it is a brake and not a quota.
+ * Per-instance memory only: serverless instances do not share it, which is
+ * why it is a best-effort brake and not a quota.
  */
-/** One address's share of a window. Exported because /privacy says it out loud. */
+/** Exported for the /privacy page. */
 export const REQUESTS_PER_WINDOW = 20;
-/** Ten minutes: the window a caller's share is counted over. */
 export const WINDOW_MS = 600_000;
-/** How many addresses a brake holds before the least recently seen are let go. */
+/** Least recently seen addresses are evicted past this. */
 const MAX_TRACKED_ADDRESSES = 10_000;
 
-/**
- * Where a request with no address is counted: all of them together, in one
- * share. On Vercel the platform always sets the address, so this is only a
- * request that reached the function some other way, and such requests share
- * one brake rather than passing every brake unseen.
- */
+// Vercel always sets the address; any request without one shares one bucket
+// rather than passing unseen.
 const UNKNOWN = 'unknown';
 
-/** An IPv6 address has eight groups; a /64 is the first four. */
 const IPV6_GROUPS = 8;
 const PREFIX_GROUPS = 4;
-/** An IPv4 address has four octets, and two of them make one IPv6 group. */
 const IPV4_OCTETS = 4;
 const BYTE = 256;
 const HEX = 16;
 
-/**
- * The eight groups of an IPv6 address, or null when it is not one. `::`
- * stands for as many zero groups as are missing, and an IPv4 address written
- * at the end fills the last two.
- */
+/** Expands `::` and a trailing dotted IPv4; null when not IPv6. */
 function ipv6Groups(address: string): string[] | null {
   const [head, tail, extra] = address.split('::');
   if (extra !== undefined) {
@@ -54,7 +36,6 @@ function ipv6Groups(address: string): string[] | null {
   return all.every((g) => /^[0-9a-f]{1,4}$/.test(g)) ? all : null;
 }
 
-/** One group as written, or the two groups a trailing dotted IPv4 address stands for. */
 function embeddedIpv4(group: string): string[] {
   const octets = group.split('.');
   if (octets.length !== IPV4_OCTETS) {
@@ -65,11 +46,7 @@ function embeddedIpv4(group: string): string[] {
   return [pair(a, b), pair(c, d)];
 }
 
-/**
- * What a brake counts one caller as. An IPv6 host is handed a whole /64, and
- * can move within it at will, so an IPv6 address counts as its /64; an IPv4
- * address, or an IPv4 address written as IPv6, counts as itself.
- */
+// IPv6 counts per /64: a host is handed a whole /64 and can rotate within it.
 function bucketOf(ip: string | null | undefined): string {
   const address = ip
     ?.trim()
@@ -95,18 +72,12 @@ function bucketOf(ip: string | null | undefined): string {
     : address;
 }
 
-/**
- * A brake that lets one address through `limit` times per `windowMs`. The
- * returned function counts the call it lets through and answers true, without
- * counting, when this address has already had its share. Requests with no
- * address share one bucket.
- */
+/** Returns true (without counting) once `limit` calls fell within `windowMs`. */
 export function createThrottle(
   limit: number,
   windowMs: number,
 ): (ip: string | null | undefined) => boolean {
-  // Kept in order of last use: a Map iterates in insertion order, and every
-  // counted call moves its bucket to the end.
+  // LRU via Map insertion order: every counted call re-inserts its bucket.
   const seen = new Map<string, number[]>();
   return (ip) => {
     const bucket = bucketOf(ip);
@@ -128,10 +99,9 @@ export function createThrottle(
   };
 }
 
-/** True when this address has already had its share of GitHub in the last ten minutes. */
+/** Shared by the server action and `/api/github-pr`, so both count one window. */
 export const throttled = createThrottle(REQUESTS_PER_WINDOW, WINDOW_MS);
 
-/** The caller's address as the platform reports it, or null behind no proxy. Counted by `bucketOf`. */
 export function callerIp(headers: Headers): string | null {
   return (
     headers.get('x-vercel-forwarded-for')?.split(',')[0]?.trim() ||

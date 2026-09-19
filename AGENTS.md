@@ -4,6 +4,10 @@ This project uses the eve framework: an agent is a directory of files under `age
 
 For a content-only change to the root agent's identity, purpose, tone, or response guidelines, edit its existing authored instructions. Fresh projects use `agent/instructions.md`; a project may instead use `agent/instructions.ts` or files under `agent/instructions/`. You do not need to read the framework docs for a content-only instructions change. A fresh project already has its selected model in `agent/agent.ts`; preserve that file unless the user asks to change the model.
 
+## Code style
+
+Layout, naming, design and dependency rules live in [docs/code-style.md](docs/code-style.md); read it before adding files or packages. Comments explain constraints or decisions the code cannot express; improve unclear names rather than narrating implementation.
+
 ## Read the docs before writing code
 
 ```sh
