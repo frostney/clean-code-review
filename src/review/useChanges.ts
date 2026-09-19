@@ -7,7 +7,6 @@ import type { Answer, Answers } from '@/agent/lib/judging/schema';
 
 import { deltaText, isMeaningful } from './display';
 
-/** How long a row stays lit after a meaningful change. */
 const HOLD_MS = 1800;
 
 export interface Changes {
@@ -18,10 +17,8 @@ export interface Changes {
 const NONE: Changes = { changed: {}, delta: {} };
 
 /**
- * Watch the answers and light up the rows whose judgment actually moved. This
- * is the whole demo: without it, 16 bars twitch at once and the eye has nothing
- * to follow. Rows stay lit for HOLD_MS, so a change is visible even while the
- * next turn is already on the wire.
+ * Lights only rows whose judgment meaningfully moved; otherwise every bar
+ * twitches at once and the eye has nothing to follow.
  */
 export function useChanges(
   answers: Answers | null | undefined,
@@ -60,16 +57,14 @@ export function useChanges(
       },
       delta: { ...s.delta, ...delta },
     }));
-    // Deliberately not cleaned up on re-run: a row lit at t=0 must still be lit
-    // when the next answer arrives and this effect runs again.
+    // Not cleared on re-run: a lit row must stay lit when the next answer arrives.
     for (const id of changed) {
       clearTimeout(timers.current[id]);
       timers.current[id] = setTimeout(() => {
         setState((s) => {
           const next = { ...s.changed };
           delete next[id];
-          // The text goes with the light: a later flash with nothing to say
-          // must not inherit the last thing this row said.
+          // A later flash with no delta must not inherit this one's text.
           const delta = { ...s.delta };
           delete delta[id];
           return { changed: next, delta };

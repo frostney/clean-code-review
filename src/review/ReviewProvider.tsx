@@ -43,60 +43,42 @@ import {
 } from './useReview';
 
 /**
- * The review the page is showing, and the four ways to open another one.
+ * All changing page state lives here so the static parts can be server-rendered
+ * and passed in as children; interactive islands read a context instead of
+ * props threaded through static markup.
  *
- * Everything on this page that changes lives here, so that everything that
- * does not — the frame around it, the examples line, the footer, the questions
- * at the bottom — can be rendered on the server and handed in as children.
- * The islands that do need a handler (a chip, the address field, the paste
- * button) read it from one of the two contexts below rather than from props
- * threaded through markup that has no business being interactive.
- *
- * Two contexts, not one: the controls change when a different review is opened
- * and the view changes on every token of a streaming answer, and a chip has no
- * reason to re-render for the second.
- *
- * Whether a review is open is also what view the page is in. With none open it
- * is the landing view — the duck at its full size, the field, the examples and
- * the questions. Opening one is the code view, and closing it is the duck.
+ * Two contexts: controls change when a review opens, the view on every
+ * streamed token, and a chip should not re-render for the latter.
  */
 interface ReviewControls {
-  /** The example whose chip stays lit, by label. */
+  /** By label. */
   activePreset: string | null;
-  /** What the address field starts with: empty, or the URL's own request. */
   address: PullRequestAddress;
-  /** A pull request is being fetched: the Judge button waits. */
   fetching: boolean;
-  /** Close the review and go back to the landing view — what the duck does. */
   goHome: () => void;
   openPreset: (label: string) => void;
   judgePasted: (text: string) => void;
   openPullRequest: (url: string) => void;
   startPasting: () => void;
-  /** The dialog hands focus back here when it closes. */
+  /** The paste dialog returns focus here on close. */
   pasteButtonRef: RefObject<HTMLButtonElement | null>;
-  /** Ask again for the pull request that last failed to open. */
   retryPullRequest: () => void;
-  /** Put away the reason the last pull request did not open. */
   dismissPrError: () => void;
-  /** Ask again about the files a failed judging turn left unanswered; false if there were none. */
+  /** False when there was nothing to retry. */
   retryJudging: () => boolean;
 }
 
 interface ReviewView {
   review: OpenReview;
-  /** A review is on screen, so the page is the code view rather than the door. */
+  /** False on the landing view. */
   open: boolean;
-  /** What the agent has answered so far, and what it is doing now. */
   judge: ReviewState;
   lineCount: number;
-  /** Why the last pull request never opened. */
   prError: string | null;
-  /** A Retry for that pull request is on the wire; its reason stays up meanwhile. */
+  /** `prError` stays shown while this is true. */
   retryingPr: boolean;
   pasting: boolean;
   stopPasting: () => void;
-  /** An edit replaces that file's content and nothing else in the review. */
   edit: (path: string, content: string) => void;
 }
 
@@ -118,12 +100,8 @@ export function useReviewView(): ReviewView {
   return required(useContext(ViewContext), 'useReviewView');
 }
 
-/**
- * The review that is not one: what the page holds on the landing view, before
- * anything has been opened. It is a whole `OpenReview` with nothing in it
- * rather than a null, because everything downstream of it reads a review and
- * "no files" is a state each of those parts already understands.
- */
+// An empty review rather than null: everything downstream already handles
+// "no files".
 const NO_REVIEW: OpenReview = {
   files: [],
   headers: {},
@@ -136,15 +114,10 @@ const NO_REVIEW: OpenReview = {
   truncated: {},
 };
 
-/** What a pull request with nothing worth judging in it is called on screen. */
 const NOTHING_TO_JUDGE = 'That pull request has no code files to judge.';
 
-/**
- * The server action, with the one way it can reject folded into the answer it
- * otherwise returns. A server action that throws reaches the browser as a
- * digest with the reason stripped out, so there is nothing to tell apart: what
- * the caller wants either way is a payload or a sentence.
- */
+// A throwing server action reaches the browser as a digest with the reason
+// stripped, so a rejection is folded into an ordinary error answer.
 async function answered(url: string): Promise<PullRequestAnswer> {
   try {
     return await fetchPullRequest(url);
@@ -159,11 +132,10 @@ async function answered(url: string): Promise<PullRequestAnswer> {
   }
 }
 
-/** The review the page opens with, when the URL already named one. */
 function opening(payload?: PullRequestPayload | null): {
   review: OpenReview;
   error: string | null;
-  /** Where what opened is kept, in GitHub's own spelling — null if nothing did. */
+  /** In GitHub's canonical spelling. */
   path: string | null;
 } {
   if (!payload) {
@@ -175,30 +147,19 @@ function opening(payload?: PullRequestPayload | null): {
     : { error: NOTHING_TO_JUDGE, path: null, review: NO_REVIEW };
 }
 
-/** What the page starts with, and what it still has to do about the URL. */
 interface Arrival extends ReturnType<typeof opening> {
-  /** What the address field starts with. */
   address: PullRequestAddress;
-  /** The route rendered this page for another address than the one it is at. */
+  /** The route rendered this page for a different address than the current one. */
   restored: boolean;
-  /** The pull request the address bar names and the route did not bring. */
+  /** A pull request the address bar names that the route did not bring. */
   pending: string | null;
 }
 
 /**
- * The page as the route rendered it — unless the address bar is somewhere
- * else, in which case the address bar wins.
- *
- * Both routes render this provider, and the entries it writes itself carry
- * whichever of the two was rendering when it wrote them: Next's patched
- * `pushState` copies its route tree into every entry, and there is no tree for
- * an address the router never navigated to. Back and Forward between this
- * page's own entries never look at that tree. Back into one of them from
- * another route (`/faq`) is Next's to handle, and Next restores the tree it
- * finds: the landing route under a pull request's address, or a pull request's
- * route under `/`. The page it renders then was made for another URL, and what
- * it opens with is what the URL names — the landing view for `/`, and for a
- * pull request the same fetch Back would have made on this page.
+ * The address bar wins over the route. Next's patched `pushState` copies the
+ * current route tree into every entry this page writes, so Back into one from
+ * another route (e.g. `/faq`) can restore the landing route under a pull
+ * request's address, or the reverse. The page then opens what the URL names.
  */
 function arrive(
   pathname: string,
@@ -232,15 +193,9 @@ function arrive(
 }
 
 /**
- * Put the review's own address in the address bar, without navigating to it.
- * The route for a pull request renders this very page, and the page is already
- * showing it — so this is the history entry that makes Back mean something and
- * the URL something to copy, and nothing more. Next's router syncs itself with
- * the native call.
- *
- * `replace` is for the one that is not a move: an open that Back or Forward
- * started is already at its entry, and the only thing left to correct is how
- * the owner and the repository are spelled there.
+ * Updates the address bar without navigating: the page already shows the
+ * review. Next's router syncs itself with the native call. `replace` is for
+ * opens started by Back/Forward, which only correct the spelling.
  */
 function showPath(path: string, replace = false): void {
   if (window.location.pathname === path) {
@@ -260,15 +215,11 @@ export function ReviewProvider({
   initialPullRequest = null,
 }: {
   children: ReactNode;
-  /** What the address field starts with, when the URL named a request. */
   initialAddress?: PullRequestAddress;
-  /** Why the route could not open the request the URL named. */
   initialError?: string | null;
-  /** A pull request the server already fetched, open before the first paint. */
+  /** Fetched by the server, so a permalink is open before first paint. */
   initialPullRequest?: PullRequestPayload | null;
 }) {
-  // Nothing is open until something is opened: the first visit is the door,
-  // not a review. A permalink is the exception — it arrives already fetched.
   const pathname = usePathname();
   const [opened] = useState(() =>
     arrive(pathname, initialAddress, initialPullRequest, initialError),
@@ -278,11 +229,7 @@ export function ReviewProvider({
   const [prError, setPrError] = useState<string | null>(opened.error);
   const [fetching, setFetching] = useState(false);
   const [retryingPr, setRetryingPr] = useState(false);
-  /**
-   * The last pull request asked for, and the history entry it was asked for
-   * from, which is what Retry asks for again. A permalink that failed on the
-   * server is the first one.
-   */
+  /** What Retry asks for again; seeded by a permalink that failed on the server. */
   const lastAskedRef = useRef<{ url: string; entry: string | null } | null>(
     opened.error && initialAddress.repo
       ? {
@@ -291,34 +238,27 @@ export function ReviewProvider({
         }
       : null,
   );
-  /** Where focus goes when the paste dialog closes. */
   const pasteButtonRef = useRef<HTMLButtonElement>(null);
-  // A counter, not state: two reviews opened before the next render would both
-  // read the same value and share an id, and an id is what tells the hook a
-  // different review is on screen.
+  // A ref, not state: two opens before the next render would share an id, and
+  // the id is how useReview detects a different review.
   const nonceRef = useRef(0);
   const nextId = useCallback((kind: string) => {
     nonceRef.current += 1;
     return `${kind}#${nonceRef.current}`;
   }, []);
-  // Which open the page is waiting for. Everything that changes what is on
-  // screen bumps it, and a fetch that comes back under an old number is
-  // dropped: a pull request resolving after the reader has gone home, or gone
-  // back twice, must not open itself over where they actually are.
+  // Bumped by everything that changes the view; a fetch that settles under an
+  // old value is dropped, so a slow pull request cannot open over wherever the
+  // reader has since gone.
   const generationRef = useRef(0);
   /**
-   * The path the page is showing, which is not always the one it is at: a
-   * `popstate` moves the address bar without re-rendering the route, and this
-   * is what tells the two apart. It is written wherever the view changes —
-   * including by a fetch that failed, so that the entry it failed at is not
-   * fetched again on every pass over it.
+   * Can differ from the address bar after `popstate`, which does not re-render
+   * the route. Also set by a failed fetch, so passing over that entry again
+   * does not refetch.
    */
   const shownPathRef = useRef(opened.path ?? '/');
 
-  // What goes on the wire: the files as shown, with every patch back under the
-  // headers it was split from, so the agent's parser and its after-image read a
-  // section git could have written. An emptied file stays empty — its headers
-  // alone are not a question, and the card already says "Nothing to judge".
+  // Patches go back under their headers so the agent parses what git would
+  // write. An emptied file stays empty: headers alone are not a question.
   const sent = useMemo(
     () =>
       review.files.map((file) => {
@@ -331,9 +271,7 @@ export function ReviewProvider({
     [review.files, review.headers],
   );
 
-  // The prompt wants the author's own words, not the node they were rendered
-  // into, and a fresh object every render would be a new pull request to the
-  // turn that reads it.
+  // Memoised: a fresh object each render would look like a new pull request.
   const prompt = useMemo<PullRequestContext | undefined>(
     () =>
       review.pr
@@ -358,17 +296,9 @@ export function ReviewProvider({
   );
 
   /**
-   * The one way a review opens, whichever door it came through: the page
-   * changes shape and the address bar follows it. The shape change is animated
-   * — the duck shrinks from the landing's mascot into the mark beside the
-   * field, and everything else crosses over — which is why the state update is
-   * handed to the browser rather than made here.
-   *
-   * The tab's name goes with the address. Neither of these is a navigation, so
-   * nothing re-runs the route's metadata — and a tab still named after the
-   * pull request you just closed is the same lie as a URL still pointing at
-   * it. The template is the layout's, written out because this side of the
-   * boundary has no metadata to inherit it from.
+   * State updates run inside `switchView` so the browser can animate the
+   * change. The title is set by hand because this is not a navigation, so the
+   * route's metadata never re-runs; the template repeats the layout's.
    */
   const show = useCallback(
     (next: OpenReview, path: string, replace = false) => {
@@ -388,14 +318,9 @@ export function ReviewProvider({
   );
 
   /**
-   * A fetch that opened nothing, put on screen.
-   *
-   * Asked for by hand it is only a notice: whatever is open stays open, above
-   * the reason the next one did not. Asked for by Back or Forward it is also a
-   * reconciliation — the address bar has already moved, and a review the URL
-   * no longer names cannot stay on screen — so the landing view comes back
-   * with the reason on it, the tab is renamed, and that entry is marked as
-   * shown so that passing over it again is not another fetch.
+   * Without `entry` it is only a notice; the open review stays. From
+   * Back/Forward the address bar has already moved, so the review the URL no
+   * longer names is closed and the entry marked shown to avoid a refetch.
    */
   const showError = useCallback((message: string, entry: string | null) => {
     if (!entry) {
@@ -415,7 +340,6 @@ export function ReviewProvider({
     document.title = SITE.name;
   }, []);
 
-  /** The duck's click: close the review and stand at the door again. */
   const goHome = useCallback(() => {
     show(NO_REVIEW, '/');
   }, [show]);
@@ -443,14 +367,9 @@ export function ReviewProvider({
   );
 
   /**
-   * What the fetch came back with, put on screen: the review it opened, or the
-   * reason it opened none.
-   *
-   * The URL the page ends on is GitHub's own, not the one that was typed: it
-   * is the canonical spelling of the owner and the repository. `entry` is the
-   * history entry this open came from, when Back or Forward started it and not
-   * the button — the address bar is already there, so that spelling replaces
-   * it rather than pushing another entry on top of it.
+   * The URL becomes GitHub's canonical spelling. `entry` is set when
+   * Back/Forward started the open; the address bar is already there, so the
+   * spelling replaces it instead of pushing an entry.
    */
   const settle = useCallback(
     (answer: PullRequestAnswer, entry: string | null) => {
@@ -469,26 +388,18 @@ export function ReviewProvider({
   );
 
   /**
-   * A pull request is fetched by the page's own server action: GitHub sends no
-   * CORS headers for a diff, and the description comes back already rendered,
-   * which is what keeps a markdown pipeline out of this bundle. The fetch is
-   * not wrapped in a transition, because the update that opens the review has
-   * to be flushed inside the browser's own view transition and a transition's
-   * update cannot be; `fetching` is the "Fetching…" state instead.
-   *
-   * A number taken at the start and checked at the end is what makes a late
-   * answer harmless. GitHub is slower than a second press of Back, and a
-   * review that opened itself over the page the reader had already returned to
-   * — rewriting the history they were walking through — is the bug that guards
-   * against.
+   * Via a server action: GitHub sends no CORS headers for a diff, and the
+   * description arrives pre-rendered, keeping markdown out of the bundle. Not
+   * a React transition: the opening update must flush inside the browser's
+   * view transition, which a transition's update cannot. The generation check
+   * stops a late answer rewriting history the reader has since walked back.
    */
   const open = useCallback(
     (url: string, entry: string | null, retrying = false) => {
       generationRef.current += 1;
       const generation = generationRef.current;
       lastAskedRef.current = { entry, url };
-      // A retry keeps the reason on screen until the answer replaces it, so
-      // the duck or the toast does not blink away and back for one fetch.
+      // A retry keeps the error shown so it does not blink away and back.
       if (!retrying) {
         setPrError(null);
       }
@@ -524,24 +435,15 @@ export function ReviewProvider({
   const dismissPrError = useCallback(() => setPrError(null), []);
 
   /**
-   * Back and forward, over the entries the page wrote itself.
-   *
-   * Next does not re-render for these: a `pushState` that did not navigate
-   * leaves the route as it was, and the router only moves `usePathname` along
-   * — so on a `popstate` the URL can say one thing while the page shows
-   * another, and putting those back together is this page's own job. Going
-   * back to `/` closes the review; going back to a pull request the page is
-   * not showing opens it again, from the server's minute-long cache rather
-   * than from GitHub. Neither writes a history entry: the address bar is
-   * already where it is going.
+   * Next does not re-render the route for entries this page pushed, so the
+   * page reconciles itself with the URL. A pull request reopens from the
+   * server's minute-long cache. Neither case writes a history entry.
    */
   useEffect(() => {
     function onPopState() {
       const path = window.location.pathname;
       if (path === shownPathRef.current) {
-        // The page already shows this address — but a fetch for the entry the
-        // reader just left may still be on its way, and it must not open
-        // itself over this one when it lands.
+        // A fetch for the entry just left may still land; invalidate it.
         generationRef.current += 1;
         setFetching(false);
         setRetryingPr(false);
@@ -561,29 +463,18 @@ export function ReviewProvider({
   }, [open, show]);
 
   /**
-   * The address bar, corrected once to the spelling the page is showing.
+   * Corrects a permalink once to GitHub's spelling (GitHub accepts any case and
+   * old repo names). `replaceState`, so Back leaves the site rather than swap
+   * spellings. With nothing open, the failed URL is recorded as shown so Back
+   * to it does not refetch.
    *
-   * GitHub answers to any capitalisation of an owner and a repository, and to
-   * a repository's old name, so a permalink can arrive as
-   * `/Facebook/React/pull/2` while the review that came back is kept at
-   * `/react/react/pull/2`. `replaceState` rather than a push: the two are one
-   * page, and Back should leave the site rather than swap the spelling. With
-   * nothing open there is nothing to correct to — the URL that failed is the
-   * one this entry shows, error notice and all, and saying so here is what
-   * keeps Back to it from fetching again.
+   * Deferred with setTimeout: Next patches `replaceState` to store its router
+   * state in an effect of the router, and a parent's effects run after its
+   * children's. Called directly, the entry's state is null, which Next's
+   * `popstate` ignores, so Back into it from `/faq` changed only the address.
    *
-   * The correction waits for the end of this commit's effects. Next patches
-   * `replaceState` to keep its own state (the router tree, and the flag that
-   * says the entry is its to restore) in every entry written from outside it,
-   * but it installs that patch in an effect of the router, and a parent's
-   * effects run after its children's. Written from here directly, the entry's
-   * state is `null` — which Next's `popstate` handler ignores, so Back into it
-   * from `/faq`, where this page is not mounted to answer, changed the address
-   * bar and nothing else.
-   *
-   * A page restored under another address than its route's (see `arrive`)
-   * opens what the address names instead, and takes the site's name back from
-   * the route it was rendered for.
+   * A page restored under another address (see `arrive`) opens what the
+   * address names instead, and drops the title the other route set.
    */
   useEffect(() => {
     let correction = 0;
@@ -601,7 +492,6 @@ export function ReviewProvider({
     }
     return () => {
       window.clearTimeout(correction);
-      // A fetch this page started must not settle over whatever replaced it.
       generationRef.current += 1;
     };
   }, [opened, open]);
@@ -618,23 +508,16 @@ export function ReviewProvider({
     }));
   }, []);
 
-  /**
-   * What the two boxes say: the review that is on screen, not the one the page
-   * was opened with. Back and Forward change which pull request is open
-   * without the route re-rendering, and a field still naming the one before it
-   * is the same lie as a tab still named after it. With nothing open the
-   * address the page arrived at is what is left — the field is not emptied
-   * under someone who is typing in it.
-   */
+  // Follows the review on screen, since Back/Forward change it without the
+  // route re-rendering.
   const openedOnce = useRef(false);
   const address = useMemo<PullRequestAddress>(() => {
     if (review.pr) {
       openedOnce.current = true;
       return splitPullRequest(review.pr.url) ?? opened.address;
     }
-    // A closed review names nothing; only a page that has shown nothing yet
-    // keeps the address it arrived with, so a failed permalink stays in the
-    // boxes for correcting.
+    // Until a review has been shown, keep the arrival address so a failed
+    // permalink stays in the boxes for correcting.
     return openedOnce.current ? NO_ADDRESS : opened.address;
   }, [review.pr, opened.address]);
 

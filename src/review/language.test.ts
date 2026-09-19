@@ -5,12 +5,8 @@ import { bundledLanguagesInfo } from 'shiki/langs';
 
 import { SHIKI_NAMES } from './language';
 
-/**
- * `language.ts` keeps its own copy of shiki's names so the page does not ship
- * shiki's registry. This is what notices when a shiki upgrade renames a
- * language, retitles one or changes its aliases: the copy has to be updated
- * with it, or chips and fence names drift from what shiki calls things.
- */
+// `language.ts` copies shiki's names to keep the registry out of the bundle;
+// this catches a shiki upgrade that changes them.
 test('every language name matches shiki’s registry', () => {
   const registry = new Map(bundledLanguagesInfo.map((info) => [info.id, info]));
   for (const [id, row] of Object.entries(SHIKI_NAMES)) {

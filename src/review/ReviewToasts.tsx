@@ -9,12 +9,9 @@ import { describeTurnError } from './errors';
 import { useReviewControls, useReviewView } from './ReviewProvider';
 
 /**
- * How many times a failure has been raised, and the last thing it said.
- *
- * A retry that fails again usually fails with the same words, so the message
- * alone cannot tell a new failure from the old one. The count goes up every
- * time the value arrives from nothing, which is what tells the live region to
- * speak again and a dismissed toast to come back.
+ * A repeat failure usually has the same message, so the count (bumped each
+ * time the value arrives from null) is what makes the live region speak again
+ * and a dismissed toast return.
  */
 function useRaised(value: string | null): {
   count: number;
@@ -37,12 +34,11 @@ function useRaised(value: string | null): {
   return next;
 }
 
-/** A pull request asked for from the field that did not open. */
 function usePullRequestToast(): ToastItem | null {
   const { prError, retryingPr } = useReviewView();
   const { dismissPrError, retryPullRequest } = useReviewControls();
-  // While a pull request is being asked for again its old reason stays up,
-  // busy; the reason counts as raised again when the answer lands.
+  // During a retry the old error stays up, busy; it is raised again when the
+  // answer lands.
   const raised = useRaised(prError && !retryingPr ? prError : null);
   if (!prError) {
     return null;
@@ -68,11 +64,10 @@ function usePullRequestToast(): ToastItem | null {
 type RetryPhase = 'waiting' | 'running' | null;
 
 /**
- * Where a pressed Retry is. Waiting until its turn starts (it may be queued
- * behind one already on the wire), running until that turn settles, and back
- * to idle if the queued turn is dropped instead: every file it would have
- * sent was emptied, removed or paused, the session's budget ran out, or the
- * failure was cleared without a turn.
+ * `waiting` until the turn starts (it may queue behind another), `running`
+ * until it settles, and back to null if the queued turn is dropped: its files
+ * were emptied, removed or paused, the budget ran out, or the failure was
+ * cleared without a turn.
  */
 function nextPhase(
   phase: RetryPhase,
@@ -89,26 +84,22 @@ function nextPhase(
   return phase === 'running' && !judge.asking ? null : phase;
 }
 
-/** A judging turn that did not come back. */
 function useJudgeToast(retryable: boolean): ToastItem | null {
   const { judge } = useReviewView();
   const { retryJudging } = useReviewControls();
   const raised = useRaised(judge.error);
 
-  // A judging retry may wait behind a turn already on the wire before it
-  // starts, and the failure it answers is cleared only when it does. The
-  // toast stays up, busy, from the press until the retried turn settles, so
-  // the button under the reader's finger never disappears.
+  // The toast stays up, busy, from the press until the retried turn settles,
+  // so the button under the reader's finger never disappears.
   const [retry, setRetry] = useState<RetryPhase>(null);
   const phase = nextPhase(retry, judge, retryable);
   if (phase !== retry) {
     setRetry(phase);
   }
-  // Dismissing puts this raising away, not the failure: the files it let go
-  // of still say "Could not judge", and the next failure comes back.
+  // Dismisses this raising only; the next failure shows again.
   const [dismissed, setDismissed] = useState(0);
-  // A retry that fails at once can clear and restore the failure inside one
-  // render, where the count above never sees it go; each press counts too.
+  // A retry that fails at once can clear and restore the error within one
+  // render, unseen by `useRaised`, so presses count too.
   const [presses, setPresses] = useState(0);
 
   const error = judge.error ?? (phase ? raised.last : null);
@@ -116,13 +107,10 @@ function useJudgeToast(retryable: boolean): ToastItem | null {
     return null;
   }
   const trouble = describeTurnError(error);
-  // Once the session's budget is spent nothing will ask again, and the notice
-  // above the review says so; a failure offering to try is stale by then.
+  // The budget-spent notice supersedes a retryable failure.
   if (trouble.retry && judge.budgetSpent) {
     return null;
   }
-  // Retry only while there is something for it to send, or while the one
-  // pressed is still under way.
   const canRetry = trouble.retry && (retryable || phase !== null);
   return {
     action: canRetry
@@ -150,11 +138,9 @@ function useJudgeToast(retryable: boolean): ToastItem | null {
 }
 
 /**
- * The code view's failures, as toasts. `retryable` is whether any file a
- * failed turn let go of could be sent again. The landing view has none; there the
- * duck says it. One toast per kind, keyed by the kind, so a retry that comes
- * back with a different reason updates the toast in place and keeps focus on
- * its button.
+ * One toast per kind, keyed by kind, so a retry failing with a different
+ * reason updates in place and keeps focus on its button. The landing view
+ * shows failures through the duck instead.
  */
 export function ReviewToasts({ retryable }: { retryable: boolean }) {
   const pr = usePullRequestToast();

@@ -1,13 +1,7 @@
 /**
- * What a failed judging turn is called on screen.
- *
- * `useReview` records what went wrong in the words it had: a status code, an
- * exception's own `toString()`, a count of files that came back empty. Those
- * are for a log. The reader gets a sentence, a tone (did something stop, or
- * is something only missing?) and whether Retry can help: a failed turn has
- * forgotten what it sent, so asking again is exactly the request an edit
- * would have made, while a file Jev has already declined twice will not be
- * answered by asking a third time.
+ * `retry` is whether Retry can help: a failed turn forgot what it sent, so
+ * asking again is what an edit would do, but a file Jev declined twice will
+ * not be answered a third time.
  */
 export interface TurnTrouble {
   sentence: string;
@@ -78,10 +72,7 @@ export function describeTurnError(message: string): TurnTrouble {
   };
 }
 
-/**
- * The same, as the reason after "No review:" in a review's own slot, which is
- * lower case and has no advice in it: that line is quiet on purpose.
- */
+/** For the quiet "No review:" line: lower case, no advice. */
 export function plainReason(message: string): string {
   if (NETWORK.test(message)) {
     return 'the reviewer could not be reached';

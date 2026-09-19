@@ -18,20 +18,10 @@ import { ReviewToasts } from './ReviewToasts';
 import { useCardWindow } from './useCardWindow';
 import type { LocalPause } from './useReview';
 
-/**
- * The review itself: the verdict across the top, whatever had to be said about
- * what was left out, and then the files — a list beside them and a card each.
- *
- * This is the part of the page that cannot be anything but a client component:
- * every card is editable, every judgment arrives over a stream, and folding one
- * is a click. The frame around it — the header, the questions, the footer — is
- * rendered on the server and never enters this tree.
- */
 export function ReviewBody() {
   const { review, judge, edit } = useReviewView();
-  /** Paths folded to their header. Per review: another example starts open. */
   const [collapsed, setCollapsed] = useState<Record<string, true>>({});
-  /** The card the sidebar was last clicked for, scrolled to once it is open. */
+  /** `at` makes a repeat click on the same card a new value. */
   const [revealed, setRevealed] = useState<{
     index: number;
     at: number;
@@ -44,50 +34,38 @@ export function ReviewBody() {
     review.files.length > 0 &&
     review.files.every((file) => collapsed[file.path]);
 
-  /** Whether anything has been judged yet, which is what the review is of. */
   const judged = Object.keys(judge.judgments).length > 0;
 
-  // Is there anything here to judge at all? A documentation-only change has no
-  // code file in it, so no judging turn is ever started and nothing will ever
-  // arrive: the review has to say so rather than pulse "Judging…" for the life
-  // of the tab.
+  // When no answer can ever arrive (no code, budget spent before the first
+  // answer, every file given up on), the pill must settle, not pulse forever.
   const codePaths = review.files
     .filter((file) => !isProsePath(file.path) && file.content.trim())
     .map((file) => file.path);
-  // Nor will anything arrive once the session's budget went before the first
-  // answer did, or when Jev was asked about every code file twice and answered
-  // for none: the pill has to settle rather than wait.
   const judgeable =
     codePaths.length > 0 &&
     !(judge.budgetSpent && !judged) &&
     !codePaths.every((path) => judge.failed[path] === true);
 
-  // A file a failed turn let go of is not being judged, and a badge saying
-  // "Judging…" would wait for good. One waiting on the budget says so instead.
-  // Emptied and removed files are pruned from `stalled` by the hook itself.
+  // Budget-paused files show as paused instead. The hook prunes emptied and
+  // removed files from `stalled`.
   const stalled = (path: string) =>
     judge.stalled[path] === true &&
     judge.pending[path] !== true &&
     judge.pausedFiles[path] !== true;
-  // The same files are what a Retry would send, so there is one to offer
-  // only while at least one of them is left.
+  // Retry is offered only while one of these is left.
   const anyStalled = Object.keys(judge.stalled).some(stalled);
 
-  /** Every file here is writing: a docs-only pull request, or a paste of one. */
   const proseOnly =
     review.files.length > 0 && review.files.every((f) => isProsePath(f.path));
 
-  // Folding is about this review's files; another example is a fresh page.
-  // Reset during the render that carries the new review rather than in an
-  // effect a frame later, so no card is ever folded from the last one.
+  // Reset during render, not in an effect a frame later.
   const [foldedFor, setFoldedFor] = useState(review.id);
   if (foldedFor !== review.id) {
     setFoldedFor(review.id);
     setCollapsed({});
   }
 
-  // A card is scrolled to after the render that opened it, not before: a
-  // folded card is a header tall, and its top is not where it will be.
+  // After the render that unfolds the card; before it, its top is elsewhere.
   useLayoutEffect(() => {
     if (!revealed) {
       return;
@@ -97,7 +75,6 @@ export function ReviewBody() {
       ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [revealed]);
 
-  /** The sidebar's click: unfold that file, draw it, and bring it into view. */
   function reveal(path: string) {
     cards.jumpTo(path);
     setCollapsed((current) => {
@@ -114,9 +91,6 @@ export function ReviewBody() {
     });
   }
 
-  // What was left out of this review, said once and quietly, inside the card
-  // that says what the review is: how many files it shows, and what it
-  // skipped. Both are known the moment the review opens.
   const skipped = skippedText(
     review.skipped,
     Math.max(review.skipped.length, review.skippedCount),
@@ -156,9 +130,7 @@ export function ReviewBody() {
             writing={isWriting(judge.summary, 'overall')}
           />
         ) : (
-          // Nothing has been judged yet, so there is no review to carry the
-          // pills — but the page must never be without its verdict. The same
-          // row, in the same place, with the card stripped to just that line.
+          // Keeps the verdict pills in place before there is a review.
           <section
             className="rounded-md border border-line bg-surface px-3 py-2"
             data-overall="placeholder"
@@ -181,8 +153,7 @@ export function ReviewBody() {
       ) : null}
       {proseOnly ? <NothingToJudge /> : null}
       <Paste />
-      {/* Keyed by the review: a retry pressed on the last one is not this
-          one's, and its busy state must not carry over. */}
+      {/* Keyed so a retry's busy state does not carry over to a new review. */}
       <ReviewToasts key={review.id} retryable={anyStalled} />
 
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
@@ -238,19 +209,13 @@ export function ReviewBody() {
           ))}
         </KeepPlace>
       </div>
-      {/* Room at the end of the page while toasts are up on a phone, where
-          they span the bottom of the screen, so the last lines can scroll out
-          from under them. Only the end grows. Sized by `ToastRegion`. */}
+      {/* Sized by `ToastRegion` so the last lines can scroll out from under
+          phone toasts. */}
       <div aria-hidden="true" className="lg:hidden" data-toast-room={true} />
     </>
   );
 }
 
-/**
- * A change with no code in it. Clean Code is a book about code, so there is
- * nothing here any of the questions is about — and, unlike a review that is
- * still running, nothing is coming either.
- */
 function NothingToJudge() {
   return (
     <Notice data-files="prose-only">
@@ -260,11 +225,7 @@ function NothingToJudge() {
   );
 }
 
-/**
- * Each tab is one durable eve session, capped at a fixed amount in agent.ts.
- * This is what running into that cap looks like: eve parked the turn asking
- * whether to keep spending, and a demo has nobody to ask.
- */
+/** The per-session cost cap in agent.ts; permanent for the tab. */
 function BudgetSpent() {
   return (
     <Notice data-budget="spent" tone="warn">
@@ -277,23 +238,17 @@ function BudgetSpent() {
 }
 
 const MS_PER_MINUTE = 60_000;
-/** `15:00`, the UTC clock time in an ISO timestamp. */
+/** `HH:MM` within an ISO timestamp. */
 const CLOCK_FROM = 11;
 const CLOCK_TO = 16;
 
-/** A time as `15:00 UTC`, rounded up to the minute so it is never earlier than the time itself. */
+/** Rounded up, so it never shows a time before the real one. */
 function clock(ms: number): string {
   const minute = Math.ceil(ms / MS_PER_MINUTE) * MS_PER_MINUTE;
   return `${new Date(minute).toISOString().slice(CLOCK_FROM, CLOCK_TO)} UTC`;
 }
 
-/**
- * The site's own model budget, shared by every tab, is spent for this hour or
- * this UTC day, or cannot be read, and the agent refused the turn before any
- * model ran. Unlike the session's cap this passes on its own, so it says when,
- * and the page asks again by itself at that time, which is also when this
- * notice goes.
- */
+/** The site-wide model budget, unlike the session cap, resets on its own. */
 function ReviewsPaused({ paused }: { paused: LocalPause }) {
   if (paused.window === 'unavailable') {
     return (

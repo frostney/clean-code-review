@@ -3,17 +3,12 @@ import type { Answer } from '@/agent/lib/judging/schema';
 
 import { detail, headline, levelsOf } from './display';
 
-/** A fill is a fraction, and CSS wants it as a percentage. */
 const PERCENT = 100;
 
-/** Jev's yes/no answers are odds; at even odds or better the answer is "yes". */
+/** A yes/no probability at or above this reads as "yes". */
 const EVEN_ODDS = 0.5;
 
-/**
- * One bar, used by every question. Ink fill on a light track, nothing else —
- * no ticks, no dots, no chips, no colour scale. If a row needs to say more, it
- * says it in words.
- */
+// Deliberately plain: no ticks or colour scale; a row says more in words.
 function Bar({ value }: { value: number }) {
   const width = Math.max(0, Math.min(1, value)) * PERCENT;
   return (
@@ -26,10 +21,9 @@ function Bar({ value }: { value: number }) {
   );
 }
 
-/** A scale with no levels to place the answer on is drawn half full. */
+/** For a scale without levels. */
 const HALF_FULL = 0.5;
 
-/** A flagged smell is loud, a cleared one is quiet, everything else is plain. */
 function headlineClass(finding: boolean, quiet: boolean): string {
   if (quiet) {
     return 'text-muted';
@@ -37,11 +31,7 @@ function headlineClass(finding: boolean, quiet: boolean): string {
   return finding ? 'text-bad' : 'text-ink';
 }
 
-/**
- * How full the bar is. Each question type has one natural "how much": for a
- * yes/no it's the probability of yes, for a scale it's how far up the scale,
- * for a choice it's how much the winner won by.
- */
+/** yes/no: P(yes); score: position on the scale; choice: the chosen option's probability. */
 function fill(meta: Question, answer: Answer | undefined): number {
   if (!answer) {
     return 0;
@@ -57,25 +47,13 @@ function fill(meta: Question, answer: Answer | undefined): number {
 }
 
 /**
- * One question, one row.
+ * Below 420px of group width the row splits into two lines, because three
+ * columns would clip the label and headline. Those are never cut; the
+ * "NN% sure" detail truncates first. A container query, because a group's
+ * column width depends on the card, not the viewport.
  *
- * Wide enough, it is a single line — label, bar, answer — and the columns line
- * up down the group so its judgments read as a single scan. In a narrow column
- * squeezing three columns in clips exactly the two words that carry the
- * judgment ("Mixes abstracti…", "Self-d…"). Under 420px the row becomes two
- * lines instead: label and answer on the first, the full-width bar under them.
- * Neither the label nor the headline is ever cut; the "NN% sure" hint is what
- * gives way when the line is short, because it is the least of the three.
- *
- * Polarity is the point: every yes/no question is phrased so that **yes is a
- * finding**. A row Jev answers "yes" to keeps its dark bar and says so in the
- * danger colour; a "no" fades its bar and mutes its word. At a glance you see
- * what is wrong with the file — the dark rows — rather than thirty-odd
- * equally loud ones.
- *
- * The breakpoint is a container query on the group, not a viewport one: the
- * review sits under the code, one column of groups or two depending on how
- * wide the card is, and what a row can fit depends on its group's column.
+ * Every yes/no question is phrased so yes is a finding: "yes" rows stay dark
+ * and red, "no" rows fade, so what is wrong stands out.
  */
 export function Meter({
   meta,

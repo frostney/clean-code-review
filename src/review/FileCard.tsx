@@ -45,30 +45,21 @@ import { useOnScreen, type WatchCard } from './useCardWindow';
 import { type Changes, useChanges } from './useChanges';
 
 /**
- * The anchor the sidebar scrolls to: the card's place in the review, not its
- * path. Speed Insights names the element a layout shift or a slow tap
- * happened on by the nearest id, and a path would say which file, and so
- * which repository, was being read.
+ * By index, not path: Speed Insights reports the nearest id, and a path would
+ * reveal which repository was being read.
  */
 export function cardId(index: number): string {
   return `file-${index}`;
 }
 
 /**
- * The two-tone path used in the card header and the sidebar alike.
+ * The basename never truncates; the directory loses its left end instead.
+ * `dir="rtl"` puts the ellipsis at the start, and `bdi` keeps the path itself
+ * left to right.
  *
- * The basename is the part that identifies the file, so it never truncates:
- * when the row is too narrow it is the directory that loses its left end.
- * `dir="rtl"` is what puts the overflow — and so the ellipsis — at the start
- * of the directory; the `bdi` keeps the path itself reading left to right.
- *
- * `stacked` is the sidebar's version, where the row is 16rem wide and the
- * paths of a real pull request are longer than that. The two parts go on two
- * lines instead of one: the directory muted above, truncated with an ordinary
- * end ellipsis, and the basename below in full — never cut, broken mid-word if
- * that is what it takes to fit. The RTL trick is not used there because it
- * clips the leading ellipsis and reorders the punctuation of a path like
- * `__tests__/`.
+ * `stacked` (the 16rem sidebar) puts the directory above the basename instead.
+ * The RTL trick is not used there: it clips the leading ellipsis and reorders
+ * the punctuation of paths like `__tests__/`.
  */
 export function FilePath({
   path,
@@ -77,7 +68,6 @@ export function FilePath({
 }: {
   path: string;
   stacked?: boolean;
-  /** How the row this sits in wants it sized. */
   className?: string;
 }) {
   const [dir, base] = splitPath(path);
@@ -115,11 +105,7 @@ export function LangChip({ path }: { path: string }) {
   );
 }
 
-/**
- * What a prose file wears where a judged file wears its verdict. Grey and
- * unbold enough not to read as an answer, because it is not one: a README is
- * on the page for context, and none of the questions is asked about it.
- */
+/** Muted so it does not read as a verdict: prose files are never judged. */
 export function ProseChip({ className = '' }: { className?: string }) {
   return (
     <span
@@ -131,7 +117,6 @@ export function ProseChip({ className = '' }: { className?: string }) {
   );
 }
 
-/** "7 smells" beside the verdict, in the header and in the sidebar alike. */
 export function SmellCount({
   count,
   className = '',
@@ -149,11 +134,6 @@ export function SmellCount({
   );
 }
 
-/**
- * The card's one always-visible line: the fold, the path, the language, how big
- * the change is, and the verdict. It is the whole card while the card is
- * folded, which is why it carries the smell count and the badge.
- */
 function CardHeader({
   answers,
   collapsed,
@@ -162,7 +142,7 @@ function CardHeader({
   path,
   smells,
   stats,
-  sure,
+  confidence,
   truncated,
   verdict,
 }: {
@@ -172,12 +152,11 @@ function CardHeader({
   onToggle: () => void;
   path: string;
   smells: number;
-  /** How many lines the change adds and removes, when the file is a diff. */
+  /** Null unless the file is a diff. */
   stats: { added: number; removed: number } | null;
-  /** How sure Jev is of the verdict, when it said. */
-  sure: number | null;
+  confidence: number | null;
   truncated: boolean;
-  /** Null for a prose file: nothing judged it, so it wears a chip instead. */
+  /** Null for a prose file. */
   verdict: Verdict | null;
 }) {
   return (
@@ -224,8 +203,8 @@ function CardHeader({
           <ProseChip />
         ) : (
           <>
-            {sure === null ? null : (
-              <span className="text-xs text-muted">{pct(sure)} sure</span>
+            {confidence === null ? null : (
+              <span className="text-xs text-muted">{pct(confidence)} sure</span>
             )}
             {answers ? <SmellCount count={smells} /> : null}
             <span
@@ -242,11 +221,6 @@ function CardHeader({
   );
 }
 
-/**
- * The judged half of a card: Luna's paragraph about this file, and Jev's
- * answers under a fold. Only a code file has one — prose is read, not judged,
- * so a prose card ends at the text of the file.
- */
 function Judgment({
   answers,
   changes,
@@ -258,11 +232,9 @@ function Judgment({
 }: {
   answers: Answers | undefined;
   changes: Changes;
-  /** The meters are unfolded; folded, Luna's paragraph stands alone. */
   findingsOpen: boolean;
   onToggleFindings: () => void;
   path: string;
-  /** The questions that were asked about this file, in book order. */
   questions: readonly Question[];
   summary: SummaryView;
 }) {
@@ -313,11 +285,7 @@ function Judgment({
   );
 }
 
-/**
- * One chapter of the book, with the rows that were asked about this file. A
- * chapter with nothing to ask is not a chapter with clean answers, so it is
- * not shown at all.
- */
+// A group with no questions is hidden, not shown as clean.
 function FindingGroup({
   answers,
   changes,
@@ -357,27 +325,20 @@ function FindingGroup({
   );
 }
 
-/** One `.code-line` row, and the `py-2` around a file's rows. */
+/** Must match `.code-line` and the `py-2` around a file's rows. */
 const CODE_ROW_PX = 20;
 const CODE_PAD_PX = 16;
 
 /**
- * A drawn card's code is laid out and painted only while it is near the
- * screen. Ten cards of a large pull request are thousands of rows, and laying
- * them all out before the first paint was most of the first frame. The
- * browser holds the space at the height the rows will take — exact, since
- * every row is one line of the same height — so nothing moves when it is.
+ * `content-visibility: auto` for drawn code: laying out every row of a large
+ * pull request was most of the first frame. The reserved height is exact
+ * because every row is one line of fixed height, so nothing moves.
  *
- * Only for an editable file. Its sideways scrollbar belongs to the textarea
- * laid over the rows, so on a system that draws scrollbars it sits inside the
- * rows' height rather than under them. A prose file's code scrolls itself,
- * and there a long line adds a scrollbar's height the rows cannot predict, so
- * a prose card is laid out in full, at the height it really has.
- * The text of a drawn card stays in the document, where find-in-page and a
- * screen reader still reach it. A card not drawn yet has no code in the
- * document at all; Cmd/Ctrl+F draws every one of those first
- * (`useCardWindow`), but a search started any other way — the browser's
- * menu, say — only finds what is drawn.
+ * Editable files only: their horizontal scrollbar is inside the textarea over
+ * the rows. A prose file scrolls itself, and a long line adds a scrollbar
+ * height the rows cannot predict.
+ *
+ * The text stays in the document for find-in-page and screen readers.
  */
 function codeSpace(
   lines: number,
@@ -393,12 +354,8 @@ function codeSpace(
 }
 
 /**
- * The space an undrawn card's body will take, held empty until it is drawn.
- *
- * The code is exact: every line is one `.code-line` row, twenty pixels, and
- * the plain and highlighted versions of a file have the same rows. The review
- * and the meters under it are an estimate from how many rows and chapters
- * there are, in `globals.css`, where the layout they depend on is.
+ * The code's height is exact; the review and meters are estimated in
+ * `globals.css`, next to the layout they depend on.
  */
 function BodySpace({
   groups,
@@ -417,8 +374,7 @@ function BodySpace({
     '--space-lines': lines,
     '--space-rows': rows,
   } as CSSProperties;
-  // Never the element the browser keeps the reader's place by: it is about to
-  // be replaced, and an anchor that leaves the page anchors nothing.
+  // Not a scroll anchor: it is about to be replaced.
   return (
     <div
       aria-hidden="true"
@@ -431,25 +387,12 @@ function BodySpace({
 }
 
 /**
- * One file of the review: its code across the card, Luna's paragraph about it,
- * and Jev's answers underneath. The code is the subject, so it gets the full
- * width — a diff beside a panel is two narrow columns and neither reads. Every
- * card keeps its own change tracking, so editing one file lights up that
- * file's rows and leaves the rest of the review alone.
+ * Code takes the full width: a diff beside a panel is two narrow columns and
+ * neither reads. Only questions asked about this file are shown; an
+ * unanswered row would read as a clean bill of health.
  *
- * Only the questions that were asked about this file are shown: the Boy Scout
- * row is a question about a change, the test row a question about a test, and
- * a row nobody answered would read as a clean bill of health.
- *
- * Two things fold away. The chevron in the header collapses the card to its
- * header — a twenty-four file review is a long page, and the header alone is
- * the verdict, the smell count and the name. Inside, "Findings" folds the
- * meters away and leaves Luna's paragraph, which is the same judgment in words.
- *
- * A prose file is the one card that is none of this. Clean Code is a book
- * about code, so a README is read and not judged: no verdict, no review, no
- * meters, and the text is shown rather than edited, since editing it would
- * re-judge nothing.
+ * Prose files (e.g. a README) are shown read-only, with no verdict, review or
+ * meters: editing them would re-judge nothing.
  */
 export function FileCard({
   file,
@@ -467,35 +410,27 @@ export function FileCard({
   watch,
 }: {
   file: ReviewFile;
-  /** Where the card stands in the review, which is its anchor. */
   index: number;
   judgment: FileJudgment | undefined;
-  /** Jev was asked about this file twice and answered for neither. */
+  /** Unanswered twice; given up on. */
   failed: boolean;
-  /** The site's model budget refused this file's turn; nothing is coming until it resets. */
+  /** Refused by the site's model budget until it resets. */
   paused: boolean;
-  /** The last judging turn failed and let this file go; nothing comes until Retry. */
+  /** Let go by a failed turn until Retry or an edit. */
   stalled: boolean;
-  /** The paste was longer than one judgment reads, and this is the part that was. */
   truncated: boolean;
-  /** Luna's review of the whole change, for the paragraph about this file. */
   summary: SummaryView;
-  /** Only the header is on screen. */
   collapsed: boolean;
   onToggle: () => void;
   onChange: (next: string) => void;
-  /** Not drawn yet: the header, and an empty space where the body will be. */
+  /** Header plus a placeholder until the reader comes near. */
   deferred: boolean;
-  /** How an undrawn card asks to be drawn once the reader comes near it. */
   watch: WatchCard;
 }) {
   const answers = judgment?.answers;
-  // Documentation, not code: shown with the review, never sent to either
-  // model. There is no verdict, no finding and nothing to edit, so the card
-  // below stops at the text of the file.
+  // Never sent to either model.
   const prose = isProsePath(file.path);
-  // Keyed on what actually decides the rows, so an edit does not hand the
-  // change tracker a new question list on every keystroke.
+  // Not keyed on content, so typing does not hand useChanges a new list.
   const questions = useMemo(
     () => questionsFor({ patch: file.patch, path: file.path }),
     [file.path, file.patch],
@@ -511,7 +446,7 @@ export function FileCard({
         paused,
         stalled,
       });
-  const sure = prose ? null : verdictConfidence(answers);
+  const confidence = prose ? null : verdictConfidence(answers);
   const stats = useMemo(
     () => (file.patch ? diffStats(parsePatch(file.content)) : null),
     [file.patch, file.content],
@@ -546,12 +481,12 @@ export function FileCard({
       <CardHeader
         answers={answers}
         collapsed={collapsed}
+        confidence={confidence}
         lineCount={lineCount}
         onToggle={onToggle}
         path={file.path}
         smells={smells}
         stats={stats}
-        sure={sure}
         truncated={truncated}
         verdict={verdict}
       />

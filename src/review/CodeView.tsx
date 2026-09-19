@@ -6,17 +6,14 @@ import type { DiffLine } from './diff';
 import { type TokenLine, useTokens } from './highlight';
 import type { Lang } from './language';
 
-/**
- * How code is drawn on this page: line numbers, tokens, and the rows of a
- * unified diff. Every example is editable, so nothing here renders on its own —
- * these are the layer the `Editor` puts a textarea on top of, and the two share
- * the `.code-line` metrics to the pixel or the caret drifts.
- */
+// The layer `Editor` lays its textarea over (read-only prose files render it
+// alone). Both must share the `.code-line` metrics to the pixel or the caret
+// drifts.
 
-/** Padding shared by every gutter and every code column, so lines line up. */
+/** Shared by every gutter and code column so lines line up. */
 const PAD_Y = 'py-2';
 
-/** One highlighted line. Always renders something, so empty lines keep height. */
+/** Always renders something, so empty lines keep their height. */
 function Tokens({ line }: { line: TokenLine | undefined }) {
   if (!line || !line.length) {
     return <> </>;
@@ -32,7 +29,6 @@ function Tokens({ line }: { line: TokenLine | undefined }) {
   );
 }
 
-/** A column of line numbers that does not scroll with the code beside it. */
 export function Gutter({
   numbers,
   backgrounds,
@@ -53,7 +49,6 @@ export function Gutter({
   );
 }
 
-/** Plain code: one row per line, nothing but the tokens. */
 export function CodeRows({ lines }: { lines: readonly TokenLine[] }) {
   return (
     <div className={`min-w-max px-3 ${PAD_Y}`}>
@@ -87,13 +82,9 @@ export function gutterBackgrounds(lines: readonly DiffLine[]): string[] {
 }
 
 /**
- * Tokenise a diff's code as the file's own language.
- *
- * The +/-/space column is taken off before highlighting and put back
- * afterwards, so a grammar never sees a leading sign; hunk and meta lines
- * contribute an empty line each, which keeps the tokens index-aligned with the
- * rows. Each row renders `sign + code`, which is the line exactly as it was
- * typed — the textarea above it has to agree character for character.
+ * Signs are stripped so the grammar never sees them; hunk and meta lines
+ * become empty lines to keep tokens index-aligned with rows. Each row renders
+ * `sign + code`, matching the textarea character for character.
  */
 export function useDiffTokens(
   lines: readonly DiffLine[],
@@ -111,10 +102,6 @@ export function useDiffTokens(
   return useTokens(stripped, lang, debounceMs, onScreen);
 }
 
-/**
- * A unified diff with its diff semantics intact: a background per line kind and
- * the code itself still highlighted as whatever language the file is.
- */
 export function DiffRows({
   lines,
   tokens,

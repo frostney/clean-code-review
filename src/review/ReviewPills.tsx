@@ -4,27 +4,14 @@ import { reviewVerdict, smellCount, smellLabel, verdictScore } from './display';
 import { PendingDot } from './PendingDot';
 import type { ReviewState } from './useReview';
 
-/**
- * What the whole review amounts to right now, as three pills: Jev's verdict
- * across every file it has judged, how many smells that adds up to, and which
- * model is working.
- *
- * They sit on the overall review card's bottom line rather than beside a page
- * title, so the one line that carries a conclusion carries all of it: Luna's
- * decision, then Jev's verdict and count, then who wrote the prose.
- */
 export function ReviewPills({
   judgeable = true,
   review,
   stalled = false,
 }: {
-  /**
-   * There is code in this review. False for a change that is only
-   * documentation: nothing will ever be judged, so the pill must not pulse.
-   */
+  /** False when no answer can ever arrive, so the pill must not pulse. */
   judgeable?: boolean;
   review: ReviewState;
-  /** Some file a failed turn let go of is still waiting on a Retry. */
   stalled?: boolean;
 }) {
   const judged = Object.values(review.judgments);
@@ -60,11 +47,7 @@ export function ReviewPills({
   );
 }
 
-/**
- * A dot and a word, and nothing at all when nothing is happening. Two models
- * answer here and they take different amounts of time, so this says which one
- * is working: Jev judging, or Luna writing the review.
- */
+// Says which model is working, since Jev and Luna take very different times.
 function ReviewStatus({ review }: { review: ReviewState }) {
   const base = 'flex items-center gap-1.5 text-xs';
   if (review.budgetSpent) {
@@ -75,15 +58,14 @@ function ReviewStatus({ review }: { review: ReviewState }) {
     );
   }
   if (review.paused) {
-    // With nothing judged the verdict pill already says "Paused".
+    // With nothing judged, the verdict pill already says "Paused".
     return Object.keys(review.judgments).length ? (
       <span className={`${base} text-muted`} data-status="paused">
         paused
       </span>
     ) : null;
   }
-  // A failed turn is said once, in the toast (`ReviewToasts`), where Retry
-  // is; the verdict pill beside this has already stopped saying "Judging…".
+  // Failures are shown once, in the toast with Retry (`ReviewToasts`).
   if (review.error && !review.asking) {
     return null;
   }

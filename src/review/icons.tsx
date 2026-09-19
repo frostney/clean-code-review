@@ -14,14 +14,7 @@ import {
 
 import type { GroupId } from '@/agent/lib/judging/questions';
 
-/**
- * One icon per chapter of *Clean Code*, in one place: the group headers in a
- * card and any other list of groups read the same picture for the same
- * chapter, so a reader learns the alphabet once.
- *
- * Keyed by `GroupId`, so a new group in `agent/lib/judging/questions.ts` is a type
- * error here rather than a silently missing icon.
- */
+// Keyed by `GroupId`, so a new group is a type error rather than a missing icon.
 const ICONS: Record<GroupId, LucideIcon> = {
   classes: Layers,
   comments: MessageSquare,
@@ -35,7 +28,7 @@ const ICONS: Record<GroupId, LucideIcon> = {
   verdict: Gavel,
 };
 
-/** 14px, muted, decorative: the group's title beside it is the label. */
+/** Decorative: the group title beside it is the label. */
 export function GroupIcon({
   group,
   className = '',
