@@ -8,7 +8,7 @@ export function PasteButton() {
 
   return (
     <button
-      className="inline-flex min-h-10 cursor-pointer items-center text-[12px] text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent lg:min-h-0"
+      className="inline-flex min-h-10 cursor-pointer items-center text-xs text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent lg:min-h-0"
       data-paste="open"
       onClick={startPasting}
       ref={pasteButtonRef}

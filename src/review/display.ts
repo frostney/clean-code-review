@@ -201,7 +201,13 @@ function verdictOf(score: number | null): Verdict {
  */
 export function fileVerdict(
   score: number | null,
-  state: { empty?: boolean; failed?: boolean; paused?: boolean },
+  state: {
+    empty?: boolean;
+    failed?: boolean;
+    paused?: boolean;
+    /** The last turn failed and nothing is asking again until Retry. */
+    stalled?: boolean;
+  },
 ): Verdict {
   if (state.empty) {
     return VERDICTS.empty;
@@ -209,9 +215,13 @@ export function fileVerdict(
   if (score === null && state.failed) {
     return VERDICTS.failed;
   }
-  // The site's model budget refused the turn: nothing is coming until it resets.
+  // The site's model budget refused the turn: nothing is coming until it
+  // resets, which is a pause, whatever turn failed around it.
   if (score === null && state.paused) {
     return VERDICTS.paused;
+  }
+  if (score === null && state.stalled) {
+    return VERDICTS.failed;
   }
   return verdictOf(score);
 }
@@ -226,12 +236,16 @@ export function reviewVerdict(
   scores: readonly (number | null)[],
   judgeable: boolean,
   paused = false,
+  stalled = false,
 ): Verdict {
   if (!judgeable) {
     return VERDICTS.empty;
   }
   const mean = meanVerdict(scores);
-  return mean === null && paused ? VERDICTS.paused : verdictOf(mean);
+  if (mean === null && paused) {
+    return VERDICTS.paused;
+  }
+  return mean === null && stalled ? VERDICTS.failed : verdictOf(mean);
 }
 
 /** The verdict score of one file, or null when Jev has not answered for it. */

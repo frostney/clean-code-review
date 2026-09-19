@@ -75,6 +75,12 @@ interface ReviewControls {
   startPasting: () => void;
   /** The dialog hands focus back here when it closes. */
   pasteButtonRef: RefObject<HTMLButtonElement | null>;
+  /** Ask again for the pull request that last failed to open. */
+  retryPullRequest: () => void;
+  /** Put away the reason the last pull request did not open. */
+  dismissPrError: () => void;
+  /** Ask again about the files a failed judging turn left unanswered; false if there were none. */
+  retryJudging: () => boolean;
 }
 
 interface ReviewView {
@@ -86,6 +92,8 @@ interface ReviewView {
   lineCount: number;
   /** Why the last pull request never opened. */
   prError: string | null;
+  /** A Retry for that pull request is on the wire; its reason stays up meanwhile. */
+  retryingPr: boolean;
   pasting: boolean;
   stopPasting: () => void;
   /** An edit replaces that file's content and nothing else in the review. */
@@ -269,6 +277,20 @@ export function ReviewProvider({
   const [pasting, setPasting] = useState(false);
   const [prError, setPrError] = useState<string | null>(opened.error);
   const [fetching, setFetching] = useState(false);
+  const [retryingPr, setRetryingPr] = useState(false);
+  /**
+   * The last pull request asked for, and the history entry it was asked for
+   * from, which is what Retry asks for again. A permalink that failed on the
+   * server is the first one.
+   */
+  const lastAskedRef = useRef<{ url: string; entry: string | null } | null>(
+    opened.error && initialAddress.repo
+      ? {
+          entry: null,
+          url: pullRequestUrl(initialAddress.repo, initialAddress.number),
+        }
+      : null,
+  );
   /** Where focus goes when the paste dialog closes. */
   const pasteButtonRef = useRef<HTMLButtonElement>(null);
   // A counter, not state: two reviews opened before the next render would both
@@ -324,7 +346,7 @@ export function ReviewProvider({
     [review.pr],
   );
 
-  const judge = useReview(review.id, sent, prompt);
+  const { state: judge, actions: judging } = useReview(review.id, sent, prompt);
 
   const lineCount = useMemo(
     () =>
@@ -356,6 +378,7 @@ export function ReviewProvider({
         setPasting(false);
         setPrError(null);
         setFetching(false);
+        setRetryingPr(false);
       });
       shownPathRef.current = path;
       showPath(path, replace);
@@ -378,6 +401,7 @@ export function ReviewProvider({
     if (!entry) {
       setPrError(message);
       setFetching(false);
+      setRetryingPr(false);
       return;
     }
     switchView(() => {
@@ -385,6 +409,7 @@ export function ReviewProvider({
       setPasting(false);
       setPrError(message);
       setFetching(false);
+      setRetryingPr(false);
     });
     shownPathRef.current = entry;
     document.title = SITE.name;
@@ -458,10 +483,16 @@ export function ReviewProvider({
    * against.
    */
   const open = useCallback(
-    (url: string, entry: string | null) => {
+    (url: string, entry: string | null, retrying = false) => {
       generationRef.current += 1;
       const generation = generationRef.current;
-      setPrError(null);
+      lastAskedRef.current = { entry, url };
+      // A retry keeps the reason on screen until the answer replaces it, so
+      // the duck or the toast does not blink away and back for one fetch.
+      if (!retrying) {
+        setPrError(null);
+      }
+      setRetryingPr(retrying);
       setFetching(true);
       const run = async () => {
         const answer = await answered(url);
@@ -482,6 +513,15 @@ export function ReviewProvider({
     },
     [open],
   );
+
+  const retryPullRequest = useCallback(() => {
+    const last = lastAskedRef.current;
+    if (last) {
+      open(last.url, last.entry, true);
+    }
+  }, [open]);
+
+  const dismissPrError = useCallback(() => setPrError(null), []);
 
   /**
    * Back and forward, over the entries the page wrote itself.
@@ -504,6 +544,7 @@ export function ReviewProvider({
         // itself over this one when it lands.
         generationRef.current += 1;
         setFetching(false);
+        setRetryingPr(false);
         return;
       }
       if (path === '/') {
@@ -601,12 +642,15 @@ export function ReviewProvider({
     () => ({
       activePreset: review.preset,
       address,
+      dismissPrError,
       fetching,
       goHome,
       judgePasted,
       openPreset,
       openPullRequest,
       pasteButtonRef,
+      retryJudging: judging.retry,
+      retryPullRequest,
       startPasting,
     }),
     [
@@ -618,6 +662,9 @@ export function ReviewProvider({
       judgePasted,
       openPullRequest,
       startPasting,
+      judging,
+      dismissPrError,
+      retryPullRequest,
     ],
   );
 
@@ -629,10 +676,11 @@ export function ReviewProvider({
       open: review.id !== NO_REVIEW.id,
       pasting,
       prError,
+      retryingPr,
       review,
       stopPasting,
     }),
-    [review, judge, lineCount, prError, pasting, stopPasting, edit],
+    [review, judge, lineCount, prError, retryingPr, pasting, stopPasting, edit],
   );
 
   return (

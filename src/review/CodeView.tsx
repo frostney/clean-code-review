@@ -42,7 +42,7 @@ export function Gutter({
 }) {
   return (
     <div
-      className={`code-line shrink-0 select-none border-r border-line bg-surface text-right text-muted/70 ${PAD_Y}`}
+      className={`code-line shrink-0 select-none border-r border-line bg-surface text-right text-muted ${PAD_Y}`}
     >
       {numbers.map((n, i) => (
         <div className={`px-2 ${backgrounds?.[i] ?? ''}`} key={i}>
@@ -71,13 +71,13 @@ const ROW_BACKGROUND: Record<DiffLine['kind'], string> = {
   context: '',
   del: 'bg-del-bg',
   hunk: 'bg-hunk-bg text-accent',
-  meta: 'text-muted/70',
+  meta: 'text-subtle',
 };
 
 const GUTTER_BACKGROUND: Record<DiffLine['kind'], string> = {
-  add: 'bg-add-gutter',
+  add: 'bg-add-gutter text-ink',
   context: '',
-  del: 'bg-del-gutter',
+  del: 'bg-del-gutter text-ink',
   hunk: 'bg-hunk-bg',
   meta: '',
 };
@@ -131,7 +131,7 @@ export function DiffRows({
           ) : (
             <>
               {line.sign ? (
-                <span className="select-none text-muted/60">{line.sign}</span>
+                <span className="select-none text-muted">{line.sign}</span>
               ) : null}
               <Tokens line={tokens[i]} />
             </>

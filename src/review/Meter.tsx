@@ -17,10 +17,10 @@ const EVEN_ODDS = 0.5;
 function Bar({ value }: { value: number }) {
   const width = Math.max(0, Math.min(1, value)) * PERCENT;
   return (
-    <div className="h-2 w-full rounded-full bg-track">
+    <div className="h-2 w-full overflow-hidden rounded-full bg-track">
       <div
-        className="h-full rounded-full bg-ink"
-        style={{ transition: 'width 300ms', width: `${width}%` }}
+        className="h-full rounded-full bg-ink motion-safe:transition-transform motion-safe:duration-300"
+        style={{ transform: `translateX(${width - PERCENT}%)` }}
       />
     </div>
   );
@@ -102,7 +102,7 @@ export function Meter({
       data-q={meta.id}
       data-type={meta.type}
     >
-      <span className="text-[13px] text-muted @[420px]/group:order-1">
+      <span className="text-sm text-muted @[420px]/group:order-1">
         {meta.label}
       </span>
       <span
@@ -110,14 +110,12 @@ export function Meter({
         data-value="true"
       >
         {changed && delta ? (
-          <span className="truncate text-tiny text-muted">{delta}</span>
+          <span className="truncate text-xs text-muted">{delta}</span>
         ) : (
-          <span className="truncate text-tiny text-muted/70">
-            {detail(answer)}
-          </span>
+          <span className="truncate text-xs text-subtle">{detail(answer)}</span>
         )}
         <span
-          className={`shrink-0 text-[13px] font-semibold ${headlineClass(finding, quiet)}`}
+          className={`shrink-0 text-sm font-semibold ${headlineClass(finding, quiet)}`}
         >
           {headline(meta, answer)}
         </span>

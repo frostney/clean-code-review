@@ -1,12 +1,10 @@
 import type { Metadata } from 'next';
-import Image from 'next/image';
-import Link from 'next/link';
 
-import { DuckTransition } from '@/src/landing/DuckTransition';
 import { FAQ } from '@/src/site/faq';
 import { SITE } from '@/src/site/site';
 import { Faq } from '@/src/ui/Faq';
 import { Footer } from '@/src/ui/Footer';
+import { PageHeader } from '@/src/ui/PageHeader';
 
 /**
  * The questions, at an address of their own.
@@ -68,42 +66,17 @@ const FAQ_LD = {
   url: `${SITE.url}/faq`,
 };
 
-/** The duck, small: the mark at the top of a page with no wordmark, and the way back. */
-const DUCK_PX = 40;
-
 export default function FaqPage() {
   return (
     <>
       <div className="mx-auto max-w-[1280px] px-4 py-5">
         <main>
-          <header className="mb-4">
-            {/* The landing page's duck, arriving: a link here from `/`, or this
-                one back to it, morphs one bird into the other. */}
-            <DuckTransition>
-              <Link
-                aria-label={`Back to ${SITE.name}`}
-                className="inline-flex rounded-md"
-                href="/"
-              >
-                <Image
-                  alt=""
-                  height={DUCK_PX}
-                  priority={true}
-                  src="/ducky-64.png"
-                  width={DUCK_PX}
-                />
-              </Link>
-            </DuckTransition>
-            <h1 className="mt-3 text-[16px] font-semibold text-ink lg:text-[14px]">
-              {TITLE}
-            </h1>
-            <p className="mt-1 max-w-[70ch] text-[13px] text-muted">
-              {SITE.tagline}
-            </p>
-          </header>
+          <PageHeader title={TITLE}>
+            <p>{SITE.tagline}</p>
+          </PageHeader>
           <Faq />
         </main>
-        <Footer />
+        <Footer current="faq" />
       </div>
       <script
         // biome-ignore lint/security/noDangerouslySetInnerHtml: a serialised object is the only way to emit structured data, and every byte of this one is written a few lines above in this same file.

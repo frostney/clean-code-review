@@ -122,7 +122,7 @@ function Overlay({
         {onChange ? (
           <textarea
             aria-label={`Edit ${path}`}
-            className="code-line absolute inset-0 w-full resize-none overflow-auto border-0 bg-transparent px-3 py-2 text-transparent caret-ink outline-none"
+            className="code-line absolute inset-0 w-full resize-none overflow-auto border-0 bg-transparent px-3 py-2 text-transparent caret-ink outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
             maxLength={REVIEW_LIMITS.maxCharsPerFile}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={onKeyDown}

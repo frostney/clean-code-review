@@ -18,14 +18,14 @@ export function ReviewStats() {
   const cached = judge.cached || judge.summary.cached;
 
   return (
-    <p className="mt-2 text-[12px] text-muted">
+    <p className="mt-2 text-xs text-muted">
       {fileCount} {fileCount === 1 ? 'file' : 'files'} · {lineCount} lines ·
       last turn {judge.ms === null ? '—' : `${judge.ms} ms`}
       {cached ? (
         <>
           {' '}
           &middot;{' '}
-          <span className="text-muted/70" data-cached="1">
+          <span className="text-subtle" data-cached="1">
             from cache
           </span>
         </>

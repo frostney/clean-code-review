@@ -13,12 +13,21 @@
   --color-ink: var(--ink);
   --color-muted: var(--muted);
   --color-line: var(--line);
+  /* A boundary that has to be seen to be used: the address field's edge.
+     `line` is a hairline between things; this clears 3:1 on the page and
+     on the surface in both themes. */
+  --color-line-strong: var(--line-strong);
+  /* The quietest text that still reads: under muted, never under 4.5:1 on
+     the page or the surface. Text is never faded with opacity instead. */
+  --color-subtle: var(--subtle);
   --color-surface: var(--surface);
   --color-accent: var(--accent);
   --color-track: var(--track);
   /* What a modal dims the page with. Ink would invert with the theme; the
      scrim is a shadow in both, so it is a colour of its own. */
   --color-scrim: var(--scrim);
+  /* What lifts a toast off the code it floats over, tinted with the ink. */
+  --shadow-toast: var(--toast-shadow);
   /* The duck's speech bubble, which is always the page's opposite. */
   --color-bubble: var(--bubble);
   --color-bubble-ink: var(--bubble-ink);
@@ -46,10 +55,14 @@
   --ink: #1f2328;
   --muted: #656d76;
   --line: #d0d7de;
+  --line-strong: #818b98;
+  --subtle: #687079;
   --surface: #f6f8fa;
   --accent: #0969da;
   --track: #eaeef2;
   --scrim: rgb(31 35 40 / 0.4);
+  --toast-shadow:
+    0 8px 24px rgb(31 35 40 / 0.14), 0 1px 3px rgb(31 35 40 / 0.1);
   --bubble: #000000;
   --bubble-ink: #ffffff;
 
@@ -79,10 +92,13 @@
   --dark-ink: #e6edf3;
   --dark-muted: #8b949e;
   --dark-line: #30363d;
+  --dark-line-strong: #6e7681;
+  --dark-subtle: #808891;
   --dark-surface: #161b22;
   --dark-accent: #58a6ff;
   --dark-track: #21262d;
   --dark-scrim: rgb(1 4 9 / 0.7);
+  --dark-toast-shadow: 0 8px 24px rgb(1 4 9 / 0.6), 0 0 0 1px rgb(1 4 9 / 0.4);
   --dark-bubble: #ffffff;
   --dark-bubble-ink: #000000;
 
@@ -107,10 +123,13 @@
   --ink: var(--dark-ink);
   --muted: var(--dark-muted);
   --line: var(--dark-line);
+  --line-strong: var(--dark-line-strong);
+  --subtle: var(--dark-subtle);
   --surface: var(--dark-surface);
   --accent: var(--dark-accent);
   --track: var(--dark-track);
   --scrim: var(--dark-scrim);
+  --toast-shadow: var(--dark-toast-shadow);
   --bubble: var(--dark-bubble);
   --bubble-ink: var(--dark-bubble-ink);
 
@@ -138,10 +157,13 @@
     --ink: var(--dark-ink);
     --muted: var(--dark-muted);
     --line: var(--dark-line);
+    --line-strong: var(--dark-line-strong);
+    --subtle: var(--dark-subtle);
     --surface: var(--dark-surface);
     --accent: var(--dark-accent);
     --track: var(--dark-track);
     --scrim: var(--dark-scrim);
+    --toast-shadow: var(--dark-toast-shadow);
     --bubble: var(--dark-bubble);
     --bubble-ink: var(--dark-bubble-ink);
 
@@ -179,18 +201,39 @@ body {
   font-size: 14px;
 }
 
-/* The page's smallest type, in one place. Eleven pixels is a desk-monitor
-   size: held at arm's length on a phone it is below what the screen renders
-   honestly, so the floor is twelve until the layout is wide enough to have
-   earned the extra pixel back. Every chip, pill, hint and column heading on
-   the page wears this rather than a literal size. */
-.text-tiny {
-  font-size: 12px;
+/* The type scale: five steps and nothing between them. xs is every chip,
+   pill, hint and column heading; sm is the body of the review and of the
+   prose pages; base is the body's own size; lg is what is typed into (below
+   16px iOS zooms the page on focus) and the pull request's title; xl is a
+   page title. Tailwind's defaults are cleared so that no size outside these
+   can be reached by name, and no step carries a line height: each element
+   keeps the one it inherits, as the pixel literals these replaced did.
+   Code is not on this scale; it is `.code-line`. */
+@theme {
+  --text-*: initial;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
 }
 
+/* Eleven pixels is a desk-monitor size: held at arm's length on a phone it
+   is below what the screen renders honestly, so the floor is twelve until
+   the layout is wide enough to have earned the extra pixel back. */
 @media (width >= 64rem) {
-  .text-tiny {
-    font-size: 11px;
+  :root {
+    --text-xs: 11px;
+  }
+}
+
+/* One focus ring for everything that takes focus: 2px of accent, 2px off
+   the edge. In the base layer, so a control that draws its own ring (the
+   address field, the duck's bubble) overrides it with a utility. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
   }
 }
 
@@ -324,22 +367,6 @@ body {
   animation: rowFlash 900ms ease-out;
 }
 
-/* A file the agent has not answered for yet. Slower and shallower than the
-   flash: this is "working", not "look here". */
-@keyframes softPulse {
-  0%,
-  100% {
-    opacity: 0.35;
-  }
-  50% {
-    opacity: 0.8;
-  }
-}
-
-.soft-pulse {
-  animation: softPulse 1.4s ease-in-out infinite;
-}
-
 /* Where prose is being written but is not there yet. A ring rather than a
    placeholder paragraph: the review is a few seconds away, not a few frames,
    and a spinner says "working" without pretending to be text. */
@@ -387,6 +414,18 @@ body {
   animation: caretBlink 1s step-end infinite;
 }
 
+/* Every loop on the page stops for a reader who has asked for less motion:
+   the status dots hold still at full strength, the spinner is a still ring,
+   the caret is a steady bar, and a changed row is simply changed. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse,
+  .spinner,
+  .caret,
+  .row-flash {
+    animation: none;
+  }
+}
+
 /* The pull request's own description, rendered as GitHub-flavoured markdown.
    Compact on purpose: this is the author speaking above the review, not the
    review, so the rhythm is tighter than a document's. The body stays muted;
@@ -409,51 +448,41 @@ body {
   margin: 0.5em 0;
 }
 
-/* One step per level, all of them in the page's ink, with one margin pair for
-   the lot so the rhythm does not change with the size. */
+/* The author's headings sit under the pull request's title, never over it:
+   the largest is the page's base size, the rest the description's own, and
+   none carries GitHub's rule, which would draw a section break across the
+   top of a review. */
 .markdown h1,
 .markdown h2,
 .markdown h3,
 .markdown h4,
 .markdown h5,
 .markdown h6 {
-  margin: 16px 0 6px;
+  margin: 12px 0 4px;
   font-weight: 600;
   color: var(--color-ink);
   line-height: 1.3;
 }
 
 .markdown h1 {
-  font-size: 18px;
+  font-size: var(--text-base);
 }
 
-.markdown h2 {
-  font-size: 16px;
-}
-
-.markdown h3 {
-  font-size: 14px;
-}
-
+.markdown h2,
+.markdown h3,
 .markdown h4,
 .markdown h5,
 .markdown h6 {
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
-/* Below h4 there is no size left to give, so the distinction is the shape of
+/* Below h3 there is no size left to give, so the distinction is the shape of
    the letters instead. */
+.markdown h4,
 .markdown h5,
 .markdown h6 {
   text-transform: uppercase;
   letter-spacing: 0.06em;
-}
-
-/* The rule under the top two levels, as GitHub draws it. */
-.markdown h1,
-.markdown h2 {
-  padding-bottom: 0.25em;
-  border-bottom: 1px solid var(--color-line);
 }
 
 /* A heading that opens the description has nothing above it to be spaced from. */

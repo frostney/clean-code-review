@@ -85,7 +85,7 @@ export function PullRequestSummary() {
       <div className="mt-3 min-w-0">
         {address ? (
           <p
-            className="flex min-w-0 items-center gap-1.5 font-mono text-[12px] text-muted"
+            className="flex min-w-0 items-center gap-1.5 font-mono text-xs text-muted"
             data-pr-name={true}
           >
             <OwnerAvatar key={pr.avatarUrl} src={pr.avatarUrl} />
@@ -94,10 +94,14 @@ export function PullRequestSummary() {
             </span>
           </p>
         ) : null}
-        <p className="min-w-0 text-[13px]">
+        {/* The title is the page's heading once a review is open: larger than
+            anything the author's description can set, and in ink, so it reads
+            as the review's subject rather than as one more link. It is still
+            the way to the pull request on GitHub, which hover and focus say. */}
+        <h2 className="min-w-0 text-lg leading-snug font-semibold text-ink">
           {pr.url ? (
             <a
-              className="inline-flex min-h-10 items-center font-semibold text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent lg:min-h-0"
+              className="inline-flex min-h-10 items-center decoration-accent underline-offset-4 hover:text-accent hover:underline lg:min-h-0"
               data-pr-title={true}
               href={pr.url}
               rel="noreferrer"
@@ -106,11 +110,9 @@ export function PullRequestSummary() {
               {pr.title}
             </a>
           ) : (
-            <span className="font-semibold text-ink" data-pr-title={true}>
-              {pr.title}
-            </span>
+            <span data-pr-title={true}>{pr.title}</span>
           )}
-        </p>
+        </h2>
       </div>
       {hasBody ? (
         <PullRequestBodyToggle>{pr.body}</PullRequestBodyToggle>

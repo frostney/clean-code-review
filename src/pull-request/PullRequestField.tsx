@@ -100,14 +100,14 @@ export function PullRequestField({ duck }: { duck?: ReactNode }) {
           size the button cannot share the line, so it takes its own. */}
       <div className="flex flex-wrap items-center gap-2">
         {duck}
-        <div className="flex min-h-11 min-w-0 flex-1 items-stretch rounded-md border border-line bg-page focus-within:border-accent lg:min-h-0 lg:min-w-[12rem]">
-          <span className="flex shrink-0 items-center border-r border-line pr-2 pl-2.5 font-mono text-[12px] text-muted select-none lg:py-2 lg:text-[13px]">
+        <div className="flex min-h-11 min-w-0 flex-1 items-stretch rounded-md border border-line-strong bg-page focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent lg:min-h-0 lg:min-w-[12rem]">
+          <span className="flex shrink-0 items-center border-r border-line pr-2 pl-2.5 font-mono text-xs text-muted select-none lg:py-2 lg:text-sm">
             {HOST_PREFIX}
           </span>
           <input
             aria-label="GitHub owner and repository"
             autoComplete="off"
-            className="w-full min-w-0 flex-1 bg-transparent px-2 font-mono text-[16px] text-ink outline-none placeholder:text-muted/60 lg:px-2.5 lg:py-2 lg:text-[13px]"
+            className="w-full min-w-0 flex-1 bg-transparent px-2 font-mono text-lg text-ink outline-none placeholder:text-subtle lg:px-2.5 lg:py-2 lg:text-sm"
             data-pr-repo={true}
             onChange={(e) => {
               // A paste lands here as a change too (keyboard, menu or drop),
@@ -131,13 +131,13 @@ export function PullRequestField({ duck }: { duck?: ReactNode }) {
             // and the field would push the page sideways on a phone.
             value={repo}
           />
-          <span className="flex shrink-0 items-center border-l border-line pr-0.5 pl-2 font-mono text-[12px] text-muted select-none lg:text-[13px]">
+          <span className="flex shrink-0 items-center border-l border-line pr-0.5 pl-2 font-mono text-xs text-muted select-none lg:text-sm">
             {PULL_INFIX}
           </span>
           <input
             aria-label="Pull request number"
             autoComplete="off"
-            className="w-14 min-w-0 shrink-0 bg-transparent px-2 font-mono text-[16px] text-ink outline-none placeholder:text-muted/60 lg:w-16 lg:px-2.5 lg:py-2 lg:text-[13px]"
+            className="w-14 min-w-0 shrink-0 bg-transparent px-2 font-mono text-lg text-ink outline-none placeholder:text-subtle lg:w-16 lg:px-2.5 lg:py-2 lg:text-sm"
             data-pr-number={true}
             inputMode="numeric"
             onChange={(e) => {
@@ -153,11 +153,22 @@ export function PullRequestField({ duck }: { duck?: ReactNode }) {
           />
         </div>
         <button
-          className="min-h-11 w-full shrink-0 cursor-pointer rounded-md bg-ink px-3 text-[14px] font-semibold whitespace-nowrap text-page disabled:cursor-default disabled:opacity-40 min-[480px]:w-auto lg:min-h-0 lg:px-3.5 lg:py-2 lg:text-[13px]"
+          className="min-h-11 w-full shrink-0 cursor-pointer rounded-md bg-ink px-3 text-base font-semibold whitespace-nowrap text-page disabled:cursor-default disabled:bg-surface disabled:text-muted disabled:ring-1 disabled:ring-line disabled:ring-inset min-[480px]:w-auto lg:min-h-0 lg:px-3.5 lg:py-2 lg:text-sm"
           disabled={!ready || fetching}
           type="submit"
         >
-          {fetching ? 'Fetching…' : 'Judge'}
+          {/* Both labels hold the one cell, the idle one hidden, so the
+              button is as wide as the longer of them all along: a label
+              swapping when the answer lands would move the field beside it
+              with nothing pressed. */}
+          <span className="grid">
+            <span className={`[grid-area:1/1] ${fetching ? 'invisible' : ''}`}>
+              Judge
+            </span>
+            <span className={`[grid-area:1/1] ${fetching ? '' : 'invisible'}`}>
+              Fetching…
+            </span>
+          </span>
         </button>
       </div>
     </form>

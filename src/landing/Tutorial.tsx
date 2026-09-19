@@ -9,12 +9,14 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
 
-import { useReviewView } from '@/src/review/ReviewProvider';
+import { describePullRequestError } from '@/src/pull-request/errors';
+import { useReviewControls, useReviewView } from '@/src/review/ReviewProvider';
 import { SITE } from '@/src/site/site';
 
 /**
@@ -116,7 +118,7 @@ function useTutorial(): Tutorial {
  * lands a frame after the review is already on screen.
  */
 export function TutorialProvider({ children }: { children: ReactNode }) {
-  const { open } = useReviewView();
+  const { open, prError } = useReviewView();
   const [step, setStep] = useState(0);
   const [over, setOver] = useState(false);
   const said = useRef<HTMLParagraphElement>(null);
@@ -130,17 +132,20 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const showing = !(open || over);
+  // A pull request that did not open is what the duck says instead, and the
+  // greeting waits where it was until that has been put away.
+  const speaking = showing && prError === null;
 
   const value = useMemo<Tutorial>(
     () => ({
-      line: showing ? (LINES[step] ?? null) : null,
-      more: showing && step < LAST,
+      line: speaking ? (LINES[step] ?? null) : null,
+      more: speaking && step < LAST,
       next,
-      nudging: showing && step === LAST,
+      nudging: speaking && step === LAST,
       said,
       step,
     }),
-    [showing, step, next],
+    [speaking, step, next],
   );
 
   return (
@@ -411,6 +416,34 @@ export function TutorialDuckPicture() {
 const BUBBLE = 'bg-bubble text-bubble-ink';
 
 /**
+ * The least a bubble with a refusal in it is on a phone: three lines of the
+ * duck's type (every refusal fits in three at 375px), the row of buttons
+ * under them, and the padding. Held, empty, while a pull request is fetched.
+ */
+const ERROR_BUBBLE_ROOM = 'max-lg:min-h-[103px]';
+
+/**
+ * The bubble's height when a fetch started, held while the answer is out and
+ * while a refusal is up, so a refusal replacing a longer greeting does not
+ * pull the field up under the reader. Read before paint, so it costs no frame.
+ */
+function useBubbleFloor(fetching: boolean, prError: string | null) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(0);
+  useLayoutEffect(() => {
+    if (fetching && ref.current) {
+      setHeight(ref.current.offsetHeight);
+    } else if (!(fetching || prError)) {
+      setHeight(0);
+    }
+  }, [fetching, prError]);
+  return { height, ref };
+}
+
+/** A control in the bubble, set in the bubble's own pixels. */
+const PIXEL_BUTTON = `${pixel.className} inline-flex min-h-6 min-w-6 cursor-pointer items-center justify-end rounded-sm px-1 text-[8px]! text-bubble-ink [font-variant-ligatures:none]! underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-bubble-ink focus-visible:outline-offset-2 aria-disabled:cursor-default aria-disabled:no-underline`;
+
+/**
  * What the duck is saying, in a bubble beside it.
  *
  * Exposed to a screen reader rather than hidden from one. Hiding it would be
@@ -428,6 +461,9 @@ const BUBBLE = 'bg-bubble text-bubble-ink';
  */
 export function TutorialBubble() {
   const { line, more, next, said, step } = useTutorial();
+  const { prError } = useReviewView();
+  const { fetching } = useReviewControls();
+  const floor = useBubbleFloor(fetching, prError);
 
   const advance = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -437,14 +473,26 @@ export function TutorialBubble() {
     [next, said, step],
   );
 
-  if (!line) {
-    return null;
+  if (!(line || prError)) {
+    // A pull request is on its way and the duck has nothing to say yet. If it
+    // comes back refused, the reason goes in a bubble here, and on a phone
+    // that bubble is in the flow above the field: its room is held from the
+    // press on, empty, so the answer fills it rather than pushing the field.
+    return fetching ? (
+      <div
+        aria-hidden="true"
+        className={`invisible mt-3 w-full max-w-[22rem] lg:hidden ${ERROR_BUBBLE_ROOM}`}
+        data-tutorial="room"
+      />
+    ) : null;
   }
 
   return (
     <div
-      className={`relative mt-3 w-full max-w-[22rem] rounded-md px-3 py-2.5 lg:absolute lg:top-1/2 lg:left-[calc(50%+8.75rem)] lg:mt-0 lg:w-80 lg:-translate-y-1/2 ${BUBBLE}`}
-      data-tutorial="bubble"
+      className={`relative mt-3 flex w-full max-w-[22rem] flex-col justify-between rounded-md px-3 py-2.5 lg:absolute lg:top-1/2 lg:left-[calc(50%+8.75rem)] lg:mt-0 lg:w-80 lg:-translate-y-1/2 ${prError ? ERROR_BUBBLE_ROOM : ''} ${BUBBLE}`}
+      data-tutorial={prError ? 'error' : 'bubble'}
+      ref={floor.ref}
+      style={floor.height ? { minHeight: floor.height } : undefined}
     >
       {/* The tail, twice: it points up at the duck standing above it on a
           phone, and left at the duck standing beside it once there is room.
@@ -457,48 +505,115 @@ export function TutorialBubble() {
         aria-hidden="true"
         className={`-left-[6px] -mt-[6px] absolute top-1/2 hidden size-3 rotate-45 lg:block ${BUBBLE}`}
       />
-      {/* A new node per sentence, so the browser has something to start the
-          fade from. `starting:` is the whole animation: no keyframes, and
-          under reduced motion the transition is not declared at all, so the
-          sentence simply appears.
-          12px, which puts one of the face's 8 grid pixels on 1.5 CSS pixels:
-          three device pixels on a 2x screen, so every edge is crisp there,
-          and half a device pixel off the grid at 1x and 3x, where the edges
-          soften a little. 16px was crisp at every ratio and was traded for a
-          quieter bubble. The lines are 21px apart, fourteen of the face's
-          pixels, which is a whole number of device pixels at 2x and the same
-          air between lines, in proportion, that the 16px setting had. The
-          glyphs are a full em wide, so the bubble stays wide from `lg` up.
-          Ligatures are off: the face joins "fi" into one glyph, which breaks the grid. */}
+      {prError ? (
+        <DuckTrouble message={prError} />
+      ) : (
+        <>
+          {/* A new node per sentence, so the browser has something to start the
+            fade from. `starting:` is the whole animation: no keyframes, and
+            under reduced motion the transition is not declared at all, so the
+            sentence simply appears.
+            12px, which puts one of the face's 8 grid pixels on 1.5 CSS pixels:
+            three device pixels on a 2x screen, so every edge is crisp there,
+            and half a device pixel off the grid at 1x and 3x, where the edges
+            soften a little. 16px was crisp at every ratio and was traded for a
+            quieter bubble. The lines are 21px apart, fourteen of the face's
+            pixels, which is a whole number of device pixels at 2x and the same
+            air between lines, in proportion, that the 16px setting had. The
+            glyphs are a full em wide, so the bubble stays wide from `lg` up.
+            Ligatures are off: the face joins "fi" into one glyph, which breaks the grid. */}
+          <p
+            aria-atomic="true"
+            aria-live="polite"
+            className={`${pixel.className} text-[12px] leading-[21px] opacity-100 [font-variant-ligatures:none] starting:opacity-0 motion-safe:transition-opacity motion-safe:duration-200`}
+            key={step}
+            ref={said}
+            tabIndex={-1}
+          >
+            {line}
+          </p>
+          {/* The control is set in the same pixels as the sentence: it is part of
+            the bubble, and a dialogue box in two typefaces reads as two things. The arrow is the
+            face's own `>`, not an icon, so it sits on the same grid. */}
+          {/* Small and in the corner, the way a game's dialogue box marks that
+            there is more: 8px is the face's own grid, so it stays crisp, and the
+            padding keeps the target a comfortable size for a finger. */}
+          {more ? (
+            <div className="-mb-1 flex justify-end">
+              <button
+                className={PIXEL_BUTTON}
+                data-tutorial="next"
+                onClick={advance}
+                type="button"
+              >
+                Next &gt;
+              </button>
+            </div>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Why the pull request did not open, in the duck's voice.
+ *
+ * It takes the bubble over from the greeting: it is about what the reader just
+ * did, which is more pressing than what the page is. It is an alert, so it is
+ * read out when it arrives, and it takes no focus. Retry is there when asking
+ * again could help, and stays up, busy, while it runs; OK puts the reason away
+ * and hands focus to the address, which is what there is to fix. The greeting
+ * comes back where it was.
+ */
+function DuckTrouble({ message }: { message: string }) {
+  const { retryingPr } = useReviewView();
+  const { dismissPrError, retryPullRequest } = useReviewControls();
+  const trouble = describePullRequestError(message);
+
+  return (
+    <>
       <p
-        aria-atomic="true"
-        aria-live="polite"
         className={`${pixel.className} text-[12px] leading-[21px] opacity-100 [font-variant-ligatures:none] starting:opacity-0 motion-safe:transition-opacity motion-safe:duration-200`}
-        key={step}
-        ref={said}
-        tabIndex={-1}
+        data-duck-error={true}
+        key={message}
+        role="alert"
       >
-        {line}
+        {trouble.duck}
       </p>
-      {/* The control is set in the same pixels as the sentence: it is part of
-          the bubble, and a dialogue box in two typefaces reads as two things. The arrow is the
-          face's own `>`, not an icon, so it sits on the same grid. */}
-      {/* Small and in the corner, the way a game's dialogue box marks that
-          there is more: 8px is the face's own grid, so it stays crisp, and the
-          padding keeps the target a comfortable size for a finger. */}
-      {more ? (
-        <div className="-mb-1 flex justify-end">
+      <div className="-mb-1 flex justify-end gap-3">
+        {trouble.retry ? (
           <button
-            className={`${pixel.className} inline-flex min-h-6 min-w-6 cursor-pointer items-center justify-end rounded-sm px-1 text-[8px]! text-bubble-ink [font-variant-ligatures:none]! underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-bubble-ink focus-visible:outline-offset-2`}
-            data-tutorial="next"
-            onClick={advance}
+            aria-disabled={retryingPr}
+            className={PIXEL_BUTTON}
+            data-tutorial="retry"
+            // Not `disabled`: a disabled button drops the focus that pressed it.
+            onClick={retryingPr ? undefined : retryPullRequest}
             type="button"
           >
-            Next &gt;
+            {retryingPr ? 'Retrying...' : 'Retry >'}
           </button>
-        </div>
-      ) : null}
-    </div>
+        ) : null}
+        <button
+          className={PIXEL_BUTTON}
+          data-tutorial="dismiss"
+          onClick={(event) => {
+            const pressed = document.activeElement === event.currentTarget;
+            dismissPrError();
+            if (pressed) {
+              requestAnimationFrame(() =>
+                document
+                  .querySelector<HTMLInputElement>('[data-pr-repo]')
+                  ?.focus(),
+              );
+            }
+          }}
+          type="button"
+        >
+          OK
+        </button>
+      </div>
+    </>
   );
 }
 
