@@ -64,9 +64,9 @@ export function Faq() {
               className="shrink-0 text-muted motion-safe:transition-transform motion-safe:duration-150 group-open:rotate-90"
               size={14}
             />
-            <h2 className="text-[13px] font-semibold text-ink">{item.q}</h2>
+            <h2 className="text-sm font-semibold text-ink">{item.q}</h2>
           </summary>
-          <p className="-mt-1 px-3 pb-2.5 pl-[2.125rem] text-[13px] leading-relaxed text-muted">
+          <p className="-mt-1 px-3 pb-2.5 pl-[2.125rem] text-sm leading-relaxed text-muted">
             {answerNodes(item.a)}
           </p>
         </details>

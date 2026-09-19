@@ -39,6 +39,7 @@ import { Editor, PatchEditor } from './Editor';
 import { GroupIcon } from './icons';
 import { langLabel, langOf, splitPath } from './language';
 import { Meter } from './Meter';
+import { PendingDot } from './PendingDot';
 import { ReviewNote } from './ReviewNote';
 import { useOnScreen, type WatchCard } from './useCardWindow';
 import { type Changes, useChanges } from './useChanges';
@@ -83,7 +84,7 @@ export function FilePath({
   if (stacked) {
     return (
       <span
-        className={`block min-w-0 font-mono text-[12px] ${className}`}
+        className={`block min-w-0 font-mono text-xs ${className}`}
         title={path}
       >
         {dir ? <span className="block truncate text-muted">{dir}</span> : null}
@@ -93,7 +94,7 @@ export function FilePath({
   }
   return (
     <span
-      className={`flex min-w-0 font-mono text-[12px] ${className}`}
+      className={`flex min-w-0 font-mono text-xs ${className}`}
       title={path}
     >
       {dir ? (
@@ -108,7 +109,7 @@ export function FilePath({
 
 export function LangChip({ path }: { path: string }) {
   return (
-    <span className="shrink-0 rounded-full border border-line px-1.5 py-px text-tiny text-muted">
+    <span className="shrink-0 rounded-full border border-line px-1.5 py-px text-xs text-muted">
       {langLabel(langOf(path))}
     </span>
   );
@@ -122,7 +123,7 @@ export function LangChip({ path }: { path: string }) {
 export function ProseChip({ className = '' }: { className?: string }) {
   return (
     <span
-      className={`shrink-0 rounded-full bg-track px-2 py-0.5 text-tiny text-muted ${className}`}
+      className={`shrink-0 rounded-full bg-track px-2 py-0.5 text-xs text-muted ${className}`}
       data-prose="1"
     >
       prose
@@ -140,7 +141,7 @@ export function SmellCount({
 }) {
   return (
     <span
-      className={`text-tiny ${count ? 'text-bad' : 'text-muted'} ${className}`}
+      className={`text-xs ${count ? 'text-bad' : 'text-muted'} ${className}`}
       data-smells={count}
     >
       {smellLabel(count)}
@@ -202,7 +203,7 @@ function CardHeader({
         path={path}
       />
       <LangChip path={path} />
-      <span className="shrink-0 text-[12px] text-muted">
+      <span className="shrink-0 text-xs text-muted">
         {stats ? (
           <>
             <span className="text-ok">+{stats.added}</span>{' '}
@@ -213,7 +214,7 @@ function CardHeader({
         )}
       </span>
       {truncated ? (
-        <span className="shrink-0 text-tiny text-warn">
+        <span className="shrink-0 text-xs text-warn">
           Truncated to {REVIEW_LIMITS.maxCharsPerFile.toLocaleString()}{' '}
           characters
         </span>
@@ -224,15 +225,14 @@ function CardHeader({
         ) : (
           <>
             {sure === null ? null : (
-              <span className="text-tiny text-muted">{pct(sure)} sure</span>
+              <span className="text-xs text-muted">{pct(sure)} sure</span>
             )}
             {answers ? <SmellCount count={smells} /> : null}
             <span
-              className={`rounded-full px-2 py-0.5 text-tiny font-semibold ${verdict.className} ${
-                verdict.key === 'pending' ? 'soft-pulse' : ''
-              }`}
+              className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold ${verdict.className}`}
               data-verdict={verdict.key}
             >
+              {verdict.key === 'pending' ? <PendingDot /> : null}
               {verdict.label}
             </span>
           </>
@@ -253,7 +253,6 @@ function Judgment({
   findingsOpen,
   onToggleFindings,
   path,
-  pending,
   questions,
   summary,
 }: {
@@ -263,15 +262,14 @@ function Judgment({
   findingsOpen: boolean;
   onToggleFindings: () => void;
   path: string;
-  pending: boolean;
   /** The questions that were asked about this file, in book order. */
   questions: readonly Question[];
   summary: SummaryView;
 }) {
   return (
     <section className="@container/card border-t border-line">
-      <div className={`px-2 py-2 ${pending && !answers ? 'soft-pulse' : ''}`}>
-        <h3 className="mb-1.5 px-1.5 text-tiny font-semibold tracking-wider text-muted uppercase">
+      <div className="px-2 py-2">
+        <h3 className="mb-1.5 px-1.5 text-xs font-semibold tracking-wider text-muted uppercase">
           Review
         </h3>
         <div className="mb-2 px-1.5">
@@ -285,7 +283,7 @@ function Judgment({
         </div>
         <button
           aria-expanded={findingsOpen}
-          className="mb-0.5 ml-1.5 flex min-h-10 cursor-pointer items-center gap-1 rounded pr-2 text-tiny font-semibold tracking-wider text-muted uppercase hover:text-ink lg:mb-1.5 lg:min-h-0 lg:pr-0"
+          className="mb-0.5 ml-1.5 flex min-h-10 cursor-pointer items-center gap-1 rounded pr-2 text-xs font-semibold tracking-wider text-muted uppercase hover:text-ink lg:mb-1.5 lg:min-h-0 lg:pr-0"
           data-toggle="findings"
           onClick={onToggleFindings}
           type="button"
@@ -339,10 +337,10 @@ function FindingGroup({
     <div className="@container/group mb-2 last:mb-0">
       <div className="mb-1 flex flex-wrap items-center gap-x-2 border-b border-line px-1.5 pb-1">
         <GroupIcon group={group.id} />
-        <h4 className="text-tiny font-semibold tracking-wider text-muted uppercase">
+        <h4 className="text-xs font-semibold tracking-wider text-muted uppercase">
           {group.title}
         </h4>
-        <span className="hidden truncate text-tiny text-muted/70 @[320px]/group:inline">
+        <span className="hidden truncate text-xs text-subtle @[320px]/group:inline">
           {group.blurb}
         </span>
       </div>
@@ -457,9 +455,9 @@ export function FileCard({
   file,
   index,
   judgment,
-  pending,
   failed,
   paused,
+  stalled,
   truncated,
   summary,
   collapsed,
@@ -472,11 +470,12 @@ export function FileCard({
   /** Where the card stands in the review, which is its anchor. */
   index: number;
   judgment: FileJudgment | undefined;
-  pending: boolean;
   /** Jev was asked about this file twice and answered for neither. */
   failed: boolean;
   /** The site's model budget refused this file's turn; nothing is coming until it resets. */
   paused: boolean;
+  /** The last judging turn failed and let this file go; nothing comes until Retry. */
+  stalled: boolean;
   /** The paste was longer than one judgment reads, and this is the part that was. */
   truncated: boolean;
   /** Luna's review of the whole change, for the paragraph about this file. */
@@ -506,7 +505,12 @@ export function FileCard({
   const smells = prose ? 0 : smellCount(answers);
   const verdict = prose
     ? null
-    : fileVerdict(verdictScore(answers), { empty, failed, paused });
+    : fileVerdict(verdictScore(answers), {
+        empty,
+        failed,
+        paused,
+        stalled,
+      });
   const sure = prose ? null : verdictConfidence(answers);
   const stats = useMemo(
     () => (file.patch ? diffStats(parsePatch(file.content)) : null),
@@ -587,7 +591,6 @@ export function FileCard({
               findingsOpen={findingsOpen}
               onToggleFindings={() => setFindingsOpen((open) => !open)}
               path={file.path}
-              pending={pending}
               questions={questions}
               summary={summary}
             />

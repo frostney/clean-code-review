@@ -14,6 +14,7 @@ import { cappedText, skippedText } from './open-review';
 import { ReviewNote } from './ReviewNote';
 import { ReviewPills } from './ReviewPills';
 import { useReviewView } from './ReviewProvider';
+import { ReviewToasts } from './ReviewToasts';
 import { useCardWindow } from './useCardWindow';
 import type { LocalPause } from './useReview';
 
@@ -27,7 +28,7 @@ import type { LocalPause } from './useReview';
  * rendered on the server and never enters this tree.
  */
 export function ReviewBody() {
-  const { review, judge, prError, edit } = useReviewView();
+  const { review, judge, edit } = useReviewView();
   /** Paths folded to their header. Per review: another example starts open. */
   const [collapsed, setCollapsed] = useState<Record<string, true>>({});
   /** The card the sidebar was last clicked for, scrolled to once it is open. */
@@ -60,6 +61,13 @@ export function ReviewBody() {
     codePaths.length > 0 &&
     !(judge.budgetSpent && !judged) &&
     !codePaths.every((path) => judge.failed[path] === true);
+
+  // A file a failed turn let go of is not being judged, and a badge saying
+  // "Judging…" would wait for good. One waiting on the budget says so instead.
+  const stalled = (path: string) =>
+    judge.stalled[path] === true &&
+    judge.pending[path] !== true &&
+    judge.pausedFiles[path] !== true;
 
   /** Every file here is writing: a docs-only pull request, or a paste of one. */
   const proseOnly =
@@ -102,16 +110,24 @@ export function ReviewBody() {
     });
   }
 
-  const selectionNotice = [
-    skippedText(
-      review.skipped,
-      Math.max(review.skipped.length, review.skippedCount),
-    ),
-  ]
+  // What was left out of this review, said once and quietly, inside the card
+  // that says what the review is: how many files it shows, and what it
+  // skipped. Both are known the moment the review opens.
+  const skipped = skippedText(
+    review.skipped,
+    Math.max(review.skipped.length, review.skippedCount),
+  );
+  const selection = [cappedText(review), skipped && `${skipped}.`]
     .filter(Boolean)
-    .join(' · ');
-
-  const capped = cappedText(review);
+    .join(' ');
+  const footnote = selection ? (
+    <p
+      className="mt-2 border-t border-line pt-1.5 text-xs leading-relaxed text-muted"
+      data-files="selection"
+    >
+      {selection}
+    </p>
+  ) : null;
 
   return (
     <>
@@ -120,6 +136,7 @@ export function ReviewBody() {
           <ReviewNote
             decision={judge.summary.decision}
             error={judge.summary.error}
+            footnote={footnote}
             incomplete={judge.summary.incomplete.overall === true}
             model={judge.summary.model}
             pills={<ReviewPills judgeable={judgeable} review={judge} />}
@@ -139,6 +156,7 @@ export function ReviewBody() {
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <ReviewPills judgeable={judgeable} review={judge} />
             </div>
+            {footnote}
           </section>
         )}
       </div>
@@ -147,13 +165,9 @@ export function ReviewBody() {
       {judge.paused && !judge.budgetSpent ? (
         <ReviewsPaused paused={judge.paused} />
       ) : null}
-      {prError ? <Notice data-pr="error">{prError}</Notice> : null}
-      {selectionNotice && (
-        <Notice data-files="skipped">{selectionNotice}</Notice>
-      )}
-      {capped && <Notice data-files="capped">{capped}</Notice>}
       {proseOnly ? <NothingToJudge /> : null}
       <Paste />
+      <ReviewToasts />
 
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
         <FileList
@@ -172,6 +186,7 @@ export function ReviewBody() {
             )
           }
           paused={judge.pausedFiles}
+          stalled={stalled}
         />
         <KeepPlace className="flex min-w-0 flex-col gap-4" drawn={cards.drawn}>
           {review.files.map((file, index) => (
@@ -199,7 +214,7 @@ export function ReviewBody() {
                 judge.pausedFiles[file.path] === true &&
                 judge.pending[file.path] !== true
               }
-              pending={judge.pending[file.path] === true}
+              stalled={stalled(file.path)}
               summary={judge.summary}
               truncated={review.truncated[file.path] === true}
               watch={cards.watch}
@@ -207,6 +222,10 @@ export function ReviewBody() {
           ))}
         </KeepPlace>
       </div>
+      {/* Room at the end of the page while toasts are up on a phone, where
+          they span the bottom of the screen, so the last lines can scroll out
+          from under them. Only the end grows. Sized by `ToastRegion`. */}
+      <div aria-hidden="true" className="lg:hidden" data-toast-room={true} />
     </>
   );
 }
@@ -232,7 +251,7 @@ function NothingToJudge() {
  */
 function BudgetSpent() {
   return (
-    <Notice data-budget="spent">
+    <Notice data-budget="spent" tone="warn">
       <strong className="font-semibold">
         This session has reached its limit.
       </strong>{' '}
@@ -262,7 +281,7 @@ function clock(ms: number): string {
 function ReviewsPaused({ paused }: { paused: LocalPause }) {
   if (paused.window === 'unavailable') {
     return (
-      <Notice data-budget="paused" data-window={paused.window}>
+      <Notice data-budget="paused" data-window={paused.window} tone="warn">
         <strong className="font-semibold">Reviews are paused for now.</strong>{' '}
         The review budget cannot be checked, so no new work starts. The page
         asks again at {clock(paused.resumeAt)}. The answers on screen stay as
@@ -273,7 +292,7 @@ function ReviewsPaused({ paused }: { paused: LocalPause }) {
   const day = paused.window === 'day';
   const at = day ? 'midnight UTC' : clock(Date.parse(paused.resetsAt));
   return (
-    <Notice data-budget="paused" data-window={paused.window}>
+    <Notice data-budget="paused" data-window={paused.window} tone="warn">
       <strong className="font-semibold">
         {day ? "Today's" : "This hour's"} review budget is spent.
       </strong>{' '}

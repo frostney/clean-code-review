@@ -6,7 +6,7 @@ import type {
   MessageResponse,
   MessageStreamEvent,
 } from 'eve/client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Answers } from '@/agent/lib/judging/schema';
 import { judgeMessage, summarizeMessage } from '@/agent/lib/review/prompt';
@@ -110,6 +110,12 @@ export interface ReviewState {
   paused: LocalPause | null;
   /** Paths a refused judge turn carried, waiting for the budget to reset. */
   pausedFiles: Record<string, true>;
+  /**
+   * Paths a turn failed for and let go: nothing asks about them again until
+   * Retry or an edit sends them. Kept apart from `error`, which is only what
+   * is said about it and can be put away without these starting to wait.
+   */
+  stalled: Record<string, true>;
   /** Every file of the last judge turn came back from the agent's one-hour cache. */
   cached: boolean;
   /** Luna's prose review of the whole change and of each file. */
@@ -128,6 +134,7 @@ const IDLE: ReviewState = {
   pausedFiles: {},
   pending: {},
   spentUsd: 0,
+  stalled: {},
   summary: NO_SUMMARY,
 };
 
@@ -670,6 +677,10 @@ function withFailedTurn(
     pausedFiles: without(s.pausedFiles, paths),
     pending: without(s.pending, paths),
     spentUsd: s.spentUsd + costUsd,
+    stalled: {
+      ...s.stalled,
+      ...Object.fromEntries(paths.map((p) => [p, true as const])),
+    },
   });
 }
 
@@ -746,6 +757,34 @@ function withoutStalePaths(
 }
 
 /**
+ * The code files whose text on screen is not what was last sent, which is
+ * what a turn asks about. An empty file is not a question; Jev is never asked
+ * about one. Nor is prose: a README is on the page for reading, not judging.
+ */
+function unsent(
+  files: readonly ReviewFile[],
+  sent: ReadonlyMap<string, string>,
+): ReviewFile[] {
+  return files
+    .filter(
+      (f) =>
+        !isProsePath(f.path) &&
+        f.content.trim() &&
+        sent.get(f.path) !== f.content,
+    )
+    .slice(0, REVIEW_LIMITS.maxFiles);
+}
+
+/** What the page can do about a turn that failed. */
+export interface ReviewActions {
+  /**
+   * Ask again about every file the failed turn left without an answer.
+   * False when there was nothing to ask about.
+   */
+  retry: () => boolean;
+}
+
+/**
  * Judge a set of files, and re-judge whichever of them changes.
  *
  * One tab, one durable eve session, one turn in flight. The first turn carries
@@ -776,7 +815,7 @@ export function useReview(
   reviewId: string,
   files: readonly ReviewFile[],
   pr?: PullRequestContext,
-): ReviewState {
+): { state: ReviewState; actions: ReviewActions } {
   const [state, setState] = useState<ReviewState>(IDLE);
 
   /**
@@ -804,6 +843,7 @@ export function useReview(
       paused: null,
       pausedFiles: {},
       pending: {},
+      stalled: {},
       summary: NO_SUMMARY,
     }));
   }
@@ -1395,6 +1435,10 @@ export function useReview(
         ...s.pending,
         ...Object.fromEntries(batch.map((f) => [f.path, true as const])),
       },
+      stalled: without(
+        s.stalled,
+        batch.map((f) => f.path),
+      ),
     }));
   }, []);
 
@@ -1418,6 +1462,10 @@ export function useReview(
       asking: false,
       error: message,
       pending: without(s.pending, paths),
+      stalled: {
+        ...s.stalled,
+        ...Object.fromEntries(paths.map((p) => [p, true as const])),
+      },
     }));
   }, []);
 
@@ -1596,16 +1644,7 @@ export function useReview(
       }
     }
     setState((s) => withoutStalePaths(s, stale));
-    // An empty file is not a question; Jev is never asked about one. Nor is
-    // prose: a README is on the page for reading, not for judging.
-    const dirty = files
-      .filter(
-        (f) =>
-          !isProsePath(f.path) &&
-          f.content.trim() &&
-          sentRef.current.get(f.path) !== f.content,
-      )
-      .slice(0, REVIEW_LIMITS.maxFiles);
+    const dirty = unsent(files, sentRef.current);
     if (!dirty.length) {
       return;
     }
@@ -1624,6 +1663,27 @@ export function useReview(
     return () => clearTimeout(timer);
   }, [files, startTurn]);
 
+  // A failed turn forgot what it had sent, so what it held is unsent again,
+  // and asking for it now is the same request an edit would have made. A
+  // file waiting on the budget waits for its reset, not for this. The failure
+  // stays up until the turn actually starts (`markSent` clears it), which may
+  // be after an in-flight turn it is queued behind.
+  const retry = useCallback((): boolean => {
+    const waiting = stateRef.current.pausedFiles;
+    const next = unsent(filesRef.current, sentRef.current).filter(
+      (f) => waiting[f.path] !== true,
+    );
+    if (!next.length) {
+      return false;
+    }
+    startTurn(next).catch(() => {
+      /* startTurn puts its own failures on screen. */
+    });
+    return true;
+  }, [startTurn]);
+
+  const actions = useMemo<ReviewActions>(() => ({ retry }), [retry]);
+
   // Nothing should still be listening for prose once the page is gone.
   useEffect(() => {
     return () => {
@@ -1634,5 +1694,5 @@ export function useReview(
     };
   }, []);
 
-  return state;
+  return { actions, state };
 }

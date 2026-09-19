@@ -97,15 +97,19 @@ export function Hero() {
             }
           />
         </div>
-        <div className={COLUMN}>
-          <p className="mt-1.5 text-tiny text-muted">
+        {/* The ways in besides the field have no job once a review is open,
+            and on a phone they are most of the first screen above it. Hidden
+            by the same server-rendered switch as the width, so a permalink
+            paints without them rather than losing them a frame later. */}
+        <div className={`${COLUMN} group-has-[[data-duck=home]]/hero:hidden`}>
+          <p className="mt-1.5 text-xs text-muted">
             Public repositories only. The code is judged file by file against
             Clean Code, then reviewed.
           </p>
 
           <TutorialSpotlight>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[12px] text-muted">
+              <span className="text-xs text-muted">
                 Or choose one of the examples:
               </span>
               {PRESETS.map((preset) => (

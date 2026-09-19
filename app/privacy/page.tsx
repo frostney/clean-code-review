@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 import { QUESTION_COUNT } from '@/agent/lib/judging/questions';
@@ -19,6 +18,8 @@ import {
 } from '@/src/mcp/mcp-limits';
 import { REQUESTS_PER_WINDOW, WINDOW_MS } from '@/src/pull-request/throttle';
 import { SITE } from '@/src/site/site';
+import { Footer } from '@/src/ui/Footer';
+import { PageHeader } from '@/src/ui/PageHeader';
 
 /**
  * What happens to code somebody pastes here, written from the code that does
@@ -33,7 +34,7 @@ import { SITE } from '@/src/site/site';
  * from the root layout), and what they send is written from Vercel's own
  * documentation, which is linked, and from the scripts themselves.
  *
- * Nothing links here from this file's side. The footer's link is the footer's.
+ * The footer's link is the way here from every other page.
  */
 
 /** Minutes are how a reader counts a rate-limit window; the brake counts milliseconds. */
@@ -76,12 +77,12 @@ function Section({
   return (
     <section aria-labelledby={id} className="mt-6">
       <h2
-        className="mb-1.5 text-tiny font-semibold tracking-wider text-muted uppercase"
+        className="mb-1.5 text-xs font-semibold tracking-wider text-muted uppercase"
         id={id}
       >
         {title}
       </h2>
-      <div className="flex flex-col gap-2 text-[13px] leading-relaxed text-ink">
+      <div className="flex flex-col gap-2 text-sm leading-relaxed text-ink">
         {children}
       </div>
     </section>
@@ -90,24 +91,18 @@ function Section({
 
 export default function PrivacyPage() {
   return (
-    <div className="mx-auto max-w-[1280px] px-4 py-6">
+    <div className="mx-auto max-w-[1280px] px-4 py-5">
       <main className="max-w-[72ch]">
-        <p className="text-tiny text-muted">
-          <Link className="underline hover:text-ink" href="/">
-            {SITE.name}
-          </Link>
-        </p>
-        <h1 className="mt-1 text-[22px] font-semibold tracking-tight text-ink">
-          Privacy
-        </h1>
-        <p className="mt-2 text-[13px] leading-relaxed text-muted">
-          There is no account, no database and no cookie on this site. Nothing
-          you paste is written down anywhere this site keeps, and nothing is
-          tied to you, because there is no you here: there is a browser tab and
-          the session it holds open. Two things are measured: how many pages are
-          viewed, with Vercel Web Analytics, and how fast they load, with Vercel
-          Speed Insights. What each one sends is described below.
-        </p>
+        <PageHeader title="Privacy">
+          <p>
+            There is no account, no database and no cookie on this site. Nothing
+            you paste is written down anywhere this site keeps, and nothing is
+            tied to you, because there is no you here: there is a browser tab
+            and the session it holds open. Two things are measured: how many
+            pages are viewed, with Vercel Web Analytics, and how fast they load,
+            with Vercel Speed Insights. What each one sends is described below.
+          </p>
+        </PageHeader>
 
         <Section id="what-leaves" title="What leaves the browser">
           <p>
@@ -311,6 +306,7 @@ export default function PrivacyPage() {
           </p>
         </Section>
       </main>
+      <Footer current="privacy" />
     </div>
   );
 }

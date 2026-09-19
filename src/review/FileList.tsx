@@ -8,6 +8,7 @@ import {
 
 import { fileVerdict, smellCount, verdictFill, verdictScore } from './display';
 import { FilePath, LangChip, ProseChip, SmellCount } from './FileCard';
+import { PendingDot } from './PendingDot';
 
 /** The bar's fill is a fraction, and CSS wants it as a percentage. */
 const PERCENT = 100;
@@ -23,6 +24,7 @@ export function FileList({
   judgments,
   failed,
   paused,
+  stalled,
   allCollapsed,
   onToggleAll,
   onSelect,
@@ -33,6 +35,8 @@ export function FileList({
   failed: Record<string, true>;
   /** Paths the site's model budget refused, each waiting for it to reset. */
   paused: Record<string, true>;
+  /** Paths the last turn failed for, not asked about again until Retry. */
+  stalled: (path: string) => boolean;
   /** Every card in the review is folded to its header. */
   allCollapsed: boolean;
   onToggleAll: () => void;
@@ -42,14 +46,15 @@ export function FileList({
   return (
     <nav
       aria-label="Files in this review"
-      className="min-w-0 lg:sticky lg:top-4"
+      className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem-var(--toast-space,0px))] lg:self-start lg:overflow-y-auto lg:overscroll-contain lg:p-1 lg:-m-1"
+      data-rail={true}
     >
       <div className="mb-2 flex items-center gap-2 px-1">
-        <h2 className="text-tiny font-semibold tracking-wider text-muted uppercase">
+        <h2 className="text-xs font-semibold tracking-wider text-muted uppercase">
           Files
         </h2>
         <button
-          className="-my-1 ml-auto inline-flex min-h-10 shrink-0 cursor-pointer items-center px-1 text-tiny text-muted hover:text-ink lg:my-0 lg:min-h-0 lg:px-0"
+          className="-my-1 ml-auto inline-flex min-h-10 shrink-0 cursor-pointer items-center px-1 text-xs text-muted hover:text-ink lg:my-0 lg:min-h-0 lg:px-0"
           data-toggle="all"
           onClick={onToggleAll}
           type="button"
@@ -77,11 +82,12 @@ export function FileList({
                   empty: !file.content.trim(),
                   failed: failed[file.path] === true,
                   paused: paused[file.path] === true,
+                  stalled: stalled(file.path),
                 });
             return (
               <li className="shrink-0 lg:shrink" key={file.path}>
                 <button
-                  className="w-72 cursor-pointer rounded-md px-2 py-1.5 text-left hover:bg-surface lg:w-full"
+                  className="w-72 cursor-pointer rounded-md px-2 py-1.5 text-left outline-offset-[-2px] hover:bg-surface lg:w-full"
                   data-file={file.path}
                   data-verdict={verdict?.key}
                   onClick={() => onSelect(file.path)}
@@ -94,14 +100,13 @@ export function FileList({
                       <ProseChip />
                     ) : (
                       <>
-                        <span
-                          className={`text-tiny text-muted ${verdict.key === 'pending' ? 'soft-pulse' : ''}`}
-                        >
+                        {verdict.key === 'pending' ? <PendingDot /> : null}
+                        <span className="text-xs text-muted">
                           {verdict.label}
                         </span>
                         {answers ? (
                           <>
-                            <span className="text-tiny text-muted/60">·</span>
+                            <span className="text-xs text-subtle">·</span>
                             <SmellCount count={smellCount(answers)} />
                           </>
                         ) : null}
@@ -109,12 +114,11 @@ export function FileList({
                     )}
                   </span>
                   {verdict === null ? null : (
-                    <span className="mt-1 block h-1 w-full rounded-full bg-track">
+                    <span className="mt-1 block h-1 w-full overflow-hidden rounded-full bg-track">
                       <span
-                        className="block h-full rounded-full bg-ink"
+                        className="block h-full rounded-full bg-ink motion-safe:transition-transform motion-safe:duration-300"
                         style={{
-                          transition: 'width 300ms',
-                          width: `${verdictFill(score) * PERCENT}%`,
+                          transform: `translateX(${(verdictFill(score) - 1) * PERCENT}%)`,
                         }}
                       />
                     </span>
