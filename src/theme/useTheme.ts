@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 
 import { DARK_QUERY, type Theme } from './theme';
 
-/** What `<html data-theme>` and the system between them currently mean. */
 function currentTheme(): Theme {
   const chosen = document.documentElement.dataset.theme;
   if (chosen === 'dark' || chosen === 'light') {
@@ -14,16 +13,8 @@ function currentTheme(): Theme {
 }
 
 /**
- * The resolved theme, for the parts of the page CSS cannot colour — shiki's
- * tokens are inline `style` attributes, so the highlighter has to be told.
- *
- * It starts at "light" so that the first client render matches the server's,
- * and corrects itself in an effect; nothing tokenised is on screen that early,
- * because the highlighter is fetched in an effect too.
- *
- * Two sources are watched, because either can move under the page: the
- * attribute (the toggle, in this tab) and the media query (the system, while
- * this page is following it).
+ * For shiki, whose tokens are inline styles CSS cannot re-colour. Starts at
+ * "light" to match the server; nothing is highlighted before the effect runs.
  */
 export function useTheme(): Theme {
   const [theme, setTheme] = useState<Theme>('light');

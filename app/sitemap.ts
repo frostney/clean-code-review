@@ -2,12 +2,7 @@ import type { MetadataRoute } from 'next';
 
 import { SITE } from '@/src/site/site';
 
-/**
- * The three pages worth indexing, said plainly, so a canonical URL is never
- * guessed at. The pull request permalinks are deliberately absent: they render
- * somebody else's change, they say `noindex`, and robots.txt keeps crawlers
- * off them.
- */
+// Permalinks are deliberately absent: `noindex`, and disallowed in robots.txt.
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { changeFrequency: 'weekly', priority: 1, url: SITE.url },

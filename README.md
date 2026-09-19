@@ -109,7 +109,8 @@ bun run check:fix   # format, sort and autofix what Biome can
 
 A lefthook pre-commit hook runs `check:fix` over the staged files and restages
 what it changed; GitHub Actions runs `bun run check` on every push to `main`
-and every pull request.
+and every pull request. Layout, naming and dependency rules are in
+[docs/code-style.md](docs/code-style.md).
 
 ## How it works
 
@@ -146,7 +147,7 @@ browser ──── summarize turn ─▶ eve session ──▶ Luna, one call 
 | Luna calls, batching, streaming order | `agent/lib/review/reviewer.ts`, `agent/lib/review/reviewer-prompt.ts` |
 | Model adapter for eve | `agent/lib/judging/jev-model.ts` |
 | Diff parsing, skip rules, file selection | `agent/lib/judging/patch.ts`, `agent/lib/review/review.ts`, `agent/lib/judging/select.ts` |
-| GitHub PR fetcher | `agent/lib/github/github.ts`, `app/api/github-pr/route.ts` |
+| GitHub PR fetcher | `agent/lib/github/github.ts`, `src/pull-request/pull-request.tsx` (page), `app/api/github-pr/route.ts` (scripts) |
 | MCP server and its one-request review | `app/api/mcp/route.ts`, `src/mcp/mcp-server.ts`, `src/mcp/mcp-review.ts` |
 | Page state and the two turns | `src/review/useReview.ts` |
 

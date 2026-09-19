@@ -1,13 +1,5 @@
-/**
- * What one MCP review call returns: the output schema an agent is promised,
- * and the same result as text for a client that only reads text.
- *
- * It is everything the page puts on screen for a review, in the vocabulary the
- * page already uses. Every answer Jev gave is here, keyed by question id and
- * carrying the question's label; Luna's decision and paragraphs are here; and
- * so is every file that was not judged, with the reason, because a review that
- * silently leaves files out reads as a review of the whole change.
- */
+// Every file not judged is listed with its reason: a review that silently
+// leaves files out reads as a review of the whole change.
 import { z } from 'zod';
 
 const probability = z.number().min(0).max(1);
@@ -82,7 +74,6 @@ const judgedFile = z.object({
     ),
 });
 
-/** Why a file of the input was not judged. */
 const NOT_JUDGED_REASONS = [
   'binary',
   'generated',
@@ -96,7 +87,6 @@ const NOT_JUDGED_REASONS = [
 
 export type NotJudgedReason = (typeof NOT_JUDGED_REASONS)[number];
 
-/** Each reason in words, for the text rendering and the schema alike. */
 const NOT_JUDGED_TEXT: Record<NotJudgedReason, string> = {
   binary: 'an image or binary file',
   deleted: 'deleted by the change, so there is no code after it to judge',
@@ -213,17 +203,14 @@ export type ReviewOutput = z.infer<typeof reviewOutputSchema>;
 type JudgedFile = ReviewOutput['files'][number];
 type AnswerOutput = JudgedFile['answers'][string];
 
-/** How a probability reads in the text rendering. */
 const PERCENT = 100;
 const percent = (p: number) => `${Math.round(p * PERCENT)}%`;
 
-/** At even odds or better a yes/no answer is a finding, as on the page. */
+/** Same finding threshold as the page. */
 const EVEN_ODDS = 0.5;
 
-/** Dollars to the hundredth of a cent, which is where these costs live. */
 const COST_DIGITS = 4;
 
-/** One answer in a line. */
 function answerLine(id: string, a: AnswerOutput): string {
   if (a.type === 'noul') {
     return `${id} (${a.label}): ${percent(a.probability)}`;
@@ -236,7 +223,6 @@ function answerLine(id: string, a: AnswerOutput): string {
   return `${id} (${a.label}): ${a.level}, score ${a.score.toFixed(2)}${spread}`;
 }
 
-/** One judged file: Luna's paragraph, the findings first, then every other answer. */
 function fileText(file: JudgedFile): string {
   const entries = Object.entries(file.answers);
   const findings = entries
@@ -268,7 +254,6 @@ function fileText(file: JudgedFile): string {
   ].join('\n');
 }
 
-/** The heading and the lines about where the review came from. */
 function sourceText(result: ReviewOutput): string[] {
   if (result.source.kind === 'paste') {
     return ['# Clean Code review of pasted code'];
@@ -280,7 +265,6 @@ function sourceText(result: ReviewOutput): string[] {
   ];
 }
 
-/** Everything that was not judged, and why. */
 function leftOutText(result: ReviewOutput): string[] {
   const lines: string[] = [];
   if (result.prose.length) {
@@ -307,7 +291,7 @@ function leftOutText(result: ReviewOutput): string[] {
   return lines;
 }
 
-/** The whole result as Markdown: the same facts as the structured content, for a reader. */
+/** For clients that read only text content. */
 export function renderReviewText(result: ReviewOutput): string {
   return [
     ...sourceText(result),

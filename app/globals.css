@@ -1,10 +1,7 @@
 @import "tailwindcss";
 
-/* The whole palette. A code review is read, not admired: one paper, one ink,
-   one muted grey, one accent, three verdict colours, and the diff backgrounds.
-   Two sets of them, because a review is read at night as well as by day.
-   Every utility on the page points at a name here and never at a literal, so
-   the second set is the only place the dark page is described. */
+/* Every colour utility points at a token here, never a literal, so the dark
+   set below is the only description of the dark page. */
 @theme inline {
   --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
@@ -13,22 +10,17 @@
   --color-ink: var(--ink);
   --color-muted: var(--muted);
   --color-line: var(--line);
-  /* A boundary that has to be seen to be used: the address field's edge.
-     `line` is a hairline between things; this clears 3:1 on the page and
-     on the surface in both themes. */
+  /* Field edges: clears 3:1 on page and surface in both themes. */
   --color-line-strong: var(--line-strong);
-  /* The quietest text that still reads: under muted, never under 4.5:1 on
-     the page or the surface. Text is never faded with opacity instead. */
+  /* Quietest text: at least 4.5:1 on page and surface. Never fade text with opacity. */
   --color-subtle: var(--subtle);
   --color-surface: var(--surface);
   --color-accent: var(--accent);
   --color-track: var(--track);
-  /* What a modal dims the page with. Ink would invert with the theme; the
-     scrim is a shadow in both, so it is a colour of its own. */
+  /* Not ink: ink inverts with the theme, a scrim is a shadow in both. */
   --color-scrim: var(--scrim);
-  /* What lifts a toast off the code it floats over, tinted with the ink. */
   --shadow-toast: var(--toast-shadow);
-  /* The duck's speech bubble, which is always the page's opposite. */
+  /* Always the page's opposite. */
   --color-bubble: var(--bubble);
   --color-bubble-ink: var(--bubble-ink);
 
@@ -46,8 +38,7 @@
   --color-hunk-bg: var(--hunk-bg);
 }
 
-/* Day. GitHub's own paper, because the page is read beside the pull request
-   it is judging. */
+/* Light: GitHub's palette, since the page is read beside the pull request. */
 :root {
   color-scheme: light;
 
@@ -80,13 +71,10 @@
   --hunk-bg: #ddf4ff;
 }
 
-/* Night, written once. Two selectors turn it on — an explicit choice and an
-   unopposed system preference — and a rule cannot belong to both a media query
-   and a plain selector, so the values live under their own names here and each
-   selector below is nothing but the switch.
-   The badge backgrounds are opaque rather than the translucent ones GitHub
-   uses: a pill sits on the page in one place and on a card's grey in another,
-   and the text on it has to clear 4.5:1 in both. Every pair here does. */
+/* Dark values live under their own names because two selectors switch them
+   on (explicit choice, unopposed system preference) and one rule cannot be
+   both a media query and a plain selector. Badge backgrounds are opaque, not
+   GitHub's translucent ones, so text clears 4.5:1 on page and surface alike. */
 :root {
   --dark-page: #0d1117;
   --dark-ink: #e6edf3;
@@ -147,8 +135,7 @@
   --hunk-bg: var(--dark-hunk-bg);
 }
 
-/* The system's preference, for anyone who has not picked. The `:not()` is what
-   lets an explicit light choice win over a dark desktop. */
+/* `:not()` lets an explicit light choice beat a dark system preference. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
@@ -201,14 +188,9 @@ body {
   font-size: 14px;
 }
 
-/* The type scale: five steps and nothing between them. xs is every chip,
-   pill, hint and column heading; sm is the body of the review and of the
-   prose pages; base is the body's own size; lg is what is typed into (below
-   16px iOS zooms the page on focus) and the pull request's title; xl is a
-   page title. Tailwind's defaults are cleared so that no size outside these
-   can be reached by name, and no step carries a line height: each element
-   keeps the one it inherits, as the pixel literals these replaced did.
-   Code is not on this scale; it is `.code-line`. */
+/* Five steps, Tailwind's defaults cleared so nothing else is reachable:
+   xs chips and hints, sm body, base, lg typed input (under 16px iOS zooms on
+   focus) and PR title, xl page title. No line heights. Code uses `.code-line`. */
 @theme {
   --text-*: initial;
   --text-xs: 12px;
@@ -218,18 +200,15 @@ body {
   --text-xl: 20px;
 }
 
-/* Eleven pixels is a desk-monitor size: held at arm's length on a phone it
-   is below what the screen renders honestly, so the floor is twelve until
-   the layout is wide enough to have earned the extra pixel back. */
+/* 11px only from 64rem: too small on a phone at arm's length. */
 @media (width >= 64rem) {
   :root {
     --text-xs: 11px;
   }
 }
 
-/* One focus ring for everything that takes focus: 2px of accent, 2px off
-   the edge. In the base layer, so a control that draws its own ring (the
-   address field, the duck's bubble) overrides it with a utility. */
+/* The one focus ring. In the base layer so a control can override it with a
+   utility. */
 @layer base {
   :focus-visible {
     outline: 2px solid var(--color-accent);
@@ -237,8 +216,7 @@ body {
   }
 }
 
-/* Every line of code on the page, in one place: the code view, the diff and
-   the editor overlay all have to agree to the pixel or the caret drifts. */
+/* Code view, diff and editor overlay must agree to the pixel or the caret drifts. */
 .code-line {
   font-family: var(--font-mono);
   font-size: 12px;
@@ -248,15 +226,9 @@ body {
   white-space: pre;
 }
 
-/* The space a card holds for its body before it is drawn (`BodySpace` in
-   `src/review/FileCard.tsx`). The code is exact: a row per line at the
-   `.code-line` height, and the `py-2` around them. Under it, for a judged
-   file, the review and its meters, estimated from how many rows and chapters
-   the card will have in each of the layouts the card itself switches
-   between: one narrow column on a phone, one wide column, two columns from
-   800px of card. The estimate only has to be close — a card is drawn well
-   before it is on screen, and the browser keeps the reader's place when one
-   above them is drawn a little taller or shorter than its space. */
+/* Placeholder height for an undrawn card (`BodySpace` in `src/review/FileCard.tsx`):
+   exact for the code, estimated for the judgment per card layout. Close is
+   enough: scroll anchoring keeps the reader's place. */
 .card-space {
   --space-judgment: calc(
     var(--space-judged) *
@@ -290,33 +262,16 @@ body {
   }
 }
 
-/* The two views of this page, and the bird that is in both of them.
-   The landing view and the code view are the same document in two shapes, so
-   the browser animates between them rather than the page repainting: the duck
-   carries a `view-transition-name` in both, which is what makes the large one
-   above the field and the small one beside it the same element to the browser,
-   and everything else crosses over under the root's own group.
-   The duck keeps the browser's own timing — a shrink that size reads well at
-   it — so the only thing written down here is the page underneath, which is a
-   change of shape rather than a scene change and has no business taking a
-   quarter of a second over it. A reader who has asked for less motion never
-   gets here at all: the transition is not started. */
+/* The duck keeps the browser's default timing; only the root crossfade is
+   shortened. Reduced motion never starts this transition. */
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation-duration: 180ms;
 }
 
-/* The same bird on the way to the questions and back. A client-side
-   navigation between `/` and `/faq` is a React transition, and React's own
-   `<ViewTransition name="duck">` on both ducks (`Duck.tsx`, `app/faq/page.tsx`)
-   is what names them for it; the page around them crosses over under the root
-   rule above. Nothing else is named, so nothing else moves.
-   Reduced motion is honoured here rather than in code, because React starts
-   these transitions itself: every part of one ends as soon as it starts, and
-   the new page is simply there. The landing and code-view switch never starts
-   one for that reader at all (`src/landing/view-transition.ts`). The root is named as
-   well as matched by `*` because the rule above names it, and a name is more
-   specific than a wildcard: this one comes later and wins by order. */
+/* React starts the `/` to `/faq` transitions (`DuckTransition` only names the
+   duck), so reduced motion is honoured here. `root` is listed because the named rule above is
+   more specific than `*`. */
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*),
   ::view-transition-old(*),
@@ -327,10 +282,8 @@ body {
   }
 }
 
-/* An FAQ answer slides open and fades in, and folds away the same way.
-   Growing to `auto` needs `interpolate-size` (Chromium only for now);
-   elsewhere the answer still fades, and without `::details-content` it simply
-   appears. `allow-discrete` keeps a closing answer rendered until it is gone. */
+/* Growing to `auto` needs `interpolate-size` (Chromium only); elsewhere it
+   fades or just appears. `allow-discrete` keeps a closing answer rendered. */
 @media (prefers-reduced-motion: no-preference) {
   [data-faq] {
     interpolate-size: allow-keywords;
@@ -352,8 +305,7 @@ body {
   }
 }
 
-/* A row whose judgment moved lights up and fades back out. 900ms: long enough
-   to catch the eye mid-scan, short enough to be gone before the next turn. */
+/* 900ms: noticed mid-scan, gone before the next turn. */
 @keyframes rowFlash {
   from {
     background: var(--warn-bg);
@@ -367,9 +319,6 @@ body {
   animation: rowFlash 900ms ease-out;
 }
 
-/* Where prose is being written but is not there yet. A ring rather than a
-   placeholder paragraph: the review is a few seconds away, not a few frames,
-   and a spinner says "working" without pretending to be text. */
 @keyframes spinnerTurn {
   to {
     transform: rotate(360deg);
@@ -387,8 +336,6 @@ body {
   animation: spinnerTurn 700ms linear infinite;
 }
 
-/* The end of the sentence the reviewer is writing right now. A terminal caret,
-   because the text arrives a word at a time and the eye needs the edge. */
 @keyframes caretBlink {
   0%,
   49% {
@@ -400,9 +347,7 @@ body {
   }
 }
 
-/* The negative right margin is what keeps it from being a layout change: the
-   caret takes up no net width, so the word it follows never jumps to the next
-   line the moment the caret appears at the end of it. */
+/* Net zero width, so the word before it never wraps when it appears. */
 .caret {
   display: inline-block;
   width: 2px;
@@ -414,9 +359,6 @@ body {
   animation: caretBlink 1s step-end infinite;
 }
 
-/* Every loop on the page stops for a reader who has asked for less motion:
-   the status dots hold still at full strength, the spinner is a still ring,
-   the caret is a steady bar, and a changed row is simply changed. */
 @media (prefers-reduced-motion: reduce) {
   .animate-pulse,
   .spinner,
@@ -426,11 +368,8 @@ body {
   }
 }
 
-/* The pull request's own description, rendered as GitHub-flavoured markdown.
-   Compact on purpose: this is the author speaking above the review, not the
-   review, so the rhythm is tighter than a document's. The body stays muted;
-   the headings do not, because a heading that shares the body's size and its
-   grey is not a heading — it is a bold line. */
+/* The PR description: tighter rhythm than a document; headings in ink so they
+   still read as headings at body size. */
 .markdown > :first-child {
   margin-top: 0;
 }
@@ -448,10 +387,7 @@ body {
   margin: 0.5em 0;
 }
 
-/* The author's headings sit under the pull request's title, never over it:
-   the largest is the page's base size, the rest the description's own, and
-   none carries GitHub's rule, which would draw a section break across the
-   top of a review. */
+/* Never larger than the PR title, and no GitHub rule under them. */
 .markdown h1,
 .markdown h2,
 .markdown h3,
@@ -476,8 +412,7 @@ body {
   font-size: var(--text-sm);
 }
 
-/* Below h3 there is no size left to give, so the distinction is the shape of
-   the letters instead. */
+/* No size left below h3, so case distinguishes them. */
 .markdown h4,
 .markdown h5,
 .markdown h6 {
@@ -485,7 +420,6 @@ body {
   letter-spacing: 0.06em;
 }
 
-/* A heading that opens the description has nothing above it to be spaced from. */
 .markdown > :first-child {
   margin-top: 0;
 }
@@ -507,7 +441,6 @@ body {
   margin: 0.15em 0;
 }
 
-/* A GFM task list carries its own bullet — the checkbox. */
 .markdown li:has(> input[type="checkbox"]) {
   list-style: none;
   margin-left: -1.2em;
@@ -533,9 +466,7 @@ body {
   padding: 0.1em 0.35em;
 }
 
-/* Relative to a 13px paragraph that ratio is 11.4px, which is under the floor
-   set above. On a phone the span is pinned to the floor instead; the ratio
-   comes back when the paragraph has room for it. */
+/* 0.88em of 13px is under the 12px phone floor. */
 @media (width < 64rem) {
   .markdown code {
     font-size: 12px;

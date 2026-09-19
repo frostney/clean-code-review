@@ -2,17 +2,7 @@
 
 import { type ReactNode, useState } from 'react';
 
-/**
- * The fold around a pull request's description.
- *
- * It is the author's own writing and the only prose on the page neither model
- * wrote, so it reads as a description under the title rather than as a block of
- * the review — 13px, muted, and folded to about a dozen lines with a toggle,
- * because a long description would otherwise push the whole review off screen.
- *
- * The description itself is a server-rendered node handed in as children; all
- * this adds is the state of the fold.
- */
+// Folded so a long description cannot push the review off screen.
 export function PullRequestBodyToggle({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
 

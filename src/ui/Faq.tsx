@@ -3,15 +3,10 @@ import type { ReactNode } from 'react';
 
 import { FAQ, FAQ_LINK_PATTERN, FAQ_LINKS } from '@/src/site/faq';
 
-/** The accent link, spelled the way the rest of the page spells one. */
 const LINK_CLASS =
   'text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent';
 
-/**
- * One answer as it is read rather than as it is stored: the phrases in
- * `FAQ_LINKS` become links, and every other run of text stays exactly the string the
- * structured data carries.
- */
+// Non-link text stays byte-identical to the JSON-LD answer.
 function answerNodes(answer: string): ReactNode[] {
   return answer.split(FAQ_LINK_PATTERN).map((part) => {
     const link = FAQ_LINKS.find((item) => item.text === part);
@@ -33,21 +28,10 @@ function answerNodes(answer: string): ReactNode[] {
 }
 
 /**
- * The questions, folded: one line each, so the page reads as a list of what
- * can be asked, and each opens where it stands.
- *
- * A native `<details>` does the folding, which works without a line of
- * script: Enter and Space open it, and the state it announces is the
- * browser's own. A closed answer is still in the document, so the
- * server-rendered HTML carries every answer the page's `FAQPage` structured
- * data claims, and the browser's find-in-page opens the one it lands in.
- *
- * The question's heading is inside the summary so that the whole line is the
- * control. Checked in Chrome's accessibility tree on 2026-09-18: each question
- * is still a heading, inside its disclosure control, so moving by heading
- * finds every one. Safari with VoiceOver was not tested; some screen readers
- * are said to flatten a summary's contents. The chevron turns to say which way it will go, and is hidden from
- * a screen reader, which hears expanded or collapsed instead.
+ * Native `<details>`: no script, and closed answers stay in the HTML for the
+ * JSON-LD and find-in-page. Headings sit inside `<summary>` so the whole line
+ * is the control; still headings in Chrome's a11y tree (checked 2026-09-18),
+ * VoiceOver untested.
  */
 export function Faq() {
   return (

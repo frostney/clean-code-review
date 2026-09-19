@@ -1,31 +1,20 @@
 /**
- * Why a pull request did not open, said twice: once in the duck's voice for
- * the landing view, and once as a plain sentence for the code view's toast.
- *
- * The duck's line is set in a pixel face that carries Latin and nothing more,
- * so it is plain ASCII, and it stays under about sixty characters, the most a
- * pixel line reads well at. `retry` is whether asking again could change the
- * answer: a network hiccup or GitHub having a bad minute can, a private
- * repository or a docs-only change cannot.
- *
- * The messages matched here are the ones `agent/lib/github/github.ts`,
- * `src/pull-request/pull-request.tsx` and `ReviewProvider` write, matched on
- * their wording rather than imported, so none of those modules reaches the
- * landing bundle for a sentence.
+ * Matches the wording of messages from `agent/lib/github/github.ts`,
+ * `./pull-request.tsx` and `ReviewProvider` rather than importing them, so none
+ * of those reaches the landing bundle.
  */
 export interface PullRequestTrouble {
-  /** The duck's line: ASCII, short. */
+  /** ASCII only (the pixel face is Latin-only), under ~60 characters. */
   duck: string;
-  /** The code view's sentence. */
   sentence: string;
+  /** Whether asking again could change the answer. */
   retry: boolean;
 }
 
-/** The browser's own ways of saying a request never reached the server. */
+/** Browsers word a failed fetch differently. */
 const NETWORK =
   /failed to fetch|networkerror|load failed|fetch failed|network|unexpected response/i;
 
-/** `GitHub returned 502 for the diff.` */
 const GITHUB_STATUS = /^GitHub returned (\d{3})/;
 
 const FIRST_SERVER_ERROR = 500;

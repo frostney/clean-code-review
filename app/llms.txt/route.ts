@@ -15,12 +15,6 @@ import {
 } from '@/src/mcp/mcp-limits';
 import { SITE } from '@/src/site/site';
 
-/**
- * What this page is, for a model that has been asked about it and cannot click
- * anything: one paragraph, the jobs it is the right tool for, and the links
- * worth following. The same claims the page makes on screen, in the plainest
- * form they can be made in.
- */
 const LLMS_TXT = `# ${SITE.name}
 
 > ${SITE.tagline}

@@ -10,19 +10,15 @@ import {
 } from './mcp-limits';
 
 /**
- * The MCP server described for a client that has not connected yet, in the
- * shape the server card proposal defines
- * (github.com/modelcontextprotocol/experimental-ext-server-card, SEP-2127).
- * The proposal is not yet part of the MCP specification, so this is advisory
- * metadata: the card itself says a client must prefer what it sees once
- * connected. Tools are deliberately not listed; a client asks the server.
+ * Server card proposal (SEP-2127, github.com/modelcontextprotocol/
+ * experimental-ext-server-card): not yet in the MCP spec, so advisory only.
+ * Tools are deliberately not listed; a client asks the server.
  */
 
-/** The server card's own media type, and the catalog's. */
 const SERVER_CARD_TYPE = 'application/mcp-server-card+json';
 const AI_CATALOG_TYPE = 'application/ai-catalog+json';
 
-/** The card format's description allows 100 characters. */
+/** The card format allows 100 characters. */
 const DESCRIPTION =
   'Judges code file by file against Clean Code and writes a review, from a pull request or pasted code.';
 
@@ -39,10 +35,7 @@ const SERVER_CARD = {
   websiteUrl: SITE.url,
 };
 
-/**
- * The domain's catalog, with the one server it offers. The identifier is the
- * format's domain-anchored URN: publisher, then `mcp`, then the server's name.
- */
+// Domain-anchored URN: publisher, then `mcp`, then the server's name.
 const AI_CATALOG = {
   entries: [
     {
@@ -54,10 +47,7 @@ const AI_CATALOG = {
   specVersion: '1.0',
 };
 
-/**
- * Headers the proposal asks of both documents: readable from a browser on any
- * origin, cached for an hour, and revalidated by entity tag after that.
- */
+// Required by the proposal: any-origin CORS, an hour's cache, ETag revalidation.
 const CACHE_SECONDS = 3600;
 const SHARED_HEADERS = {
   'access-control-allow-headers': 'Content-Type, If-None-Match',
@@ -69,11 +59,9 @@ const SHARED_HEADERS = {
 
 const NO_CONTENT = 204;
 
-/** Enough of a SHA-256 to tell two versions of one small document apart. */
 const ETAG_CHARS = 22;
 const NOT_MODIFIED = 304;
 
-/** A fixed document, answered with its entity tag, or 304 when the client already has it. */
 function documentResponder(document: unknown, type: string) {
   const body = JSON.stringify(document, null, 2);
   const etag = `"${createHash('sha256').update(body).digest('base64url').slice(0, ETAG_CHARS)}"`;
@@ -93,7 +81,7 @@ function documentResponder(document: unknown, type: string) {
         },
       });
     },
-    /** The CORS preflight a browser sends before a request carrying `If-None-Match`. */
+    /** Preflight: `If-None-Match` is not a CORS-safelisted header. */
     options(): Response {
       return new Response(null, {
         headers: SHARED_HEADERS,

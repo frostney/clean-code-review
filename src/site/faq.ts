@@ -17,24 +17,14 @@ import {
 
 import { SITE } from './site';
 
-/** The session cap, in the unit the answer says it in. */
 const CENTS_PER_DOLLAR = 100;
 const CAP_CENTS = SESSION_COST_CAP_USD * CENTS_PER_DOLLAR;
 
-/** How many of the answers are scales rather than probabilities. */
 const SCALE_COUNT = QUESTION_COUNT - SMELL_IDS.length;
 
 /**
- * The questions people actually ask about this page, answered once and read
- * three times: on `/faq`, in the `FAQPage` structured data that route emits,
- * and in the Markdown an agent gets for `/faq`. All three read this array, so
- * none of them can say something the others do not.
- *
- * It is a plain module rather than part of the component because the Markdown
- * is written in `proxy.ts`'s bundle, which must not pull in React.
- *
- * Every number here is read from the code it describes rather than typed
- * twice, and every claim is one that code makes.
+ * The single source for `/faq`, its `FAQPage` JSON-LD and the agent Markdown.
+ * React-free because `proxy.ts` bundles it. Every number is imported.
  */
 export const FAQ: readonly { q: string; a: string }[] = [
   {
@@ -63,24 +53,19 @@ export const FAQ: readonly { q: string; a: string }[] = [
   },
 ];
 
-/**
- * Phrases in the answers that are links wherever the answers are rendered, and
- * plain words in the structured data. They live apart from the text because
- * `FAQ` has to stay a list of strings: a `FAQPage` answer is quoted, not
- * rendered, and an anchor inside it would reach an answer engine as markup.
- */
+// Kept apart so `FAQ` stays plain strings: JSON-LD answers are quoted, and an
+// anchor would reach an answer engine as markup.
 export const FAQ_LINKS: readonly { href: string; text: string }[] = [
   { href: SITE.author, text: 'Robert C. Martin' },
   { href: SITE.book, text: 'Clean Code' },
   { href: SITE.jev, text: "Jev, TypeSafe's evaluation model" },
 ];
 
-/** The linked phrases as one alternation, captured so `split` keeps them. */
+/** Captured so `split` keeps the phrases. */
 export const FAQ_LINK_PATTERN = new RegExp(
   `(${FAQ_LINKS.map((link) => link.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`,
 );
 
-/** One answer with its linked phrases written as Markdown links, for the agent's copy of `/faq`. */
 export function answerMarkdown(answer: string): string {
   return answer
     .split(FAQ_LINK_PATTERN)

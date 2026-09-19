@@ -21,31 +21,16 @@ import { SITE } from '@/src/site/site';
 import { Footer } from '@/src/ui/Footer';
 import { PageHeader } from '@/src/ui/PageHeader';
 
-/**
- * What happens to code somebody pastes here, written from the code that does
- * it rather than from a template.
- *
- * Every claim below is one a reader could check against this repository, and
- * every figure is imported from the module that enforces it. There is no
- * consent banner to describe, no cookie and no account, so the page is short:
- * a privacy policy that lists rights against data nobody collects is a worse
- * answer than the true one. Two things are measured, page views by Vercel Web
- * Analytics and page speed by Vercel Speed Insights (both in `Measurement`,
- * from the root layout), and what they send is written from Vercel's own
- * documentation, which is linked, and from the scripts themselves.
- *
- * The footer's link is the way here from every other page.
- */
+// Every claim must be checkable against this repository and every figure
+// imported from the module that enforces it; the Vercel sections follow
+// Vercel's linked documentation.
 
-/** Minutes are how a reader counts a rate-limit window; the brake counts milliseconds. */
 const MS_PER_MINUTE = 60_000;
 const WINDOW_MINUTES = Math.round(WINDOW_MS / MS_PER_MINUTE);
 
-/** Where Vercel says what Web Analytics collects. */
 const WEB_ANALYTICS_PRIVACY =
   'https://vercel.com/docs/analytics/privacy-policy';
 
-/** Where Vercel says what Speed Insights collects. */
 const SPEED_INSIGHTS_PRIVACY =
   'https://vercel.com/docs/speed-insights/privacy-policy';
 
@@ -64,7 +49,6 @@ export const metadata: Metadata = {
   title: 'Privacy',
 };
 
-/** One section: a heading a reader can link to, and its paragraphs. */
 function Section({
   children,
   id,

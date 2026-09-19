@@ -4,43 +4,25 @@ import { CircleAlert, Info, TriangleAlert, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 /**
- * Something the page has to say while a review is being read: a pull request
- * that did not open, a judging turn that failed. It floats rather than taking
- * a row, so nothing on the page moves when it arrives or leaves.
+ * Floats so nothing moves when it comes or goes: at the foot of the file list's
+ * column from `lg` (the sticky list shrinks by `--toast-space`), across the
+ * bottom on a phone (the page grows by the same space).
  *
- * Where it floats is the decision. From `lg` up it stands at the foot of the
- * file list's column, as wide as the list, never over code; the list, which
- * sticks to the top of the screen, gives up the toasts' height at its bottom
- * while they are up (`--toast-space` on `[data-rail]`, measured here), so
- * once it is stuck no row of it is under them either. On a phone there is no
- * margin to use, so it spans the bottom of the screen above the home
- * indicator, and the page gains the same space at its end so the last lines
- * can scroll clear. It goes
- * away with its own button, or with Escape anywhere on the page while no
- * dialog is open.
- *
- * It never takes focus. What it says is repeated into two live regions that
- * are on the page from the first paint, so it is announced when it arrives:
- * errors through `role="alert"`, which interrupts, and warnings and notes
- * through `role="status"`, which waits. The toasts themselves are not live,
- * or every announcement would end in "Retry, Dismiss". Each message is its
- * own node keyed by how many times it was raised, so a failure that comes
- * back in the same words is announced again; a retry under way is announced
- * as "Retrying." in the polite region. Nothing times out,
- * because an error that leaves on its own leaves before a slow reader has
- * finished it.
+ * Never takes focus. Announced through two always-present live regions (alert
+ * for errors, status otherwise) rather than live toasts, which would read out
+ * "Retry, Dismiss" too. Keyed by `raised` so a repeat is announced again.
+ * Nothing times out: a slow reader must be able to finish it.
  */
 
 type ToastTone = 'info' | 'warn' | 'error';
 
 export interface ToastItem {
-  /** The kind of thing being said; one toast per kind, updated in place. */
+  /** One toast per id, updated in place. */
   id: string;
-  /** Which raising of it this is: a new value is said again. */
+  /** A new value is announced again. */
   raised: number | string;
   tone: ToastTone;
   message: string;
-  /** The one thing that can be done about it, when there is one. */
   action?: { label: string; busyLabel: string; busy: boolean; run: () => void };
   onDismiss: () => void;
 }
@@ -114,12 +96,9 @@ function Toast({ item }: { item: ToastItem }) {
   );
 }
 
-/** The corner the toasts live in, and the two regions that read them out. */
 export function ToastRegion({ toasts }: { toasts: readonly ToastItem[] }) {
-  // Escape puts every toast away, unless a dialog is open: there Escape is
-  // the dialog's, and closing it must not also clear what the page said. The
-  // listener reads the toasts through a ref, so it is added once while any
-  // are up rather than again on every render.
+  // Escape dismisses all, except while a dialog is open: there it is the
+  // dialog's. Read through a ref so the listener is not re-added every render.
   const current = useRef(toasts);
   current.current = toasts;
   const shown = toasts.length > 0;
@@ -143,11 +122,8 @@ export function ToastRegion({ toasts }: { toasts: readonly ToastItem[] }) {
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [shown]);
 
-  // The stack's height, for the rail (`[data-rail]`) and the page's end
-  // (`[data-toast-room]`) to make room by. It is written on those two alone,
-  // never on the root: a custom property there
-  // is inherited by every row of every card, and restyling the whole review
-  // for one number was the longest task on the page.
+  // Written on `[data-rail]` and `[data-toast-room]` only: a custom property
+  // on the root restyles every row of every card (the page's longest task).
   const stack = useRef<HTMLElement>(null);
   const [space, setSpace] = useState(0);
   useEffect(() => {
@@ -156,10 +132,8 @@ export function ToastRegion({ toasts }: { toasts: readonly ToastItem[] }) {
       setSpace(0);
       return;
     }
-    // From the stack's top to the bottom of the screen, which takes in the
-    // gap under it, the home indicator's inset included. The layout
-    // viewport's height, not `innerHeight`, which pinch-zoom shrinks while
-    // the fixed stack stays put.
+    // Includes the home-indicator inset. `clientHeight`, not `innerHeight`,
+    // which pinch-zoom shrinks while the fixed stack stays put.
     const measure = () =>
       setSpace(
         Math.max(
@@ -193,8 +167,7 @@ export function ToastRegion({ toasts }: { toasts: readonly ToastItem[] }) {
 
   const said = (loud: boolean) =>
     toasts
-      // A toast whose retry is running says "Retrying." instead, and its
-      // message comes back as a new node, and is said again, if it fails.
+      // While retrying, "Retrying." is said instead; a repeat failure is a new node.
       .filter((t) => (t.tone === 'error') === loud && !t.action?.busy)
       .map((t) => <span key={`${t.id}:${t.raised}`}>{t.message} </span>);
   const busy = toasts.some((t) => t.action?.busy);

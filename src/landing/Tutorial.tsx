@@ -19,41 +19,16 @@ import { describePullRequestError } from '@/src/pull-request/errors';
 import { useReviewControls, useReviewView } from '@/src/review/ReviewProvider';
 import { SITE } from '@/src/site/site';
 
-/**
- * The duck's voice: an 8-pixel-grid face, loaded here and applied to the
- * sentence alone, so nothing else on the page is set in it.
- *
- * `block` rather than the `swap` the page's own faces use. A swap paints the
- * sentence in a fallback first and then redraws it in pixels, and a bubble
- * whose letters change shape and width under the reader is exactly the jump
- * this face must not make. The file is a few kilobytes and preloaded from the
- * head, so the block is usually over before the first paint; if it is not, the
- * sentence is late rather than wrong, and it fades in either way.
- */
+// `block`, not `swap`: a swap redraws the sentence from a fallback, and the
+// bubble must not change shape under the reader. The file is tiny and preloaded.
 const pixel = Press_Start_2P({
   display: 'block',
   subsets: ['latin'],
   weight: '400',
 });
 
-/**
- * What the duck says when you arrive.
- *
- * Three sentences: what the page is, what it does to a file, and what to do
- * next. They are a greeting rather than a manual — the field below them
- * already says what it wants, and the questions have a page of their own — so
- * the sequence is over in two clicks and never asks to be dismissed.
- *
- * No count of questions: how many there are is a fact the FAQ answers when
- * asked, not something to sell with. Nor "every file" or "every code file":
- * prose in a change is shown and never judged, and a pull request can hold
- * more code files than one review takes. "File by file" is true of all of it. The copy is plain ASCII
- * on purpose, since the pixel face below carries Latin and nothing more.
- *
- * The book's name is a link, in the bubble's own ink and underlined, so it
- * reads on the black bubble and the white one alike without a colour of its
- * own. The FAQ names the author in full; the greeting can be friendlier.
- */
+// Plain ASCII: the pixel face carries Latin only. No "every file": prose is
+// never judged, and a pull request can hold more files than one review takes.
 const LINES: readonly ReactNode[] = [
   <>
     Quack. This page reviews code against Uncle Bob's{' '}
@@ -74,26 +49,18 @@ const LINES: readonly ReactNode[] = [
 const LAST = LINES.length - 1;
 
 interface Tutorial {
-  /** The sentence on screen, or null once the greeting is over. */
   line: ReactNode | null;
-  /**
-   * The greeting is running and has another sentence after this one, so there
-   * is something for a click to do. False the moment it is over, which is what
-   * keeps a duck nobody can advance from staying a button.
-   */
+  /** False once there is nothing left to advance, so the duck stops being a button. */
   more: boolean;
-  /** Which sentence is showing. Only the affordances need this. */
   step: number;
   next: () => void;
-  /** The last sentence is up, and the examples are what it is pointing at. */
   nudging: boolean;
-  /** The sentence itself, which is where focus goes when the buttons leave. */
+  /** Where focus goes when the last press removes both buttons. */
   said: RefObject<HTMLParagraphElement | null>;
 }
 
 const TutorialContext = createContext<Tutorial | null>(null);
 
-/** Spelled once, so the error below reads as a sentence rather than a blob. */
 const HOOK = 'useTutorial';
 
 function useTutorial(): Tutorial {
@@ -105,17 +72,9 @@ function useTutorial(): Tutorial {
 }
 
 /**
- * The greeting's state, which is the whole of its memory.
- *
- * It runs on every visit, so there is nothing to remember between them: no
- * storage is read and none is written, and a reload is a fresh hello. What
- * does have to be remembered is within one page load — a reader who has opened
- * a review has been introduced, and going home afterwards must not introduce
- * them again — and that is `over`, which lives here and dies with the tab.
- *
- * Setting it while rendering rather than in an effect is deliberate: the
- * examples keep their ring until the state that hides it lands, and an effect
- * lands a frame after the review is already on screen.
+ * No storage: the greeting runs on every visit, and `over` lasts one page load.
+ * Set during render, not in an effect: an effect lands a frame after the
+ * review is on screen, with the examples still ringed.
  */
 export function TutorialProvider({ children }: { children: ReactNode }) {
   const { open, prError } = useReviewView();
@@ -132,8 +91,7 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const showing = !(open || over);
-  // A pull request that did not open is what the duck says instead, and the
-  // greeting waits where it was until that has been put away.
+  // A refused pull request speaks instead; the greeting resumes after it.
   const speaking = showing && prError === null;
 
   const value = useMemo<Tutorial>(
@@ -156,19 +114,9 @@ export function TutorialProvider({ children }: { children: ReactNode }) {
 }
 
 /**
- * The duck, as the thing you click to hear the rest.
- *
- * It is the obvious target — it is the largest thing on the page and it is the
- * one talking — so it is a real button with a name that says what pressing it
- * does, rather than a click handler on a picture. Once there is nothing left
- * to say — the last sentence is up, or a review has ended the greeting for
- * this page load — the button is gone and the duck is a picture again: a
- * control that does nothing is worse than no control.
- *
- * The button adds no box of its own. The `view-transition-name` that turns
- * this duck into the small one beside the field sits on the element outside
- * it, and a wrapper with padding would change the size the browser morphs
- * from.
+ * A real button only while there is more to say. It adds no box: the
+ * `view-transition-name` sits on its parent, and padding would change the size
+ * the morph starts from.
  */
 export function TutorialDuck({ children }: { children: ReactNode }) {
   const { more, next, said, step } = useTutorial();
@@ -199,33 +147,18 @@ export function TutorialDuck({ children }: { children: ReactNode }) {
   );
 }
 
-/** The duck waiting for a pick: a loop of foot taps, fetched late. */
 const FOOT_TAPS = '/ducky-foot-taps.webp';
 
-/**
- * Whether the foot taps are downloaded and decoded, for this page load.
- *
- * Module state rather than component state, because the landing duck unmounts
- * when a review opens and mounts again on the way home, and a duck that has
- * already been tapping its feet should not wink once more while the file it
- * already has is decoded a second time. It is memory, not storage: a reload
- * starts it over.
- */
+// Module state: the duck remounts on the way home and must not decode again.
 let footTapsReady: Promise<void> | null = null;
 
-/** However busy the page is, the fetch starts within this long of painting. */
 const IDLE_AT_MOST_MS = 2000;
-/** Where there is no idle callback, how long after painting to start. */
+/** Where `requestIdleCallback` is missing. */
 const IDLE_STAND_IN_MS = 200;
 
 /**
- * Fetch and decode the foot taps once the page has painted, if it should.
- *
- * Never under reduced motion, where the duck is the still and an animation
- * nobody sees is 700 KB for nothing, and never for a reader who has asked
- * their browser to save data. Otherwise not until the browser is idle: the
- * file is the largest thing on the landing view, and the wink it replaces is
- * already on screen, so nothing is waiting for it.
+ * Skipped under reduced motion (the still shows instead; 700 KB for nothing) and
+ * Save-Data. Otherwise deferred to idle: the wink is already on screen.
  */
 function useFootTaps(): boolean {
   const [ready, setReady] = useState(false);
@@ -283,14 +216,8 @@ function useFootTaps(): boolean {
 }
 
 /**
- * Run `then` once the page has put something on screen, and return a way to
- * stop waiting.
- *
- * An effect can run before the first frame is presented, so mounting is not
- * proof of a paint. The browser's own first-contentful-paint entry is, and a
- * tab opened in the background simply reports it later, once it is shown.
- * Where there is no paint timing, two animation frames stand in: the second
- * comes after the first has been drawn.
+ * An effect can run before the first frame is presented, so it waits for the
+ * FCP entry; two animation frames stand in where paint timing is missing.
  */
 function afterFirstPaint(then: () => void): () => void {
   const painted = () =>
@@ -320,24 +247,16 @@ function afterFirstPaint(then: () => void): () => void {
   return () => observer.disconnect();
 }
 
-/** Both loops run for this long, and the duck changes between them on whole loops. */
+/** Both animations are this long, so switches land on whole loops. */
 const LOOP_MS = 4800;
-/** One wink, then two rounds of foot taps, then round again. */
 const WINK_LOOPS = 1;
 const FOOT_TAP_LOOPS = 2;
 
 type DuckLoop = 'foot-taps' | 'wink';
 
 /**
- * Which loop the duck is in: the wink, then the foot taps, then the wink
- * again, for as long as the landing duck is on screen, on its own clock rather
- * than the bubbles'. Tied to the bubbles, the wink lasted only as long as it
- * took to read two lines, and the duck spent the rest of every visit tapping.
- *
- * It starts on the wink, which is on screen from first paint, and stays there
- * until the foot taps have arrived; under reduced motion they never do, so no
- * timer ever runs. Coming home from a review mounts the duck again, so it
- * greets with a wink each time.
+ * Its own clock, not the bubbles': tied to them the wink ends after two lines.
+ * No timer until the foot taps are decoded, so none under reduced motion.
  */
 function useDuckLoop(): DuckLoop {
   const ready = useFootTaps();
@@ -365,15 +284,8 @@ function useDuckLoop(): DuckLoop {
 }
 
 /**
- * The landing duck's artwork, which alternates between a wink and foot taps.
- *
- * Both loops are cut from the same canvas, so they fill the same box with the
- * bird in the same place, and the change is one `src` on one element. The foot
- * taps are only shown once they are decoded, which is why there is never a
- * blank frame between them. `picture` swaps in the matching still for a
- * reader who has asked for less motion, and the foot taps are never fetched
- * for them. Neither loop goes through the optimiser, which keeps an animated
- * image's first frame and drops the rest.
+ * Both loops are cut from one canvas, so switching is one `src`. Unoptimized:
+ * the optimiser keeps only an animated image's first frame.
  */
 export function TutorialDuckPicture() {
   const tapping = useDuckLoop() === 'foot-taps';
@@ -388,9 +300,7 @@ export function TutorialDuckPicture() {
         alt=""
         className="h-44 w-44 sm:h-62 sm:w-62"
         data-duck-loop={tapping ? 'foot-taps' : 'wink'}
-        // The largest paint on the landing page. `preload` would put a
-        // `<link>` in the head for one of the two sources; inside a
-        // `picture` the hint belongs on the image itself.
+        // LCP. Not `preload`: inside `picture` that would hint only one source.
         fetchPriority="high"
         height={480}
         loading="eager"
@@ -402,30 +312,17 @@ export function TutorialDuckPicture() {
   );
 }
 
-/**
- * The bubble's colours: the page's opposite. Black with white letters on the
- * white page, white with black letters on the dark one, so the duck's speech is
- * the one thing on the page printed in reverse whichever paper it is on.
- *
- * They come from the palette (`--bubble` and `--bubble-ink` in `globals.css`)
- * rather than from a `dark:` variant, because the palette is what follows the
- * reader's own choice: a light page on a dark desktop still gets a black
- * bubble. The tail is the same colour as the body and needs no outline in
- * either theme, since the bubble is always the page's opposite.
- */
+// Palette tokens rather than `dark:`, so the bubble follows the chosen theme,
+// not the OS one: always the page's opposite.
 const BUBBLE = 'bg-bubble text-bubble-ink';
 
-/**
- * The least a bubble with a refusal in it is on a phone: three lines of the
- * duck's type (every refusal fits in three at 375px), the row of buttons
- * under them, and the padding. Held, empty, while a pull request is fetched.
- */
+// Three lines of duck type (every refusal fits in three at 375px), the buttons
+// and the padding.
 const ERROR_BUBBLE_ROOM = 'max-lg:min-h-[103px]';
 
 /**
- * The bubble's height when a fetch started, held while the answer is out and
- * while a refusal is up, so a refusal replacing a longer greeting does not
- * pull the field up under the reader. Read before paint, so it costs no frame.
+ * Holds the bubble's height from fetch through a refusal, so a shorter refusal
+ * does not pull the field up. Measured before paint.
  */
 function useBubbleFloor(fetching: boolean, prError: string | null) {
   const ref = useRef<HTMLDivElement>(null);
@@ -440,24 +337,12 @@ function useBubbleFloor(fetching: boolean, prError: string | null) {
   return { height, ref };
 }
 
-/** A control in the bubble, set in the bubble's own pixels. */
 const PIXEL_BUTTON = `${pixel.className} inline-flex min-h-6 min-w-6 cursor-pointer items-center justify-end rounded-sm px-1 text-[8px]! text-bubble-ink [font-variant-ligatures:none]! underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-bubble-ink focus-visible:outline-offset-2 aria-disabled:cursor-default aria-disabled:no-underline`;
 
 /**
- * What the duck is saying, in a bubble beside it.
- *
- * Exposed to a screen reader rather than hidden from one. Hiding it would be
- * the easy answer — every claim in it is elsewhere on the page — but the duck
- * beside it is a button, and a labelled button whose whole effect is invisible
- * to the reader pressing it is a worse lie than a little repetition. So the
- * sentence is a polite live region: nothing is announced on arrival, because a
- * live region does not announce what it was born with, and each press
- * announces the sentence it produced. Nothing takes focus on its own and
- * nothing loops, so there is no trap to get out of.
- *
- * The exception is the press that reaches the last sentence, which takes both
- * affordances off the page. Focus would fall to the document, so it is put on
- * the sentence instead — the one thing on screen that just changed.
+ * A polite live region rather than aria-hidden: the duck is a labelled button,
+ * and its only effect must reach a screen reader. The press that reaches the
+ * last sentence removes both buttons, so focus moves to the sentence.
  */
 export function TutorialBubble() {
   const { line, more, next, said, step } = useTutorial();
@@ -474,10 +359,8 @@ export function TutorialBubble() {
   );
 
   if (!(line || prError)) {
-    // A pull request is on its way and the duck has nothing to say yet. If it
-    // comes back refused, the reason goes in a bubble here, and on a phone
-    // that bubble is in the flow above the field: its room is held from the
-    // press on, empty, so the answer fills it rather than pushing the field.
+    // On a phone a refusal bubble sits in the flow above the field; hold its
+    // room from the press on so the answer does not push the field down.
     return fetching ? (
       <div
         aria-hidden="true"
@@ -494,9 +377,7 @@ export function TutorialBubble() {
       ref={floor.ref}
       style={floor.height ? { minHeight: floor.height } : undefined}
     >
-      {/* The tail, twice: it points up at the duck standing above it on a
-          phone, and left at the duck standing beside it once there is room.
-          A square turned 45 degrees, half of it standing out of the bubble. */}
+      {/* Two tails: up at the duck on a phone, left at it from `lg`. */}
       <span
         aria-hidden="true"
         className={`-top-[6px] -ml-[6px] absolute left-1/2 size-3 rotate-45 lg:hidden ${BUBBLE}`}
@@ -509,19 +390,10 @@ export function TutorialBubble() {
         <DuckTrouble message={prError} />
       ) : (
         <>
-          {/* A new node per sentence, so the browser has something to start the
-            fade from. `starting:` is the whole animation: no keyframes, and
-            under reduced motion the transition is not declared at all, so the
-            sentence simply appears.
-            12px, which puts one of the face's 8 grid pixels on 1.5 CSS pixels:
-            three device pixels on a 2x screen, so every edge is crisp there,
-            and half a device pixel off the grid at 1x and 3x, where the edges
-            soften a little. 16px was crisp at every ratio and was traded for a
-            quieter bubble. The lines are 21px apart, fourteen of the face's
-            pixels, which is a whole number of device pixels at 2x and the same
-            air between lines, in proportion, that the 16px setting had. The
-            glyphs are a full em wide, so the bubble stays wide from `lg` up.
-            Ligatures are off: the face joins "fi" into one glyph, which breaks the grid. */}
+          {/* A new node per sentence gives `starting:` a fade to run.
+            12px/21px puts the face's 8-pixel grid on whole device pixels at 2x
+            (slightly soft at 1x and 3x; 16px was crisp everywhere but loud).
+            Ligatures off: the face joins "fi" into one glyph off the grid. */}
           <p
             aria-atomic="true"
             aria-live="polite"
@@ -532,12 +404,8 @@ export function TutorialBubble() {
           >
             {line}
           </p>
-          {/* The control is set in the same pixels as the sentence: it is part of
-            the bubble, and a dialogue box in two typefaces reads as two things. The arrow is the
-            face's own `>`, not an icon, so it sits on the same grid. */}
-          {/* Small and in the corner, the way a game's dialogue box marks that
-            there is more: 8px is the face's own grid, so it stays crisp, and the
-            padding keeps the target a comfortable size for a finger. */}
+          {/* Same pixel face as the sentence, arrow included; 8px is the
+            face's grid, and the padding keeps a finger-sized target. */}
           {more ? (
             <div className="-mb-1 flex justify-end">
               <button
@@ -557,14 +425,8 @@ export function TutorialBubble() {
 }
 
 /**
- * Why the pull request did not open, in the duck's voice.
- *
- * It takes the bubble over from the greeting: it is about what the reader just
- * did, which is more pressing than what the page is. It is an alert, so it is
- * read out when it arrives, and it takes no focus. Retry is there when asking
- * again could help, and stays up, busy, while it runs; OK puts the reason away
- * and hands focus to the address, which is what there is to fix. The greeting
- * comes back where it was.
+ * An alert that takes no focus. OK hands focus to the address, the thing to
+ * fix.
  */
 function DuckTrouble({ message }: { message: string }) {
   const { retryingPr } = useReviewView();
@@ -617,14 +479,7 @@ function DuckTrouble({ message }: { message: string }) {
   );
 }
 
-/**
- * The row of examples, ringed while the sentence that names them is up.
- *
- * A ring rather than a spotlight: nothing is dimmed, nothing is covered and
- * the chips stay exactly where they were, because the reader is meant to click
- * one and not to admire the emphasis. The ring is always drawn and only its
- * colour changes, so the row does not move when it arrives.
- */
+// The ring is always drawn and only its colour changes, so the row never shifts.
 export function TutorialSpotlight({ children }: { children: ReactNode }) {
   const { nudging } = useTutorial();
 
@@ -640,13 +495,7 @@ export function TutorialSpotlight({ children }: { children: ReactNode }) {
   );
 }
 
-/**
- * Hold on to focus across the press that removes the thing pressed.
- *
- * Only the step before the last one does this: every other press leaves its
- * button on the page, and moving focus off a control someone is still using is
- * its own kind of rude.
- */
+// Only the step before the last: that press removes the button it came from.
 function keepFocus(
   control: HTMLElement,
   step: number,

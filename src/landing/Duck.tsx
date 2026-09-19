@@ -7,34 +7,20 @@ import { useReviewControls, useReviewView } from '@/src/review/ReviewProvider';
 import { DuckTransition } from './DuckTransition';
 
 /**
- * The duck, in both of its sizes.
- *
- * There is one duck on this page and it is in two places: large above the
- * field while nothing is open, and small beside the field once a review is.
- * Only one of the two is ever rendered, and both wear the same
- * `view-transition-name`, which is what lets the browser treat them as the
- * same bird and animate one into the other instead of crossing them over.
- *
- * The image itself is handed in rather than imported, so `next/image` stays in
- * the server's bundle and out of this one.
+ * Both ducks share one `view-transition-name`, and only one is ever rendered,
+ * so the browser morphs one into the other.
  */
 const SAME_DUCK = { viewTransitionName: 'duck' } as const;
 
 /**
- * The mascot on the landing view, and whatever it is saying.
- *
- * `aside` is a slot beside the bird rather than part of it: the duck keeps the
- * `view-transition-name`, so anything inside that span is snapshotted and
- * morphed with it when a review opens, and a speech bubble is not the duck.
- * The column is what puts the bubble under the duck on a phone, where there is
- * no room beside it; from `lg` up the bubble takes itself out of the flow and
- * stands to the right, which is why the duck does not move when it appears.
+ * `aside` sits outside the named span: anything inside it would be snapshotted
+ * and morphed with the duck. From `lg` the bubble leaves the flow, so the duck
+ * does not move when it appears.
  */
 export function LandingDuck({
   aside,
   children,
 }: {
-  /** Rendered after the duck, in the same positioning context. */
   aside?: ReactNode;
   children: ReactNode;
 }) {
@@ -55,11 +41,7 @@ export function LandingDuck({
   );
 }
 
-/**
- * The mark beside the field in the code view, and the way back out of it. A
- * page with no title has nothing else that means "the start", and the duck is
- * already where a wordmark would be.
- */
+// The page has no title, so the duck is the way back to the start.
 export function HomeDuck({ children }: { children: ReactNode }) {
   const { open } = useReviewView();
   const { goHome } = useReviewControls();

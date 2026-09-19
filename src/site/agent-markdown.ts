@@ -1,20 +1,8 @@
 /**
- * Every page of this site, written out as Markdown for a caller that asked for
- * Markdown.
- *
- * `acceptmarkdown.com` asks that a request carrying `Accept: text/markdown`
- * come back as a Markdown document rather than as HTML, and an agent reading
- * this site has no use for the duck, the meters or the editor. So each page
- * gets a documentation-shaped twin here: what the page is, what it does with
- * what you give it, and the limits it actually enforces.
- *
- * Nothing in this file renders a page or fetches anything. It is a lookup from
- * a pathname to a string, which is what lets `proxy.ts` answer before the
- * router has run and what keeps `/owner/repo/pull/123` from spending this
- * site's GitHub rate limit on a request that only wanted the documentation.
- *
- * Every figure below is read from the module that enforces it, so a limit
- * cannot be raised in one place and still be promised in another.
+ * Markdown twins of every page, for `Accept: text/markdown` (acceptmarkdown.com).
+ * A pure pathname-to-string lookup, so `proxy.ts` can answer before the router
+ * and a permalink costs no GitHub rate limit. Every figure is imported from the
+ * module that enforces it.
  */
 
 import { parsePullRequest } from '@/agent/lib/github/github';
@@ -38,19 +26,12 @@ import { pullRequestUrl } from '@/src/pull-request/address';
 import { answerMarkdown, FAQ } from './faq';
 import { SITE } from './site';
 
-/** The one content type this module's output may be served as. */
 export const MARKDOWN_TYPE = 'text/markdown; charset=utf-8';
 
 /**
- * True when the caller asked for Markdown by name.
- *
- * By name, and never by wildcard: a browser sends
- * `text/html,…,*\/*;q=0.8`, and reading that as "Markdown is acceptable"
- * would hand the whole web a text file instead of the page. The same strictness
- * is what keeps React's own navigations out of here — an RSC request asks for
- * `text/x-component`, never for this — which matters because Next strips its
- * Flight headers from the request inside a proxy, so the Accept header is the
- * only thing left to tell the two apart.
+ * By name, never by wildcard: browsers send `*\/*`. It also keeps RSC requests
+ * (`text/x-component`) out, which matters because Next strips the Flight
+ * headers inside a proxy, leaving Accept as the only way to tell them apart.
  */
 export function wantsMarkdown(accept: string | null | undefined): boolean {
   return /(^|,)\s*text\/markdown\s*(;|,|$)/i.test(accept ?? '');
@@ -58,7 +39,6 @@ export function wantsMarkdown(accept: string | null | undefined): boolean {
 
 const url = (path: string) => `${SITE.url}${path}`;
 
-/** The indexes and the endpoint an agent should be pointed at from anywhere on the site. */
 const INDEXES = [
   `- [llms.txt](${url('/llms.txt')}): this site in one paragraph, for a model.`,
   `- [sitemap.xml](${url('/sitemap.xml')}): every page meant to be indexed.`,
@@ -66,12 +46,7 @@ const INDEXES = [
   `- [Source](${SITE.source}): the whole application, including the question set and the prompts.`,
 ].join('\n');
 
-/**
- * What this site will and will not do with a change, in the numbers the code
- * holds. `agent/lib/review/review.ts` owns the caps; the hour is
- * `agent/lib/infra/cache.ts`'s and is said in words because it is a duration, not a
- * quantity the reader is counting against.
- */
+// The cache hour is written in words: it is a duration, not a count.
 const LIMITS = [
   '- Public GitHub repositories only. There is no account and nothing to sign in to.',
   `- One turn judges at most ${REVIEW_LIMITS.maxFiles} code files, the largest changes first.`,
@@ -82,7 +57,6 @@ const LIMITS = [
   '- Each browser tab is one agent session with its own spending cap and an hour-long lifetime.',
 ].join('\n');
 
-/** The header every one of these documents opens with. */
 const TITLE = `# ${SITE.name}`;
 
 const HOME = `${TITLE}
@@ -127,11 +101,7 @@ ${LIMITS}
 ${INDEXES}
 `;
 
-/**
- * `/faq` for an agent: the same answers the page shows, from the same array,
- * with the page's linked phrases as Markdown links, so this copy cannot drift
- * from the one on screen.
- */
+// Built from the same `FAQ` array as the page, so the two cannot drift.
 const FAQ_PAGE = `# Questions about ${SITE.name}
 
 ${FAQ.map((item) => `## ${item.q}\n\n${answerMarkdown(item.a)}`).join('\n\n')}
@@ -269,14 +239,12 @@ counted without saying who you are. Nothing is sold, because there is nothing co
 ${INDEXES}
 `;
 
-/** The static pages, by the exact path each is served at. */
 const PAGES = new Map<string, string>([
   ['/', HOME],
   ['/faq', FAQ_PAGE],
   ['/privacy', PRIVACY],
 ]);
 
-/** The permalink route's document, written from the address and nothing else. */
 function pullRequestMarkdown(owner: string, repo: string, id: number): string {
   const path = `/${owner}/${repo}/pull/${id}`;
   return `# ${owner}/${repo}#${id} · ${SITE.name}
@@ -307,17 +275,8 @@ ${INDEXES}
 `;
 }
 
-/**
- * The pull request this pathname names, in the one spelling GitHub would have
- * written, or null.
- *
- * It goes through the same parser the route itself uses rather than a second
- * regular expression, so that "is there a page here" is answered identically on
- * both sides. A capitalisation the route renders is a capitalisation this
- * answers for, and a spelling the route sends to `notFound()` — a leading zero
- * in the number, a segment that is not a GitHub name — is one this calls
- * unknown too.
- */
+// The route's own parser, not a second regex, so "is there a page here" is
+// answered the same way the route answers it (casing, leading zeros, names).
 function pullRequestAt(pathname: string) {
   const parts = pathname.split('/');
   const [, owner, repo, pull, id] = parts;
@@ -327,24 +286,16 @@ function pullRequestAt(pathname: string) {
   return parsePullRequest(pullRequestUrl(`${owner}/${repo}`, id));
 }
 
-/** `['', owner, repo, 'pull', number]`: the shape of a permalink, split. */
+/** `['', owner, repo, 'pull', number]` */
 const PULL_PATH_SEGMENTS = 5;
 
-/** A path with its trailing slash removed, because `/privacy/` is `/privacy`. */
 function normalize(pathname: string): string {
   return pathname.length > 1 ? pathname.replace(/\/+$/, '') || '/' : '/';
 }
 
 /**
- * This page as Markdown, or null when the site has no page at that path.
- *
- * Null is what produces a 404, so it has to be wrong in the safe direction: a
- * real page answered as "not found" would tell an agent this site is smaller
- * than it is. Every static page is listed in `PAGES` above by the exact path
- * `app/` serves it at, and the one dynamic route is resolved by its own parser,
- * so the two lists cannot disagree about a spelling. Adding a page under `app/`
- * means adding it here — which is the same edit the sitemap already asks for,
- * and this file sits beside it for that reason.
+ * Null means 404, so it must err towards answering. A page added under `app/`
+ * must be added to `PAGES` too, alongside `app/sitemap.ts`.
  */
 export function markdownFor(pathname: string): string | null {
   const path = normalize(pathname);
@@ -356,11 +307,6 @@ export function markdownFor(pathname: string): string | null {
   return pr ? pullRequestMarkdown(pr.owner, pr.repo, pr.number) : null;
 }
 
-/**
- * What a path that names nothing gets: the error in words, and the two indexes
- * that list what does exist, so that a wrong guess is one fetch from a right
- * one.
- */
 export function notFoundMarkdown(pathname: string): string {
   return `# 404 Not Found
 

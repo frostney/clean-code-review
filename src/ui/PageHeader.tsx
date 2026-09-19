@@ -5,27 +5,18 @@ import type { ReactNode } from 'react';
 import { DuckTransition } from '@/src/landing/DuckTransition';
 import { SITE } from '@/src/site/site';
 
-/** The duck, small: the mark at the top of a page with no wordmark, and the way back. */
 const DUCK_PX = 40;
 
-/**
- * The top of every page of prose (the questions, the privacy notes): the
- * duck as the way home, the page's title, and one line of what it is for.
- * One shape for all of them, so leaving the tool for a page of text always
- * looks like the same step.
- */
 export function PageHeader({
   title,
   children,
 }: {
   title: string;
-  /** The lede, in the page's body size. */
   children: ReactNode;
 }) {
   return (
     <header className="mb-6">
-      {/* The landing page's duck, arriving: a link here from `/`, or this one
-          back to it, morphs one bird into the other. */}
+      {/* Morphs into the landing duck when navigating to and from `/`. */}
       <DuckTransition>
         <Link
           aria-label={`Back to ${SITE.name}`}

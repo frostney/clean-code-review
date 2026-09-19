@@ -1,18 +1,9 @@
 import { SITE } from '@/src/site/site';
 import { Shell } from '@/src/ui/Shell';
 
-/**
- * The front door: the page with nothing open. What it looks like and what it
- * is made of are `Shell`'s, because the permalink route renders the very same
- * tree with a pull request in it; what is only ever true here is the
- * structured data below, which describes this URL and no other.
- *
- * The questions used to be here too, with a `FAQPage` block beside them. They
- * live at `/faq` now, and so does that block: the same answers claimed at two
- * addresses is one of them lying about where to be read.
- */
+// The `FAQPage` JSON-LD lives on `/faq` only: the same answers claimed at two
+// addresses would contradict where they are to be read.
 
-/** What this is, for a machine that has to decide whether to recommend it. */
 const APPLICATION_LD = {
   '@context': 'https://schema.org',
   '@type': 'WebApplication',

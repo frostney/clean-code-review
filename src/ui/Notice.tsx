@@ -1,15 +1,9 @@
 import type { ReactNode } from 'react';
 
 /**
- * A standing system message above the review: not a judgment about the code,
- * and not something that just happened (that is a toast). Three tones, so the
- * amber is left for what actually needs care: `info` for what the reader
- * should know (a docs-only change), `warn` for what limits the review (a spent
- * budget), `error` for what stopped it.
- *
- * Extra props land on the wrapper, which is how each notice keeps its own
- * `data-*` hook for tests. A caller's `className` is merged rather than
- * overridden — spreading it last would drop the notice's own styling.
+ * A standing message (a transient one is a toast). Amber is reserved for what
+ * limits the review. `className` is merged, not spread, so the notice keeps its
+ * own styling.
  */
 const TONE = {
   error: 'border-bad/40 bg-bad-bg text-bad',
