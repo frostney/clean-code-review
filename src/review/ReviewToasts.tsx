@@ -65,8 +65,32 @@ function usePullRequestToast(): ToastItem | null {
   };
 }
 
+type RetryPhase = 'waiting' | 'running' | null;
+
+/**
+ * Where a pressed Retry is. Waiting until its turn starts (it may be queued
+ * behind one already on the wire), running until that turn settles, and back
+ * to idle if the queued turn is dropped instead: every file it would have
+ * sent was emptied, removed or paused, the session's budget ran out, or the
+ * failure was cleared without a turn.
+ */
+function nextPhase(
+  phase: RetryPhase,
+  judge: { asking: boolean; budgetSpent: boolean; error: string | null },
+  retryable: boolean,
+): RetryPhase {
+  if (phase === 'waiting') {
+    if (judge.asking) {
+      return 'running';
+    }
+    const dropped = !retryable || judge.budgetSpent || judge.error === null;
+    return dropped ? null : 'waiting';
+  }
+  return phase === 'running' && !judge.asking ? null : phase;
+}
+
 /** A judging turn that did not come back. */
-function useJudgeToast(): ToastItem | null {
+function useJudgeToast(retryable: boolean): ToastItem | null {
   const { judge } = useReviewView();
   const { retryJudging } = useReviewControls();
   const raised = useRaised(judge.error);
@@ -75,12 +99,10 @@ function useJudgeToast(): ToastItem | null {
   // starts, and the failure it answers is cleared only when it does. The
   // toast stays up, busy, from the press until the retried turn settles, so
   // the button under the reader's finger never disappears.
-  const [retry, setRetry] = useState<'waiting' | 'running' | null>(null);
-  if (retry === 'waiting' && judge.asking) {
-    setRetry('running');
-  }
-  if (retry === 'running' && !judge.asking) {
-    setRetry(null);
+  const [retry, setRetry] = useState<RetryPhase>(null);
+  const phase = nextPhase(retry, judge, retryable);
+  if (phase !== retry) {
+    setRetry(phase);
   }
   // Dismissing puts this raising away, not the failure: the files it let go
   // of still say "Could not judge", and the next failure comes back.
@@ -89,16 +111,23 @@ function useJudgeToast(): ToastItem | null {
   // render, where the count above never sees it go; each press counts too.
   const [presses, setPresses] = useState(0);
 
-  const error = judge.error ?? (retry ? raised.last : null);
-  if (!error || (retry === null && raised.count === dismissed)) {
+  const error = judge.error ?? (phase ? raised.last : null);
+  if (!error || (phase === null && raised.count === dismissed)) {
     return null;
   }
   const trouble = describeTurnError(error);
-  const canRetry = trouble.retry && !judge.budgetSpent;
+  // Once the session's budget is spent nothing will ask again, and the notice
+  // above the review says so; a failure offering to try is stale by then.
+  if (trouble.retry && judge.budgetSpent) {
+    return null;
+  }
+  // Retry only while there is something for it to send, or while the one
+  // pressed is still under way.
+  const canRetry = trouble.retry && (retryable || phase !== null);
   return {
     action: canRetry
       ? {
-          busy: retry !== null,
+          busy: phase !== null,
           busyLabel: 'Retrying…',
           label: 'Retry',
           run: () => {
@@ -121,14 +150,15 @@ function useJudgeToast(): ToastItem | null {
 }
 
 /**
- * The code view's failures, as toasts. The landing view has none; there the
+ * The code view's failures, as toasts. `retryable` is whether any file a
+ * failed turn let go of could be sent again. The landing view has none; there the
  * duck says it. One toast per kind, keyed by the kind, so a retry that comes
  * back with a different reason updates the toast in place and keeps focus on
  * its button.
  */
-export function ReviewToasts() {
+export function ReviewToasts({ retryable }: { retryable: boolean }) {
   const pr = usePullRequestToast();
-  const judged = useJudgeToast();
+  const judged = useJudgeToast(retryable);
   const toasts = [pr, judged].filter((t): t is ToastItem => t !== null);
   return <ToastRegion toasts={toasts} />;
 }

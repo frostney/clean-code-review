@@ -16,6 +16,7 @@ import type { ReviewState } from './useReview';
 export function ReviewPills({
   judgeable = true,
   review,
+  stalled = false,
 }: {
   /**
    * There is code in this review. False for a change that is only
@@ -23,13 +24,15 @@ export function ReviewPills({
    */
   judgeable?: boolean;
   review: ReviewState;
+  /** Some file a failed turn let go of is still waiting on a Retry. */
+  stalled?: boolean;
 }) {
   const judged = Object.values(review.judgments);
   const verdict = reviewVerdict(
     judged.map((j) => verdictScore(j.answers)),
     judgeable,
     review.paused !== null,
-    !review.asking && Object.keys(review.stalled).length > 0,
+    !review.asking && stalled,
   );
   const smells = judged.reduce((total, j) => total + smellCount(j.answers), 0);
 

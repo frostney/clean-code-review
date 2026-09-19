@@ -114,15 +114,17 @@ function Toast({ item }: { item: ToastItem }) {
   );
 }
 
-/** The gap under the stack (`bottom-4`), which the room made for it includes. */
-const STACK_BOTTOM_PX = 16;
-
 /** The corner the toasts live in, and the two regions that read them out. */
 export function ToastRegion({ toasts }: { toasts: readonly ToastItem[] }) {
   // Escape puts every toast away, unless a dialog is open: there Escape is
-  // the dialog's, and closing it must not also clear what the page said.
+  // the dialog's, and closing it must not also clear what the page said. The
+  // listener reads the toasts through a ref, so it is added once while any
+  // are up rather than again on every render.
+  const current = useRef(toasts);
+  current.current = toasts;
+  const shown = toasts.length > 0;
   useEffect(() => {
-    if (!toasts.length) {
+    if (!shown) {
       return;
     }
     function onKeyDown(event: KeyboardEvent) {
@@ -133,13 +135,13 @@ export function ToastRegion({ toasts }: { toasts: readonly ToastItem[] }) {
       ) {
         return;
       }
-      for (const toast of toasts) {
+      for (const toast of current.current) {
         toast.onDismiss();
       }
     }
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [toasts]);
+  }, [shown]);
 
   // The stack's height, for the rail (`[data-rail]`) and the page's end
   // (`[data-toast-room]`) to make room by. It is written on those two alone,
@@ -148,18 +150,33 @@ export function ToastRegion({ toasts }: { toasts: readonly ToastItem[] }) {
   // for one number was the longest task on the page.
   const stack = useRef<HTMLElement>(null);
   const [space, setSpace] = useState(0);
-  const shown = toasts.length > 0;
   useEffect(() => {
     const node = stack.current;
     if (!(shown && node)) {
       setSpace(0);
       return;
     }
-    const observer = new ResizeObserver(() => {
-      setSpace(node.offsetHeight + STACK_BOTTOM_PX);
-    });
+    // From the stack's top to the bottom of the screen, which takes in the
+    // gap under it, the home indicator's inset included. The layout
+    // viewport's height, not `innerHeight`, which pinch-zoom shrinks while
+    // the fixed stack stays put.
+    const measure = () =>
+      setSpace(
+        Math.max(
+          0,
+          Math.ceil(
+            document.documentElement.clientHeight -
+              node.getBoundingClientRect().top,
+          ),
+        ),
+      );
+    const observer = new ResizeObserver(measure);
     observer.observe(node);
-    return () => observer.disconnect();
+    window.addEventListener('resize', measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+    };
   }, [shown]);
   useEffect(() => {
     const rail = document.querySelector<HTMLElement>('[data-rail]');

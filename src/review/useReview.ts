@@ -725,12 +725,9 @@ function withoutStalePaths(
   const cleared = Object.keys(s.failed).filter(stale);
   const notes = Object.keys(s.summary.files).filter(stale);
   const waiting = Object.keys(s.pausedFiles).filter(stale);
+  const letGo = Object.keys(s.stalled).filter(stale);
   if (
-    !gone.length &&
-    !orphaned.length &&
-    !cleared.length &&
-    !notes.length &&
-    !waiting.length
+    [gone, orphaned, cleared, notes, waiting, letGo].every((l) => !l.length)
   ) {
     return s;
   }
@@ -748,6 +745,7 @@ function withoutStalePaths(
     judgments,
     pausedFiles: without(s.pausedFiles, waiting),
     pending: without(s.pending, orphaned),
+    stalled: without(s.stalled, letGo),
     summary: {
       ...s.summary,
       files: summaryFiles,

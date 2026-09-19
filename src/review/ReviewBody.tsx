@@ -64,10 +64,14 @@ export function ReviewBody() {
 
   // A file a failed turn let go of is not being judged, and a badge saying
   // "Judging…" would wait for good. One waiting on the budget says so instead.
+  // Emptied and removed files are pruned from `stalled` by the hook itself.
   const stalled = (path: string) =>
     judge.stalled[path] === true &&
     judge.pending[path] !== true &&
     judge.pausedFiles[path] !== true;
+  // The same files are what a Retry would send, so there is one to offer
+  // only while at least one of them is left.
+  const anyStalled = Object.keys(judge.stalled).some(stalled);
 
   /** Every file here is writing: a docs-only pull request, or a paste of one. */
   const proseOnly =
@@ -139,7 +143,13 @@ export function ReviewBody() {
             footnote={footnote}
             incomplete={judge.summary.incomplete.overall === true}
             model={judge.summary.model}
-            pills={<ReviewPills judgeable={judgeable} review={judge} />}
+            pills={
+              <ReviewPills
+                judgeable={judgeable}
+                review={judge}
+                stalled={anyStalled}
+              />
+            }
             status={overallSummaryStatus(judge.summary)}
             text={judge.summary.overall}
             tone="overall"
@@ -154,7 +164,11 @@ export function ReviewBody() {
             data-overall="placeholder"
           >
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <ReviewPills judgeable={judgeable} review={judge} />
+              <ReviewPills
+                judgeable={judgeable}
+                review={judge}
+                stalled={anyStalled}
+              />
             </div>
             {footnote}
           </section>
@@ -167,7 +181,9 @@ export function ReviewBody() {
       ) : null}
       {proseOnly ? <NothingToJudge /> : null}
       <Paste />
-      <ReviewToasts />
+      {/* Keyed by the review: a retry pressed on the last one is not this
+          one's, and its busy state must not carry over. */}
+      <ReviewToasts key={review.id} retryable={anyStalled} />
 
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[16rem_minmax(0,1fr)]">
         <FileList
