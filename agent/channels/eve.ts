@@ -7,13 +7,16 @@ import {
 } from 'eve/channels/auth';
 import { eveChannel } from 'eve/channels/eve';
 
+import {
+  SESSION_WINDOW_MS,
+  SESSIONS_PER_WINDOW,
+} from '../lib/infra/session-facts';
+
 /**
  * Best effort: counted per address in this instance's memory, which Fluid
  * Compute keeps warm enough to catch a loop. The real bounds are the global
  * spend brake and the Vercel Firewall.
  */
-const SESSIONS_PER_WINDOW = 30;
-const WINDOW_MS = 600_000;
 const MAX_TRACKED_ADDRESSES = 10_000;
 const sessionStartsByAddress = new Map<string, number[]>();
 
@@ -42,7 +45,7 @@ function sessionCreationBrake(): AuthFn<Request> {
     }
     const now = Date.now();
     const recent = (sessionStartsByAddress.get(ip) ?? []).filter(
-      (t) => now - t < WINDOW_MS,
+      (t) => now - t < SESSION_WINDOW_MS,
     );
     if (recent.length >= SESSIONS_PER_WINDOW) {
       throw new ForbiddenError({

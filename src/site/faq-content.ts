@@ -28,27 +28,27 @@ const SCALE_COUNT = QUESTION_COUNT - SMELL_IDS.length;
  */
 export const FAQ: readonly { q: string; a: string }[] = [
   {
-    a: `Code, one file at a time, against ${QUESTION_COUNT} questions drawn from the chapters of Robert C. Martin's Clean Code: names, functions, comments, formatting, objects and data structures, error handling, unit tests, classes and the smells chapter. Of those answers, ${SMELL_IDS.length} are probabilities and ${SCALE_COUNT} are scores on a five-level scale, so the meters compare between files. Markdown and other prose files are shown beside the review and never judged.`,
+    a: `Code, one file at a time, against up to ${QUESTION_COUNT} questions from the chapters of Robert C. Martin's Clean Code: names, functions, comments, formatting, objects and data structures, error handling, unit tests, classes and the smells chapter. Of those answers, up to ${SMELL_IDS.length} are probabilities and ${SCALE_COUNT} are scores on a five-level scale, so the meters compare between files. Markdown and other prose files sit beside the review and are never judged.`,
     q: 'What does it judge?',
   },
   {
-    a: `Two. Jev, TypeSafe's evaluation model, reached through the Vercel AI Gateway, answers the whole question set for one file in a single call and returns probabilities and scores, no prose. Luna (${REVIEWER_MODEL}) writes the words: each file's section from Jev's findings and that file's code, and the decision at the top from every file's findings and the pull request's title and description.`,
+    a: `Two. Jev, TypeSafe's evaluation model, answers the whole question set for one file in a single call, through the Vercel AI Gateway. It returns probabilities and scores, no prose. Luna (${REVIEWER_MODEL}) writes the words. Each file's section comes from Jev's findings and that file's code, and the decision at the top from every file's findings and the pull request's title and description.`,
     q: 'Which models do the work?',
   },
   {
-    a: 'No. Each browser tab is one eve session that holds the files only for the turn being judged, the page clears that history before every turn, and the session ends with the tab. There is no account and no database. An identical turn can come back from a one-hour cache, which is what the "from cache" note means.',
+    a: 'No. Each browser tab is one eve session, and it holds the files only for the turn being judged. The page clears that history before every turn, and the session ends with the tab. There is no account and no database. An identical turn can come back from a one-hour cache: that is what the "from cache" note means.',
     q: 'Is my code stored?',
   },
   {
-    a: `A pull request arrives as one unified diff and is split per file. The question set adjusts: a diff is also asked whether it leaves the code worse than it found it, and only a test file is asked whether its tests are clear. One turn judges at most ${REVIEW_LIMITS.maxFiles} code files, whichever changed most, and shows up to ${REVIEW_LIMITS.maxProseFiles} prose files beside them. Images, lockfiles and generated files are skipped, and only public repositories can be fetched.`,
+    a: `A pull request arrives as one unified diff and is split per file. The question set adjusts: a diff is also asked whether it leaves the code worse than it found it, and only a test file is asked whether its tests are clear. One turn judges at most ${REVIEW_LIMITS.maxFiles} code files, whichever changed most, and shows up to ${REVIEW_LIMITS.maxProseFiles} prose files beside them. Images, lockfiles and generated files are skipped. Public repositories only.`,
     q: 'How is a pull request judged?',
   },
   {
-    a: `Yes, over MCP, at ${SITE.url}${MCP_PATH}. It has two tools: one reviews a public GitHub pull request, the other reviews pasted code or a diff, and both return every answer, the written review and what the call cost. Each address can make ${MCP_CALLS_PER_WINDOW} calls every ${MCP_WINDOW_MINUTES} minutes, and all callers share ${dollars(MCP_HOURLY_BUDGET_USD)} an hour and ${dollars(MCP_DAILY_BUDGET_USD)} a UTC day of model time. A server card at ${SITE.url}${MCP_SERVER_CARD_PATH} describes it for clients that look one up.`,
+    a: `Yes, over MCP, at ${SITE.url}${MCP_PATH}. It has two tools: one reviews a public GitHub pull request, the other reviews pasted code or a diff. Both return every answer, the written review and what the call cost. Each address can make ${MCP_CALLS_PER_WINDOW} calls every ${MCP_WINDOW_MINUTES} minutes, and all callers share ${dollars(MCP_HOURLY_BUDGET_USD)} an hour and ${dollars(MCP_DAILY_BUDGET_USD)} a UTC day of model time. A server card at ${SITE.url}${MCP_SERVER_CARD_PATH} describes it for clients that look one up.`,
     q: 'Can an agent use it?',
   },
   {
-    a: `Yes, and there is nothing to sign in to. Each browser tab carries its own cap of ${CAP_CENTS} cents of model time, so a single session cannot run up a bill; when a tab reaches the cap the meters keep their last answers and a reload starts a fresh session. The whole site shares a model budget of ${dollars(PAGE_HOURLY_BUDGET_USD)} an hour and ${dollars(PAGE_DAILY_BUDGET_USD)} a UTC day, and pauses new reviews until it resets once that is spent. The source is MIT-licensed, at ${SITE.source.replace(/^https?:\/\//, '')}.`,
+    a: `Yes, and there is nothing to sign in to. Each browser tab carries its own cap of ${CAP_CENTS} cents of model time, so one session cannot run up a bill. When a tab reaches the cap the meters keep their last answers, and a reload starts a fresh session. The whole site shares a model budget of ${dollars(PAGE_HOURLY_BUDGET_USD)} an hour and ${dollars(PAGE_DAILY_BUDGET_USD)} a UTC day. Once that is spent, new reviews pause until it resets. The source is MIT-licensed, at ${SITE.source.replace(/^https?:\/\//, '')}.`,
     q: 'Is it free?',
   },
 ];

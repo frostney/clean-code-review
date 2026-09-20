@@ -6,7 +6,7 @@ For a content-only change to the root agent's identity, purpose, tone, or respon
 
 ## Code style
 
-Layout, naming, design and dependency rules live in [docs/code-style.md](docs/code-style.md); read it before adding files or packages. Comments explain constraints or decisions the code cannot express; improve unclear names rather than narrating implementation.
+Layout, naming, design and dependency rules live in [docs/code-style.md](docs/code-style.md); read it before adding files or packages. [docs/architecture.md](docs/architecture.md) holds the layer map, the module boundaries and every limit and budget; [docs/deployment.md](docs/deployment.md) holds the build settings and the deploy checks. Comments explain constraints or decisions the code cannot express; improve unclear names rather than narrating implementation.
 
 ## Read the docs before writing code
 
@@ -14,7 +14,7 @@ Layout, naming, design and dependency rules live in [docs/code-style.md](docs/co
 ls node_modules/eve/docs
 ```
 
-Start with `docs/README.md`: it maps each task to the page that covers it. Read that page before authoring tools, connections, channels, skills, subagents, schedules, or deployment. In a workspace or local package install, resolve the installed `eve` package location first. If the package docs are missing, use https://eve.dev/docs.
+Start with `node_modules/eve/docs/README.md`: it maps each task to the page that covers it. Read that page before authoring tools, connections, channels, skills, subagents, schedules, or deployment. In a workspace or local package install, resolve the installed `eve` package location first. If the package docs are missing, use https://eve.dev/docs.
 
 Use a bounded authoring loop:
 

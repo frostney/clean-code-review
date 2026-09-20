@@ -6,6 +6,10 @@
  */
 
 import { parsePullRequest } from '@/agent/lib/github/github';
+import {
+  SESSION_WINDOW_MS,
+  SESSIONS_PER_WINDOW,
+} from '@/agent/lib/infra/session-facts';
 import { QUESTION_COUNT } from '@/agent/lib/judging/questions';
 import { REVIEW_LIMITS } from '@/agent/lib/review/review';
 import { REVIEWER_MODEL } from '@/agent/lib/review/summary';
@@ -13,6 +17,8 @@ import {
   dollars,
   MCP_DAILY_BUDGET_USD,
   MCP_HOURLY_BUDGET_USD,
+  PAGE_DAILY_BUDGET_USD,
+  PAGE_HOURLY_BUDGET_USD,
 } from '@/agent/lib/spend/budgets';
 import {
   MAX_PASTE_CHARS,
@@ -22,6 +28,10 @@ import {
   MCP_WINDOW_MINUTES,
 } from '@/src/mcp/mcp-facts';
 import { pullRequestUrl } from '@/src/pull-request/address';
+import {
+  GITHUB_FETCH_WINDOW_MS,
+  GITHUB_FETCHES_PER_WINDOW,
+} from '@/src/pull-request/throttle';
 
 import { answerMarkdown, FAQ } from './faq-content';
 import { SITE } from './site';
@@ -38,6 +48,12 @@ export function wantsMarkdown(accept: string | null | undefined): boolean {
 }
 
 const url = (path: string) => `${SITE.url}${path}`;
+
+const MS_PER_MINUTE = 60_000;
+const GITHUB_FETCH_WINDOW_MINUTES = Math.round(
+  GITHUB_FETCH_WINDOW_MS / MS_PER_MINUTE,
+);
+const SESSION_WINDOW_MINUTES = Math.round(SESSION_WINDOW_MS / MS_PER_MINUTE);
 
 const INDEXES = [
   `- [llms.txt](${url('/llms.txt')}): this site in one paragraph, for a model.`,
@@ -65,8 +81,8 @@ const HOME = `${TITLE}
 
 This URL is the application. Point it at a public GitHub pull request, or paste a
 unified diff or a single file, and Jev (TypeSafe's evaluation model, reached
-through the Vercel AI Gateway) answers ${QUESTION_COUNT} questions about every code file
-in the change in one call. The questions come from the chapters of Robert C.
+through the Vercel AI Gateway) answers up to ${QUESTION_COUNT} questions about every code
+file in the change in one call. The questions come from the chapters of Robert C.
 Martin's *Clean Code*: names, functions, comments, formatting, objects and data
 structures, error handling, tests, classes and smells. Every answer is a
 probability or a score rather than a sentence, so a verdict is made of things a
@@ -117,122 +133,122 @@ ${LIMITS}
 ${INDEXES}
 `;
 
+// The twin of `app/privacy/page.tsx`: the same facts in the same order, with
+// the Vercel measurement details in the same table.
 const PRIVACY = `# Privacy
 
-There is no account, no database and no cookie on this site. Nothing you paste
-is written down anywhere this site controls, and nothing is associated with you,
-because there is no you: there is a browser tab and the session it holds open.
-Two things are measured: how many pages are viewed, with Vercel Web Analytics,
-and how fast they load, with Vercel Speed Insights. What each one sends is
-described below.
+Nothing here identifies you. There is no account, no database and no cookie:
+there is a browser tab and the session it holds open. Nothing you paste is
+written down anywhere this site keeps.
 
-## What leaves the browser
+## Your code
 
-The code you paste, or the diff fetched for the pull request you named, is sent
-to this site's server as the message of one agent turn. The server sends each
-file to Jev through the Vercel AI Gateway to be answered, and sends Jev's
-findings plus the file's text to Luna, through the same gateway, to be written
-up. That is the whole path. Your code reaches the gateway and the two model
-providers behind it, and nothing else.
+The code you paste reaches this site's server as one agent turn. So does the
+diff fetched for a pull request you name. The server sends each file through the
+Vercel AI Gateway to Jev, TypeSafe's evaluation model, to be answered against up
+to ${QUESTION_COUNT} questions. Jev's findings and that file's text then go to Luna
+(${REVIEWER_MODEL}) through the same gateway, to be written up as the review you read.
 
-Code can also arrive from an agent, through the MCP server at
-\`${url(MCP_PATH)}\`. That path takes the same route to the same two models in
-a single request, with no session and no browser tab. It keeps what the page
-keeps: the same one-hour cache of answers and reviews, and a count of calls per
-network address, ${MCP_CALLS_PER_WINDOW} per ${MCP_WINDOW_MINUTES} minutes, held in one server instance's memory.
-It also has a model budget that every caller shares, ${dollars(MCP_HOURLY_BUDGET_USD)} per hour and
-${dollars(MCP_DAILY_BUDGET_USD)} per UTC day. Once it is spent, the endpoint refuses new reviews until it
-resets. The budget is a running total of what the models cost, and it holds nothing
-about who called.
-
-## How long anything is kept
-
-Each browser tab holds one agent session. The session's history is cleared before
-every turn, so the only code it holds is the code being judged right now. Closing
-the tab retires the session, and a session left alone expires after an hour.
-
-Answers are cached for one hour, keyed by a hash of exactly what was judged, so
-that judging the same file twice costs one evaluation rather than two. The cache
-holds the code that was judged and the answers that came back. It is per region,
-it expires on its own, and it is not keyed by anything about you.
+That is the whole path: the gateway and the two model providers behind it, and
+nothing else. One turn sends at most ${REVIEW_LIMITS.maxFiles} code files, each cut to
+${REVIEW_LIMITS.maxCharsPerFile.toLocaleString('en-US')} characters. Up to ${REVIEW_LIMITS.maxProseFiles} prose files are shown beside them and
+never sent.
 
 ## Pull requests
 
-Only public repositories can be read. The server fetches the pull request from
-GitHub with no credentials of yours; an optional token on the server raises this
-site's own rate limit with GitHub and is never yours. Fetching is rate limited
-per network address, which is the one thing about a visitor this site's server holds in
-memory at all, and it holds it for minutes, in one server instance's memory, to
-decide whether to fetch again.
+Public repositories only. The server fetches the pull request from GitHub with
+none of your credentials, and none are ever asked for. This deployment sets no
+GitHub token either, so the fetch is anonymous at both ends. A deployment can set
+one to raise its own rate limit with GitHub; it would grant no access a
+signed-out visitor lacks.
 
-## Page views
+Fetching is rate limited by network address: ${GITHUB_FETCHES_PER_WINDOW} pull requests per
+${GITHUB_FETCH_WINDOW_MINUTES} minutes. Opening a session is limited separately, ${SESSIONS_PER_WINDOW} per
+${SESSION_WINDOW_MINUTES} minutes. That address is the one thing about a visitor this site's own
+server holds. Each counter keeps it in one server instance's memory for the
+length of its window and writes it nowhere else.
 
-This site counts page views with Vercel Web Analytics. A small script from
-Vercel, served from this site's own domain, sends a record to Vercel each time a
-page is opened, including a review opened without reloading the page. Nothing
-else is sent: not a click, not the code you paste and not a review.
+## How an address is counted
 
-Each record carries the address and the route of the page, the address of the
-page that linked here if it is on another site, a location worked out from the
-request (such as the country, region and city), the browser and its version,
-the operating system and its version, the device type, the version of the
-script, and the time. The linking page's address is sent as your browser gives
-it, which this site does not change.
+The pull request and MCP limits share one counter, so both count an IPv6 address
+by its /64: one host is handed a whole /64 and can move within it. Both put a
+request that arrives with no address into one shared bucket rather than letting
+it pass unseen.
 
-This site's own addresses are cleaned before they are sent. The home page,
-\`/faq\` and \`/privacy\` go as they are. A review opened from a pull request,
-and any other address under a repository's \`/pull\`, goes as
-\`/[owner]/[repo]/pull/[number]\`, so the record says that a review was read
-and not which one. Any other address can only be a page that does not exist,
-and goes as \`/[not-found]\`. None of them carries its query or fragment.
+The session limit is separate. It counts the address as given, so a host moving
+within its own /64 gets ${SESSIONS_PER_WINDOW} sessions per address it uses, and a request
+with no address is not counted at all.
 
-The script sets no cookie and stores nothing in your browser. To tell visitors
-apart, Vercel makes a hash from the incoming request instead, and resets it
-after a day, so a visitor cannot be followed from one day to the next or from
-this site to another. Vercel describes the records as anonymous: they are not
-tied to a person or to a network address. Vercel keeps them for at least the
-reporting window of this site's plan, one month on the free plan and one or two
-years on paid ones, and says it may keep them longer.
+## Agents
 
-[Vercel's own account of what Web Analytics collects](https://vercel.com/docs/analytics/privacy-policy).
+Code can also arrive from an agent rather than a browser tab, through the MCP
+server at \`${url(MCP_PATH)}\`. It takes the same route to the same two models in
+one request, with no session and no tab, and it keeps what the page keeps and
+nothing more. Each address gets ${MCP_CALLS_PER_WINDOW} calls per ${MCP_WINDOW_MINUTES} minutes.
 
-## How fast the page loads
+## What a review costs
 
-This site measures how fast its pages load for the people using them, with
-Vercel Speed Insights. A small script from Vercel, served from this site's own
-domain, reads the loading and responsiveness timings the browser already keeps
-(the Web Vitals) and sends them to Vercel as the page is used and when it is left.
+Every visitor shares one model budget: ${dollars(PAGE_HOURLY_BUDGET_USD)} per hour and ${dollars(PAGE_DAILY_BUDGET_USD)} per UTC
+day. Reviews pause once it is spent and resume when it resets. The MCP server
+has its own, ${dollars(MCP_HOURLY_BUDGET_USD)} per hour and ${dollars(MCP_DAILY_BUDGET_USD)} per UTC day, and refuses new reviews
+once that is spent. Each budget counts what the models cost, never who asked.
 
-Each measurement carries the timing and its value, the address and the route of
-the page it was taken on, the page element it concerns, the browser and its
-version, the device type and operating system, the network speed the browser
-reports, the country, the version of the Speed Insights script, and the time
-Vercel received it. The address and the route are cleaned the same way as for
-page views, so each is one of the three pages, \`/[owner]/[repo]/pull/[number]\`
-or \`/[not-found]\`, with no query or fragment. The responsiveness timing also names the kind of input it measured,
-such as a tap or a key press, along with the element.
+## How long anything is kept
 
-The element is named by a short selector the script builds from tag names, style
-class names and at most one id, such as \`main>img\` or \`#file-3>div.flex\`.
-No id or class on this site carries a file name, a repository or words from a
-pull request: the file cards are numbered, and the ids and code-language classes
-a pull request's description would bring are renumbered or dropped. Code you
-paste, the names of the files and the reviews are never part of a measurement.
+Each browser tab holds one agent session. The page clears that session's history
+before every turn, so the only code it holds is the code being judged right now.
+Closing the tab retires the session, and a session left alone expires after an
+hour.
 
-The script sets no cookie and stores nothing in your browser. Vercel describes
-the measurements as anonymous: they are not tied to a visitor or to a network
-address, and nothing in them would let anyone follow one visitor from page to
-page or say who they are. Vercel does not publish how long it keeps them. The
-dashboard this site's owner reads them in shows the last seven days, or longer
-on Vercel's paid tier.
+Judgments and written reviews are cached for an hour, keyed by a hash of exactly
+what was judged, so the same file is evaluated once rather than twice. Those two
+caches hold the answers and the review, not the code: the code goes into the key
+and no further. A fetched pull request is cached separately for a minute, keyed
+by its GitHub address. That one does hold the whole thing it fetched — the diff,
+the title, the description, the author's avatar address and the number of files
+changed — all of it public, from a public repository. Every cache is per
+deployment region, or in one server instance's memory where there is no regional
+cache. Each expires on its own and is keyed by nothing about you. A
+review that comes back from one is marked "from cache".
 
-[Vercel's own account of what Speed Insights collects](https://vercel.com/docs/speed-insights/privacy-policy).
+## What Vercel measures
+
+This site's own domain serves two scripts from Vercel. Web Analytics counts page
+views. Speed Insights reads the loading and responsiveness timings the browser
+already keeps, the Web Vitals, and reports how fast a page was. Neither stores
+anything in your browser. Vercel describes both as anonymous: neither is tied to
+a person or to a network address.
+
+This site's own addresses are cleaned before either script sends them. The home
+page, \`/faq\` and \`/privacy\` go as they are. Anything under a repository's
+\`/pull\` goes as \`/[owner]/[repo]/pull/[number]\`, so the record says a review
+was read and not which one. Anything else is a page that does not exist,
+and goes as \`/[not-found]\`. No query and no fragment is ever sent.
+
+| | Page views | Page speed |
+|---|---|---|
+| Sent | Each time a page is opened, including a review opened without reloading the page | As the page is used and when it is left |
+| Always carries | The cleaned address and route, the browser and its version, the operating system and its version, the device type, the version of the script, the time | The cleaned address and route, the timing and its value, the browser and its version, the device type and operating system, the version of the script, the time Vercel received it |
+| Also carries | The address of the page that linked here if it is on another site, as your browser gives it; a location worked out from the request, such as the country, region and city | The country; the network speed the browser reports; the page element the timing concerns, and for responsiveness the kind of input, such as a tap or a key press |
+| Never carries | A click, the code you paste, a review | The code you paste, the names of the files, a review |
+| Tells visitors apart by | A hash Vercel makes from the incoming request and resets after a day, so a visitor cannot be followed from one day to the next or from this site to another | Nothing: no identifier follows one visitor from page to page |
+| Kept by Vercel for | At least the reporting window of this site's plan, one month on the free plan and one or two years on paid ones. Vercel says it may keep them longer | Not published. The dashboard this site's owner reads shows the last seven days, or longer on Vercel's paid tier |
+| Vercel's own account | [What Web Analytics collects](https://vercel.com/docs/analytics/privacy-policy) | [What Speed Insights collects](https://vercel.com/docs/speed-insights/privacy-policy) |
+
+The element is a short selector of tag names, style class names and at most one
+id, such as \`main>img\` or \`#file-3>div.flex\`. No id or class here carries a
+file name, a repository or words from a pull request: the file cards are
+numbered, and a pull request description's ids and code-language classes are
+renumbered or dropped.
 
 ## What is not here
 
-No sign-in. No profile. No database. No advertising and no tracking pixels, and
-nothing that records who visits: the page views and page speed above are
-counted without saying who you are. Nothing is sold, because there is nothing collected to sell.
+No sign-in and no profile. No database. Nothing in local storage but the light
+or dark setting this page remembers for you. No advertising and no tracking
+pixels. Nothing is sold, because nothing is collected to sell.
+
+The whole application is open source, so none of this has to be taken on trust:
+[read the code](${SITE.source}).
 
 ## Machine-readable
 
