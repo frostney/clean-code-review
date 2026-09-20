@@ -8,20 +8,30 @@ import {
 import { eveChannel } from 'eve/channels/eve';
 
 import {
+  createThrottle,
+  overSharedLimit,
+  SESSION_CREATE_RULE,
+} from '../lib/infra/rate-limit';
+import {
   SESSION_WINDOW_MS,
   SESSIONS_PER_WINDOW,
 } from '../lib/infra/session-facts';
 
 /**
- * Best effort: counted per address in this instance's memory, which Fluid
- * Compute keeps warm enough to catch a loop. The real bounds are the global
- * spend brake and the Vercel Firewall.
+ * Counted per address in this instance's memory, which Fluid Compute keeps
+ * warm enough to catch a loop, and against the Firewall's shared counter
+ * where its rule exists. The remaining bound is the global spend brake.
+ *
+ * A whole IPv6 /64 counts as one caller, which binds live traffic tighter
+ * than a count per address: a host is handed the block and rotates in it.
  */
-const MAX_TRACKED_ADDRESSES = 10_000;
-const sessionStartsByAddress = new Map<string, number[]>();
+const sessionsInThisInstance = createThrottle(
+  SESSIONS_PER_WINDOW,
+  SESSION_WINDOW_MS,
+);
 
 function sessionCreationBrake(): AuthFn<Request> {
-  return (request) => {
+  return async (request) => {
     const url = new URL(request.url);
     const isCreate =
       request.method === 'POST' && /\/eve\/v1\/session\/?$/.test(url.pathname);
@@ -43,20 +53,14 @@ function sessionCreationBrake(): AuthFn<Request> {
     if (!ip) {
       return null;
     }
-    const now = Date.now();
-    const recent = (sessionStartsByAddress.get(ip) ?? []).filter(
-      (t) => now - t < SESSION_WINDOW_MS,
-    );
-    if (recent.length >= SESSIONS_PER_WINDOW) {
+    if (
+      sessionsInThisInstance(ip) ||
+      (await overSharedLimit(SESSION_CREATE_RULE, request.headers, ip))
+    ) {
       throw new ForbiddenError({
         message:
           'Too many new sessions from this address. Try again in a few minutes.',
       });
-    }
-    recent.push(now);
-    sessionStartsByAddress.set(ip, recent);
-    if (sessionStartsByAddress.size > MAX_TRACKED_ADDRESSES) {
-      sessionStartsByAddress.clear();
     }
     return null; // Not an identity: fall through to the real auth entries.
   };

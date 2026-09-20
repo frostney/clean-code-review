@@ -56,6 +56,51 @@ const MAX_OUTPUT_TOKENS: Record<ReviewPart['role'], number> = {
 
 const RETRY_CEILING_FACTOR = 2;
 
+/**
+ * Bounds a reviewer that stops answering, so the summary run fails and the
+ * overall block shows the quiet "No review:" line with the reason, instead
+ * of the page waiting on a stream that will not end. Measured parts reached
+ * their first chunk in 3.3 to 5.0 s and streamed for 0.5 to 2.9 s more, so
+ * `firstChunkMs` sits 4x above the slowest start and `chunkMs` 3x above the
+ * longest whole stream. A reasoning delta with text in it resets the chunk
+ * timer, so a model that thinks before it answers is not cut off.
+ *
+ * `streamRetries` stays at its default of none: deltas go straight to the
+ * page, so a restarted stream would repeat a section already on screen.
+ */
+export const REVIEWER_TIMEOUT = {
+  chunkMs: 10_000,
+  firstChunkMs: 20_000,
+};
+
+/**
+ * Reasons for that "No review:" line, which takes them lower case and
+ * without advice (`plainReason` in `src/review/errors.ts`). The SDK names
+ * the bound that fired nowhere but in its abort reason's prose, so the match
+ * is loose and the reason itself goes to the log rather than to the reader.
+ */
+export const TIMED_OUT = {
+  chunk: 'the reviewer stopped part-way through its answer',
+  firstChunk: 'the reviewer did not start answering',
+  total: 'the reviewer took too long',
+};
+
+function timedOut(reason: unknown): string {
+  const text = String(reason);
+  console.warn(`[review] A reviewer call was stopped by its bound: ${text}`);
+  if (/first chunk/i.test(text)) {
+    return TIMED_OUT.firstChunk;
+  }
+  return /chunk/i.test(text) ? TIMED_OUT.chunk : TIMED_OUT.total;
+}
+
+/**
+ * A third below the slowest throughput measured (about 75 output tokens a
+ * second), so the wall-clock cap it sizes is out of reach of an attempt
+ * writing to its ceiling and can only be hit by a stream that drips.
+ */
+const MS_PER_OUTPUT_TOKEN = 20;
+
 /** Jev's yes/no answers are probabilities; at or above this, the smell is a finding. */
 const EVEN_ODDS = 0.5;
 
@@ -241,7 +286,12 @@ class PartFailed extends Error {
 
 /** `seen` counts answer and reasoning characters. Failure and cancellation arrive as stream parts and are thrown. */
 async function readParts(
-  parts: AsyncIterable<{ type: string; text?: string; error?: unknown }>,
+  parts: AsyncIterable<{
+    type: string;
+    text?: string;
+    error?: unknown;
+    reason?: unknown;
+  }>,
   text: ReturnType<typeof withoutSignalLines>,
   seen: { chars: number },
   signal: AbortSignal,
@@ -257,7 +307,13 @@ async function readParts(
       throw part.error;
     } else if (part.type === 'abort') {
       signal.throwIfAborted();
-      throw new Error('the model call was aborted');
+      // Past `throwIfAborted` the only signal left is one of this call's own
+      // bounds, so the message is written for the reader, not from the cause.
+      throw new Error(
+        part.reason === undefined
+          ? 'the model call was aborted'
+          : timedOut(part.reason),
+      );
     }
   }
   text.end();
@@ -281,6 +337,12 @@ async function attempt(
     model: REVIEWER_MODEL,
     prompt: p.message,
     system: REVIEWER_INSTRUCTIONS,
+    timeout: {
+      ...REVIEWER_TIMEOUT,
+      // The longest start allowed plus the longest this ceiling could take to
+      // write: a cap no healthy attempt can reach.
+      totalMs: REVIEWER_TIMEOUT.firstChunkMs + ceiling * MS_PER_OUTPUT_TOKEN,
+    },
   });
   const sections = onlyOwnSections(push, p.part);
   const signals = withoutSignalLines(sections.write);
