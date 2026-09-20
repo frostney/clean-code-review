@@ -4,23 +4,21 @@
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
+import { createThrottle } from '@/agent/lib/infra/rate-limit';
 import { REVIEW_LIMITS } from '@/agent/lib/review/review';
 import {
   dollars,
   MCP_DAILY_BUDGET_USD,
   MCP_HOURLY_BUDGET_USD,
 } from '@/agent/lib/spend/budgets';
-import {
-  callerIp,
-  createThrottle,
-  GITHUB_FETCH_WINDOW_MS,
-} from '@/src/pull-request/throttle';
+import { callerIp } from '@/src/pull-request/throttle';
 
 import {
   MAX_PASTE_CHARS,
   MCP_CALLS_PER_WINDOW,
   MCP_TOOLS,
   MCP_WINDOW_MINUTES,
+  MCP_WINDOW_MS,
 } from './mcp-facts';
 import {
   type ReviewOutput,
@@ -33,10 +31,7 @@ import { ReviewError, reviewPaste, reviewPullRequest } from './mcp-review';
 const MAX_URL_CHARS = 500;
 
 /** Separate from the page's brake, so neither spends the other's share. */
-const mcpCallThrottled = createThrottle(
-  MCP_CALLS_PER_WINDOW,
-  GITHUB_FETCH_WINDOW_MS,
-);
+const mcpCallThrottled = createThrottle(MCP_CALLS_PER_WINDOW, MCP_WINDOW_MS);
 
 const CAPS = `At most ${REVIEW_LIMITS.maxFiles} code files are judged, the largest changes first, each read up to ${REVIEW_LIMITS.maxCharsPerFile.toLocaleString('en-US')} characters; up to ${REVIEW_LIMITS.maxProseFiles} prose files (Markdown, plain text) are listed and never judged; images, binaries, lockfiles and generated files are skipped. Every file left out is listed with the reason.`;
 

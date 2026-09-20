@@ -3,7 +3,6 @@
  * /privacy. Kept apart from the server so `proxy.ts` does not pull in the review
  * pipeline; the model budget lives in `agent/lib/spend/budgets.ts`.
  */
-import { GITHUB_FETCH_WINDOW_MS } from '@/src/pull-request/throttle';
 
 export const MCP_PATH = '/api/mcp';
 
@@ -27,7 +26,7 @@ export const MAX_PASTE_CHARS = 1_000_000;
 
 const MS_PER_MINUTE = 60_000;
 
-/** Same window as the page's brake. */
-export const MCP_WINDOW_MINUTES = Math.round(
-  GITHUB_FETCH_WINDOW_MS / MS_PER_MINUTE,
-);
+/** The MCP's own window, the same length as the page's brake: retuning one must not move the other, since this one is published on /privacy and in llms.txt. */
+export const MCP_WINDOW_MS = 600_000;
+
+export const MCP_WINDOW_MINUTES = Math.round(MCP_WINDOW_MS / MS_PER_MINUTE);
