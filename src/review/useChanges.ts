@@ -7,7 +7,7 @@ import type { Answer, Answers } from '@/agent/lib/judging/schema';
 
 import { deltaText, isMeaningfulChange } from './display';
 
-const HOLD_MS = 1800;
+const ROW_LIT_MS = 1800;
 
 export interface Changes {
   changed: Record<string, true>;
@@ -69,7 +69,7 @@ export function useChanges(
           delete delta[id];
           return { changed: next, delta };
         });
-      }, HOLD_MS);
+      }, ROW_LIT_MS);
     }
   }, [answers, meta]);
 

@@ -25,7 +25,8 @@ import {
 const OK = 200;
 const NOT_FOUND = 404;
 
-const MARKDOWN_CACHE = 'private, max-age=3600';
+const MARKDOWN_CACHE_SECONDS = 3600;
+const MARKDOWN_CACHE = `private, max-age=${MARKDOWN_CACHE_SECONDS}`;
 
 const IMAGE_ROUTES = new Set(['/opengraph-image', '/twitter-image']);
 

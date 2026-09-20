@@ -167,8 +167,8 @@ function neverReached(err: unknown): boolean {
   return false;
 }
 
-const CLIENT_ERROR = 400;
-const SERVER_ERROR = 500;
+const FIRST_CLIENT_ERROR = 400;
+const FIRST_SERVER_ERROR = 500;
 
 /**
  * Whether a failed call may have been billed for its prompt. Cancellations,
@@ -184,7 +184,7 @@ export function failureMayHaveBilled(
   }
   const status = httpStatusOf(err);
   if (status !== undefined) {
-    return !(status >= CLIENT_ERROR && status < SERVER_ERROR);
+    return !(status >= FIRST_CLIENT_ERROR && status < FIRST_SERVER_ERROR);
   }
   return !neverReached(err);
 }

@@ -18,8 +18,8 @@ const RETRYABLE_CLIENT_ERRORS: readonly number[] = [
   REQUEST_TIMEOUT,
   TOO_MANY_REQUESTS,
 ];
-const SERVER_ERROR = 500;
-const CLIENT_ERROR = 400;
+const FIRST_SERVER_ERROR = 500;
+const FIRST_CLIENT_ERROR = 400;
 
 function statusOf(err: unknown): number | undefined {
   const status = (err as { statusCode?: unknown } | null)?.statusCode;
@@ -75,8 +75,8 @@ function retryDecision(
   const status = statusOf(err);
   if (
     status !== undefined &&
-    status >= CLIENT_ERROR &&
-    status < SERVER_ERROR &&
+    status >= FIRST_CLIENT_ERROR &&
+    status < FIRST_SERVER_ERROR &&
     !RETRYABLE_CLIENT_ERRORS.includes(status)
   ) {
     return { retry: false };

@@ -70,8 +70,9 @@ export function parsePatch(patch: string): DiffLine[] {
   for (const raw of patch.split('\n')) {
     const hunk = HUNK.exec(raw);
     if (hunk) {
-      cursor.oldNo = Number(hunk[1]);
-      cursor.newNo = Number(hunk[2]);
+      const [, oldStart, newStart] = hunk;
+      cursor.oldNo = Number(oldStart);
+      cursor.newNo = Number(newStart);
       inHunk = true;
       lines.push(unnumberedLine(raw, 'hunk'));
       continue;

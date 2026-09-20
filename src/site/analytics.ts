@@ -4,8 +4,10 @@
  * 404 name, never a query or fragment. The privacy page promises exactly this.
  */
 
+const ROOT_PATH = '/';
+
 /** Route handlers are not page views. */
-const PAGES = new Set(['/', '/faq', '/privacy']);
+const PAGES = new Set([ROOT_PATH, '/faq', '/privacy']);
 
 const PULL_REQUEST_ROUTE = '/[owner]/[repo]/pull/[number]';
 
@@ -15,7 +17,8 @@ const NOT_FOUND_ROUTE = '/[not-found]';
 const PULL_REQUEST_PATH = /^\/[^/]+\/[^/]+\/pull(\/|$)/;
 
 export function anonymousPath(pathname: string): string {
-  const page = pathname.length > 1 ? pathname.replace(/\/$/, '') : pathname;
+  const page =
+    pathname.length > ROOT_PATH.length ? pathname.replace(/\/$/, '') : pathname;
   if (PAGES.has(page)) {
     return pathname;
   }
