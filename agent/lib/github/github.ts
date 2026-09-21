@@ -44,12 +44,14 @@ export interface PullRequestRef {
  */
 export function parsePullRequest(input: string): PullRequestRef | null {
   const m = PR_URL.exec(input.trim());
+
   if (!m) {
     return null;
   }
   const owner = m[1].toLowerCase();
   // A clone URL's `.git` is not part of the name; the input field strips it too.
   const repo = m[2].toLowerCase().replace(/\.git$/, '');
+
   if (
     owner.length > MAX_NAME_LENGTH ||
     repo.length > MAX_NAME_LENGTH ||
@@ -57,6 +59,7 @@ export function parsePullRequest(input: string): PullRequestRef | null {
   ) {
     return null;
   }
+
   return {
     number: Number(m[3]),
     owner,
@@ -75,33 +78,40 @@ const HTTP_TOO_MANY = 429;
 /** Null past `max` bytes. GitHub sends diffs chunked, so content-length cannot be relied on. */
 async function readCapped(res: Response, max: number): Promise<string | null> {
   const reader = res.body?.getReader();
+
   if (!reader) {
     return '';
   }
   const chunks: Uint8Array[] = [];
   let size = 0;
+
   for (;;) {
     const { done, value } = await reader.read();
+
     if (done) {
       break;
     }
     size += value.byteLength;
     if (size > max) {
       await reader.cancel();
+
       return null;
     }
     chunks.push(value);
   }
+
   return new TextDecoder().decode(concat(chunks, size));
 }
 
 function concat(chunks: Uint8Array[], size: number): Uint8Array {
   const out = new Uint8Array(size);
   let offset = 0;
+
   for (const c of chunks) {
     out.set(c, offset);
     offset += c.byteLength;
   }
+
   return out;
 }
 
@@ -110,6 +120,7 @@ export async function fetchPullRequest(
   token = process.env.GITHUB_TOKEN,
 ): Promise<PullRequestReview> {
   const ref = parsePullRequest(input);
+
   if (!ref) {
     throw new Error(NOT_A_PULL_REQUEST);
   }
@@ -137,6 +148,7 @@ export async function fetchPullRequest(
     }
     throw new Error(message);
   };
+
   if (meta.status === HTTP_NOT_FOUND) {
     fail('Pull request not found. Private repositories are not supported.');
   }
@@ -150,6 +162,7 @@ export async function fetchPullRequest(
     fail(`GitHub returned ${diff.status} for the diff.`);
   }
   const length = Number(diff.headers.get('content-length') ?? 0);
+
   if (length > MAX_DIFF_BYTES) {
     fail("That pull request's diff is too large to judge here.");
   }
@@ -161,9 +174,11 @@ export async function fetchPullRequest(
     base?: { repo?: { owner?: { avatar_url?: string } } };
   };
   const text = await readCapped(diff, MAX_DIFF_BYTES);
+
   if (text === null) {
     throw new Error("That pull request's diff is too large to judge here.");
   }
+
   return {
     avatarUrl: json.base?.repo?.owner?.avatar_url ?? '',
     body: json.body ?? '',

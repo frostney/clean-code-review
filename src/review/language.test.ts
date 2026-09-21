@@ -9,8 +9,10 @@ import { SHIKI_NAMES } from './language';
 // this catches a shiki upgrade that changes them.
 test('every language name matches shiki’s registry', () => {
   const registry = new Map(bundledLanguagesInfo.map((info) => [info.id, info]));
+
   for (const [id, row] of Object.entries(SHIKI_NAMES)) {
     const info = registry.get(id);
+
     assert.ok(info, `shiki no longer bundles "${id}"`);
     assert.equal(row.name, info.name, `name of "${id}"`);
     assert.deepEqual(

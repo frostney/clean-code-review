@@ -64,6 +64,7 @@ function opened(
   const headers: Record<string, string> = {};
   const kept = withinCaps(unique).map((file) => {
     let shown = file;
+
     if (shown.content.length > REVIEW_LIMITS.maxCharsPerFile) {
       truncated[shown.path] = true;
       shown = {
@@ -75,11 +76,14 @@ function opened(
       return shown;
     }
     const { header, body } = splitPatchHeader(shown.content);
+
     if (header) {
       headers[shown.path] = header;
     }
+
     return { ...shown, content: body };
   });
+
   return {
     files: kept,
     headers,
@@ -94,6 +98,7 @@ function countKinds(files: readonly ReviewFile[]): {
   prose: number;
 } {
   const prose = files.filter((file) => isProsePath(file.path)).length;
+
   return { code: files.length - prose, prose };
 }
 
@@ -101,12 +106,15 @@ function countKinds(files: readonly ReviewFile[]): {
 function withinCaps(files: readonly ReviewFile[]): ReviewFile[] {
   let code = 0;
   let prose = 0;
+
   return files.filter((file) => {
     if (isProsePath(file.path)) {
       prose++;
+
       return prose <= REVIEW_LIMITS.maxProseFiles;
     }
     code++;
+
     return code <= REVIEW_LIMITS.maxFiles;
   });
 }
@@ -123,9 +131,11 @@ export function fromPreset(preset: Preset, id: string): OpenReview {
 
 export function fromPaste(text: string, id: string): OpenReview | null {
   const files = filesFromPaste(text);
+
   if (!files.length) {
     return null;
   }
+
   return {
     id,
     pr: null,
@@ -142,10 +152,12 @@ export function fromPullRequest(
 ): OpenReview | null {
   const judgeable = filesFromPatch(payload.diff);
   const { kept, skipped } = selectReviewFiles(judgeable);
+
   if (!kept.length) {
     return null;
   }
   const review = opened(kept);
+
   return {
     id,
     pr: {
@@ -179,6 +191,7 @@ export function skippedText(
   const binary = skipped.filter((s) => s.reason === 'binary').length;
   const generated = skipped.filter((s) => s.reason === 'generated').length;
   const parts: string[] = [];
+
   if (binary) {
     parts.push(
       `${binary} ${binary === 1 ? 'image or binary' : 'images or binaries'}`,
@@ -188,11 +201,13 @@ export function skippedText(
     parts.push(`${generated} generated ${generated === 1 ? 'file' : 'files'}`);
   }
   const unattributed = Math.max(0, count - skipped.length);
+
   if (unattributed) {
     parts.push(
       `${unattributed} generated or non-code ${unattributed === 1 ? 'file' : 'files'}`,
     );
   }
+
   return parts.length ? `Skipped ${parts.join(' and ')}` : null;
 }
 
@@ -201,6 +216,7 @@ export function cappedText(review: OpenReview): string | null {
   const shown = { code: review.files.length - shownProse, prose: shownProse };
   const counts: string[] = [];
   const reasons: string[] = [];
+
   if (review.total.code > shown.code) {
     counts.push(`${shown.code} of ${review.total.code} code files`);
     reasons.push(
@@ -216,5 +232,6 @@ export function cappedText(review: OpenReview): string | null {
   if (!counts.length) {
     return null;
   }
+
   return `Showing ${counts.join(' and ')}: ${reasons.join(', and ')}.`;
 }

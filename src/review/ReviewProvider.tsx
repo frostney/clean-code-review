@@ -89,6 +89,7 @@ function required<T>(value: T | null, hook: string): T {
   if (!value) {
     throw new Error(`${hook} must be used inside <ReviewProvider>`);
   }
+
   return value;
 }
 
@@ -142,6 +143,7 @@ function opening(payload?: PullRequestPayload | null): {
     return { error: null, path: null, review: NO_REVIEW };
   }
   const review = fromPullRequest(payload, 'pr#0');
+
   return review
     ? { error: null, path: pullRequestPath(payload.url) ?? '/', review }
     : { error: NOTHING_TO_JUDGE, path: null, review: NO_REVIEW };
@@ -172,6 +174,7 @@ function arrive(
     ? pullRequestPath(pullRequestUrl(address.repo, address.number))
     : '/';
   const here = pathname === '/' ? '/' : pullRequestPath(pathname.slice(1));
+
   if (here === null || here === route || here === opened.path) {
     return {
       ...opened,
@@ -182,6 +185,7 @@ function arrive(
     };
   }
   const pending = here === '/' ? null : pathname;
+
   return {
     address: (pending && splitPullRequest(pending.slice(1))) || NO_ADDRESS,
     error: null,
@@ -203,6 +207,7 @@ function showPath(path: string, replace = false): void {
   }
   if (replace) {
     window.history.replaceState(null, '', path);
+
     return;
   }
   window.history.pushState(null, '', path);
@@ -244,6 +249,7 @@ export function ReviewProvider({
   const nonceRef = useRef(0);
   const nextId = useCallback((kind: string) => {
     nonceRef.current += 1;
+
     return `${kind}#${nonceRef.current}`;
   }, []);
   // Bumped by everything that changes the view; a fetch that settles under an
@@ -263,9 +269,11 @@ export function ReviewProvider({
     () =>
       review.files.map((file) => {
         const header = review.headers[file.path];
+
         if (!file.patch || !header || !file.content.trim()) {
           return file;
         }
+
         return { ...file, content: withPatchHeader(header, file.content) };
       }),
     [review.files, review.headers],
@@ -331,6 +339,7 @@ export function ReviewProvider({
       setPrError(message);
       setFetching(false);
       setRetryingPr(false);
+
       return;
     }
     switchView(() => {
@@ -351,6 +360,7 @@ export function ReviewProvider({
   const openPreset = useCallback(
     (label: string) => {
       const preset = PRESETS.find((p) => p.label === label);
+
       if (!preset) {
         return;
       }
@@ -362,6 +372,7 @@ export function ReviewProvider({
   const judgePasted = useCallback(
     (text: string) => {
       const next = fromPaste(text, nextId('paste'));
+
       if (!next) {
         return;
       }
@@ -379,11 +390,14 @@ export function ReviewProvider({
     (answer: PullRequestAnswer, entry: string | null) => {
       if (!answer.ok) {
         showError(answer.error, entry);
+
         return;
       }
       const next = fromPullRequest(answer.pr, nextId('pr'));
+
       if (!next) {
         showError(NOTHING_TO_JUDGE, entry);
+
         return;
       }
       show(next, pullRequestPath(answer.pr.url) ?? '/', entry !== null);
@@ -402,6 +416,7 @@ export function ReviewProvider({
     (url: string, entry: string | null, retrying = false) => {
       generationRef.current += 1;
       const generation = generationRef.current;
+
       lastAskedRef.current = { entry, url };
       // A retry keeps the error shown so it does not blink away and back.
       if (!retrying) {
@@ -411,10 +426,12 @@ export function ReviewProvider({
       setFetching(true);
       const run = async () => {
         const answer = await answered(url);
+
         if (generationRef.current === generation) {
           settle(answer, entry);
         }
       };
+
       run().catch(() => {
         /* Every way this fails is already on screen. */
       });
@@ -431,6 +448,7 @@ export function ReviewProvider({
 
   const retryPullRequest = useCallback(() => {
     const last = lastAskedRef.current;
+
     if (last) {
       open(last.url, last.entry, true);
     }
@@ -446,23 +464,28 @@ export function ReviewProvider({
   useEffect(() => {
     function onPopState() {
       const path = window.location.pathname;
+
       if (path === shownPathRef.current) {
         // A fetch for the entry just left may still land; invalidate it.
         generationRef.current += 1;
         setFetching(false);
         setRetryingPr(false);
+
         return;
       }
       if (path === '/') {
         show(NO_REVIEW, '/');
+
         return;
       }
       const parts = splitPullRequest(path.slice(1));
+
       if (parts) {
         open(pullRequestUrl(parts.repo, parts.number), path);
       }
     }
     window.addEventListener('popstate', onPopState);
+
     return () => window.removeEventListener('popstate', onPopState);
   }, [open, show]);
 
@@ -482,18 +505,22 @@ export function ReviewProvider({
    */
   useEffect(() => {
     let correction = 0;
+
     if (opened.restored) {
       document.title = SITE.name;
     }
     const parts = opened.pending && splitPullRequest(opened.pending.slice(1));
+
     if (opened.pending && parts) {
       open(pullRequestUrl(parts.repo, parts.number), opened.pending);
     } else if (opened.path) {
       const path = opened.path;
+
       correction = window.setTimeout(() => showPath(path, true), 0);
     } else {
       shownPathRef.current = window.location.pathname;
     }
+
     return () => {
       window.clearTimeout(correction);
       generationRef.current += 1;
@@ -518,8 +545,10 @@ export function ReviewProvider({
   const address = useMemo<PullRequestAddress>(() => {
     if (review.pr) {
       openedOnce.current = true;
+
       return splitPullRequest(review.pr.url) ?? opened.address;
     }
+
     // Until a review has been shown, keep the arrival address so a failed
     // permalink stays in the boxes for correcting.
     return openedOnce.current ? NO_ADDRESS : opened.address;

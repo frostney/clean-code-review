@@ -91,14 +91,17 @@ function windowsOf(
 ): { spans: Span[]; cut: boolean } {
   const spans: Span[] = [];
   let from = 0;
+
   while (
     from < lines.length &&
     spans.length < REVIEW_LIMITS.maxWindowsPerFile
   ) {
     let to = from;
     let chars = 0;
+
     while (to < lines.length) {
       const next = chars + lines[to].length + (to > from ? 1 : 0);
+
       if (to > from && next > budget) {
         break;
       }
@@ -108,6 +111,7 @@ function windowsOf(
     spans.push({ from, to });
     from = to;
   }
+
   return { cut: from < lines.length, spans };
 }
 
@@ -132,6 +136,7 @@ function withHunkHeader(window: string, before: string): string {
     return window;
   }
   const last = before.match(HUNK_HEADERS)?.at(-1);
+
   return last === undefined
     ? window
     : `${cappedAt(last, MAX_HUNK_HEADER_CHARS)}\n${window}`;
@@ -158,10 +163,13 @@ function callsOf(
     // The spans leave room for the header, but one line can be longer than a
     // whole window, so the cap is what decides.
     const content = cappedAt(whole, REVIEW_LIMITS.maxCharsPerFile);
+
     truncated ||= content.length < whole.length;
     const part: ReviewFile = { ...file, content };
+
     return { file: part, key: judgeKey(part, pass, i), pass };
   });
+
   return { calls, truncated };
 }
 
@@ -188,6 +196,7 @@ function planOf(file: ReviewFile): JudgePlan {
     cut: cut || a.truncated || file.content.length > MAX_JUDGED_CHARS,
   };
   const stripped = withoutComments({ ...file, content });
+
   if (stripped.kind !== 'stripped') {
     return {
       a: a.calls,
@@ -201,6 +210,7 @@ function planOf(file: ReviewFile): JudgePlan {
   const b = callsOf(file, 'b', spans, (from, to) =>
     strippedText(stripped.lines, from, to),
   ).calls.filter((call) => call.file.content.trim() !== '');
+
   return { a: a.calls, b, ...whole };
 }
 
@@ -209,11 +219,14 @@ const plans = new WeakMap<ReviewFile, JudgePlan>();
 
 export function judgePlan(file: ReviewFile): JudgePlan {
   const held = plans.get(file);
+
   if (held) {
     return held;
   }
   const plan = planOf(file);
+
   plans.set(file, plan);
+
   return plan;
 }
 
@@ -227,6 +240,7 @@ export async function judgeEstimateUsd(files: readonly ReviewFile[]) {
         : 0,
     ),
   );
+
   return misses.reduce((total, usd) => total + usd, 0);
 }
 
@@ -280,6 +294,7 @@ async function runCall(call: JudgeCall, spent: Spent, signal?: AbortSignal) {
   const { value, hit } = await cached(call.key, 'jev-judgment', async () =>
     toJudgment(await withOneRetry(once, CALL_TIMEOUT_MS, signal)),
   );
+
   return { ...value, cost: hit ? 0 : value.cost, hit };
 }
 
@@ -291,6 +306,7 @@ function worse(left: Answer, right: Answer): Answer {
   if (left.type === 'score' && right.type === 'score') {
     return right.score < left.score ? right : left;
   }
+
   // A choice has no order, and two answers of different types cannot be
   // ordered either; in both cases the first window's answer stands rather than
   // an arbitrary one winning.
@@ -299,12 +315,15 @@ function worse(left: Answer, right: Answer): Answer {
 
 function worstOf(parts: readonly Answers[]): Answers {
   const worst: Answers = {};
+
   for (const part of parts) {
     for (const [id, answer] of Object.entries(part)) {
       const held = worst[id];
+
       worst[id] = held === undefined ? answer : worse(held, answer);
     }
   }
+
   return worst;
 }
 
@@ -333,14 +352,17 @@ async function runPass(
   const done = settled.flatMap((outcome) =>
     outcome.status === 'fulfilled' ? [outcome.value] : [],
   );
+
   if (done.length === 0) {
     throw (settled[0] as PromiseRejectedResult).reason;
   }
   const usage = { input_tokens: 0, output_tokens: 0 };
+
   for (const part of done) {
     usage.input_tokens += part.judgment.usage.input_tokens;
     usage.output_tokens += part.judgment.usage.output_tokens;
   }
+
   return {
     answers: worstOf(done.map((part) => part.judgment.answers)),
     cached: done.length === calls.length && done.every((part) => part.hit),
@@ -367,16 +389,19 @@ const VERDICT_ID = 'verdict';
  */
 function answersOfPasses(a: Answers, b: Answers): Answers {
   const merged: Answers = { ...b };
+
   for (const [id, answer] of Object.entries(a)) {
     if (COMMENT_QUESTION_IDS.has(id) || merged[id] === undefined) {
       merged[id] = answer;
     }
   }
+
   return merged;
 }
 
 function verdictOf(answers: Answers): number | null {
   const verdict = answers[VERDICT_ID];
+
   return verdict?.type === 'score' ? verdict.score : null;
 }
 
@@ -401,6 +426,7 @@ function leanForFile(
   }
   const asWritten = verdictOf(written.answers);
   const stripped = verdictOf(bare.answers);
+
   return asWritten === null || stripped === null
     ? undefined
     : asWritten - stripped;
@@ -421,6 +447,7 @@ export async function judgeFile(file: ReviewFile, signal?: AbortSignal) {
     ...(plan.b.length ? [runPass(plan.b, spent, signal)] : []),
   ]);
   const bare = b?.status === 'fulfilled' ? b.value : null;
+
   if (a.status === 'rejected') {
     throw new JudgeFileError(spent.failedUsd + (bare?.cost ?? 0), a.reason);
   }
@@ -442,9 +469,11 @@ export async function judgeFile(file: ReviewFile, signal?: AbortSignal) {
     ...(plan.cut ? { cut: true } : {}),
   };
   const lean = leanForFile(plan, a.value, bare);
+
   if (lean !== undefined) {
     judgment.commentLean = lean;
   }
+
   return {
     cost: a.value.cost + (bare?.cost ?? 0) + spent.failedUsd,
     judgment,
@@ -469,6 +498,7 @@ function toAnswer(a: EvaluatedAnswer, confidence: number | undefined): Answer {
       type: 'score',
     };
   }
+
   return {
     choice: a.choice,
     confidence,
@@ -486,12 +516,14 @@ function toJudgment(result: Awaited<ReturnType<typeof evaluateFile>>) {
         | undefined
     )?.confidence ?? {};
   const answers: Answers = {};
+
   for (const [id, a] of Object.entries(result.answers)) {
     const reported = confidence[id];
     const clamped =
       typeof reported === 'number' && Number.isFinite(reported)
         ? Math.max(0, Math.min(1, reported))
         : undefined;
+
     answers[id] = toAnswer(a, clamped);
   }
   const judgment: FileJudgment = {
@@ -506,6 +538,7 @@ function toJudgment(result: Awaited<ReturnType<typeof evaluateFile>>) {
     (result.providerMetadata?.gateway as { cost?: unknown } | undefined)?.cost,
     result.usage.inputTokens ?? 0,
   );
+
   return {
     cost,
     judgment,
@@ -528,17 +561,22 @@ export async function judgeReview(input: ReviewInput, signal?: AbortSignal) {
   let failedUsd = 0;
   const warnings: Awaited<ReturnType<typeof judgeFile>>['warnings'] = [];
   const errors: string[] = [];
+
   settled.forEach((outcome, i) => {
     const path = input.files[i].path;
+
     if (outcome.status === 'rejected') {
       const reason = outcome.reason;
+
       failedUsd += reason instanceof JudgeFileError ? reason.spentUsd : 0;
       errors.push(
         `${path}: ${String(reason instanceof JudgeFileError ? reason.cause : reason)}`,
       );
+
       return;
     }
     const { judgment, cost: c, warnings: w, model } = outcome.value;
+
     result.files[path] = judgment;
     result.usage.input_tokens += judgment.usage.input_tokens;
     result.usage.output_tokens += judgment.usage.output_tokens;
@@ -549,5 +587,6 @@ export async function judgeReview(input: ReviewInput, signal?: AbortSignal) {
   if (errors.length === input.files.length && input.files.length > 0) {
     throw new JudgeFailedError(errors.join('; '), failedUsd);
   }
+
   return { cost, errors, failedUsd, result, warnings };
 }

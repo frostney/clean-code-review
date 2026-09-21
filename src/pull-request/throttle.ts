@@ -20,6 +20,7 @@ const inThisInstance = createThrottle(
  */
 export async function githubFetchThrottled(headers: Headers): Promise<boolean> {
   const ip = callerIp(headers);
+
   return (
     inThisInstance(ip) ||
     (await overSharedLimit(GITHUB_FETCH_RULE, headers, ip))

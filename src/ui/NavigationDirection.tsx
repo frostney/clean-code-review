@@ -6,8 +6,10 @@ type Direction = 'back' | 'forward';
 
 function mark(direction: Direction | null): void {
   const root = document.documentElement;
+
   if (direction) {
     root.dataset.nav = direction;
+
     return;
   }
   delete root.dataset.nav;
@@ -28,6 +30,7 @@ function opensHere(event: MouseEvent): boolean {
   }
   const target = event.target;
   const link = target instanceof Element ? target.closest('a[href]') : null;
+
   return (
     link instanceof HTMLAnchorElement &&
     link.origin === window.location.origin &&
@@ -76,8 +79,10 @@ export function NavigationDirection() {
       }
       const from = window.navigation.currentEntry?.index ?? -1;
       const to = event.destination.index;
+
       if (from < 0 || to < 0) {
         mark(null);
+
         return;
       }
       mark(to < from ? 'back' : 'forward');
@@ -85,12 +90,14 @@ export function NavigationDirection() {
     const onPopState = () => mark(null);
 
     const navigationApi: Navigation | undefined = window.navigation;
+
     document.addEventListener('click', onClick, true);
     if (navigationApi) {
       navigationApi.addEventListener('navigate', onNavigate);
     } else {
       window.addEventListener('popstate', onPopState);
     }
+
     return () => {
       document.removeEventListener('click', onClick, true);
       navigationApi?.removeEventListener('navigate', onNavigate);

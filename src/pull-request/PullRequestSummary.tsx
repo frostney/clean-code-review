@@ -28,6 +28,7 @@ function sized(src: string): string {
  */
 function OwnerAvatar({ src }: { src: string }) {
   const [broken, setBroken] = useState(false);
+
   if (!src || broken) {
     return null;
   }
@@ -49,6 +50,7 @@ function OwnerAvatar({ src }: { src: string }) {
 export function PullRequestSummary() {
   const { review } = useReviewView();
   const pr = review.pr;
+
   if (!pr) {
     return null;
   }

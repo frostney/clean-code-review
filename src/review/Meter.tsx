@@ -11,6 +11,7 @@ const EVEN_ODDS = 0.5;
 // Deliberately plain: no ticks or colour scale; a row says more in words.
 function Bar({ value }: { value: number }) {
   const width = Math.max(0, Math.min(1, value)) * PERCENT;
+
   return (
     <div className="h-2 w-full overflow-hidden rounded-full bg-track">
       <div
@@ -28,6 +29,7 @@ function headlineClass(finding: boolean, quiet: boolean): string {
   if (quiet) {
     return 'text-muted';
   }
+
   return finding ? 'text-bad' : 'text-ink';
 }
 
@@ -43,6 +45,7 @@ function fill(meta: Question, answer: Answer | undefined): number {
     return answer.probabilities[answer.choice] ?? 0;
   }
   const levels = levelsOf(meta);
+
   return levels.length > 1 ? answer.score / (levels.length - 1) : HALF_FULL;
 }
 
@@ -70,6 +73,7 @@ export function Meter({
     meta.type === 'noul' && answer?.type === 'noul' && answer.noul >= EVEN_ODDS;
   const quiet =
     meta.type === 'noul' && answer?.type === 'noul' && answer.noul < EVEN_ODDS;
+
   return (
     <div
       className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded px-1.5 py-1 @[420px]/group:grid-cols-[11rem_minmax(0,1fr)_10rem] ${

@@ -68,6 +68,7 @@ export function FileList({
                   paused: paused[file.path] === true,
                   stalled: stalled(file.path),
                 });
+
             return (
               <li className="shrink-0 lg:shrink" key={file.path}>
                 <button

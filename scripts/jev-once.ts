@@ -12,8 +12,10 @@ import { PRESETS } from '../examples/presets';
 
 const arg = process.argv[2] ?? '0';
 let files: ReviewFile[];
+
 if (/^\d+$/.test(arg)) {
   const preset = PRESETS[Number(arg)];
+
   if (!preset) {
     console.error(`No preset ${arg}; pick 0–${PRESETS.length - 1}.`);
     process.exit(1);
@@ -21,6 +23,7 @@ if (/^\d+$/.test(arg)) {
   files = preset.files;
 } else {
   const text = readFileSync(arg, 'utf8');
+
   files = looksLikePatch(text)
     ? filesFromPatch(text)
     : [{ content: text, path: arg }];
@@ -32,6 +35,7 @@ const ID_WIDTH = 26;
 
 for (const file of files) {
   const { judgment, cost, warnings, model } = await judgeFile(file);
+
   console.log(
     `${file.path}: ${judgment.ms} ms, ${judgment.usage.input_tokens}→${judgment.usage.output_tokens} tokens, $${cost.toFixed(COST_DIGITS)}, model ${model}, warnings ${JSON.stringify(warnings)}`,
   );

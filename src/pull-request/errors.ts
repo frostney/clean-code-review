@@ -63,8 +63,10 @@ export function describePullRequestError(message: string): PullRequestTrouble {
     };
   }
   const status = GITHUB_STATUS.exec(message);
+
   if (status) {
     const retry = Number(status[1]) >= FIRST_SERVER_ERROR;
+
     return retry
       ? {
           duckLine: 'GitHub did not answer. Try again?',
@@ -85,6 +87,7 @@ export function describePullRequestError(message: string): PullRequestTrouble {
         'Could not reach the server. Check your connection and try again.',
     };
   }
+
   return {
     duckLine: 'That pull request did not open. Try again?',
     retry: true,

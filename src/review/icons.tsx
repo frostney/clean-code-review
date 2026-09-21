@@ -37,6 +37,7 @@ export function GroupIcon({
   className?: string;
 }) {
   const Icon = ICONS[group];
+
   return (
     <Icon
       aria-hidden="true"

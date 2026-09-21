@@ -17,6 +17,7 @@ export function Paste() {
 
   useEffect(() => {
     const dialog = dialogRef.current;
+
     if (!dialog) {
       return;
     }

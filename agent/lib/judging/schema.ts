@@ -65,17 +65,21 @@ const resultSchema = z.object({
 
 function validAnswers(raw: Record<string, unknown>): Answers {
   const answers: Answers = {};
+
   for (const q of QUESTIONS) {
     const row = answerSchema.safeParse(raw[q.id]);
+
     if (!row.success) {
       continue;
     }
     const a = row.data;
+
     if (a.type !== q.type) {
       continue;
     }
     answers[q.id] = a;
   }
+
   return answers;
 }
 
@@ -86,18 +90,22 @@ export function parseReview(
     return null;
   }
   let raw: unknown;
+
   try {
     raw = JSON.parse(text);
   } catch {
     return null;
   }
   const parsed = resultSchema.safeParse(raw);
+
   if (!parsed.success) {
     return null;
   }
   const files: ReviewResult['files'] = {};
+
   for (const [path, file] of Object.entries(parsed.data.files)) {
     files[path] = { ...file, answers: validAnswers(file.answers) };
   }
+
   return { ...parsed.data, files };
 }

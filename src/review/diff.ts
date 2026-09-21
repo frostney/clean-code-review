@@ -49,6 +49,7 @@ function codeLine(raw: string, cursor: Cursor, inHunk: boolean): DiffLine {
     };
   }
   const spaced = raw.startsWith(' ');
+
   return {
     code: spaced ? raw.slice(1) : raw,
     kind: 'context',
@@ -67,10 +68,13 @@ export function parsePatch(patch: string): DiffLine[] {
   const lines: DiffLine[] = [];
   const cursor: Cursor = { newNo: 0, oldNo: 0 };
   let inHunk = false;
+
   for (const raw of patch.split('\n')) {
     const hunk = HUNK.exec(raw);
+
     if (hunk) {
       const [, oldStart, newStart] = hunk;
+
       cursor.oldNo = Number(oldStart);
       cursor.newNo = Number(newStart);
       inHunk = true;
@@ -83,6 +87,7 @@ export function parsePatch(patch: string): DiffLine[] {
     }
     lines.push(codeLine(raw, cursor, inHunk));
   }
+
   return lines;
 }
 
@@ -99,9 +104,11 @@ export interface SplitPatch {
 export function splitPatchHeader(content: string): SplitPatch {
   const lines = content.split('\n');
   let i = 0;
+
   while (i < lines.length && FILE_HEADER.test(lines[i])) {
     i++;
   }
+
   return {
     body: lines.slice(i).join('\n'),
     header: lines.slice(0, i).join('\n'),

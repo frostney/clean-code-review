@@ -33,16 +33,19 @@ function isToolComment(text: string): boolean {
 /** True where a character belongs to a comment that should go. */
 function commentMask(text: string, path: string): Uint8Array | null {
   const ranges = commentRanges(text, path);
+
   if (ranges === null) {
     return null;
   }
   const mask = new Uint8Array(text.length);
+
   for (const { start, end } of ranges) {
     if (isToolComment(text.slice(start, end))) {
       continue;
     }
     mask.fill(1, start, end);
   }
+
   return mask;
 }
 
@@ -54,6 +57,7 @@ function keptOf(
 ): { text: string; touched: boolean } {
   let text = '';
   let touched = false;
+
   for (let i = 0; i < line.length; i++) {
     if (mask[at + i]) {
       touched = true;
@@ -61,6 +65,7 @@ function keptOf(
       text += line[i];
     }
   }
+
   return { text: touched ? text.trimEnd() : text, touched };
 }
 
@@ -72,11 +77,14 @@ function keptOf(
 function withoutMasked(text: string, mask: Uint8Array): (string | null)[] {
   const out: (string | null)[] = [];
   let at = 0;
+
   for (const line of text.split('\n')) {
     const kept = keptOf(line, mask, at);
+
     at += line.length + 1;
     out.push(kept.touched && kept.text.trim() === '' ? null : kept.text);
   }
+
   return out;
 }
 
@@ -95,18 +103,21 @@ interface Images {
 function imagesOf(lines: readonly string[]): Images {
   const images: Images = { after: [], before: [], source: [] };
   let inHunk = false;
+
   lines.forEach((line, i) => {
     if (isHunkHeader(line)) {
       images.before.push('');
       images.after.push('');
       images.source.push(null);
       inHunk = true;
+
       return;
     }
     if (inHunk && leavesHunk(line, lines[i + 1])) {
       inHunk = false;
     }
     const body = line.slice(1);
+
     if (!inHunk || line.startsWith('\\')) {
       images.source.push(null);
     } else if (line.startsWith('-')) {
@@ -121,6 +132,7 @@ function imagesOf(lines: readonly string[]): Images {
       images.after.push(body);
     }
   });
+
   return images;
 }
 
@@ -128,15 +140,18 @@ function imagesOf(lines: readonly string[]): Images {
 function lineMasks(lines: string[], path: string): Uint8Array[] | null {
   const text = lines.join('\n');
   const mask = commentMask(text, path);
+
   if (mask === null) {
     return null;
   }
   const out: Uint8Array[] = [];
   let at = 0;
+
   for (const line of lines) {
     out.push(mask.subarray(at, at + line.length));
     at += line.length + 1;
   }
+
   return out;
 }
 
@@ -155,30 +170,38 @@ function strippedPatch(
   const images = imagesOf(lines);
   const after = lineMasks(images.after, path);
   const before = lineMasks(images.before, path);
+
   if (after === null || before === null) {
     return null;
   }
   const masks = { after, before };
   const out: (string | null)[] = [];
   let changed = 0;
+
   lines.forEach((line, i) => {
     const source = images.source[i];
+
     if (source === null) {
       // Outside every hunk: `diff --git`, `---`, `+++`, `\ No newline`.
       out.push(line);
+
       return;
     }
     const kept = keptOf(line.slice(1), masks[source.image][source.line], 0);
+
     if (kept.touched && kept.text.trim() === '') {
       out.push(null);
+
       return;
     }
     const marker = line.slice(0, 1);
+
     if (marker === '+' || marker === '-') {
       changed++;
     }
     out.push(marker + kept.text);
   });
+
   return changed > 0 ? out : null;
 }
 
@@ -218,6 +241,7 @@ function answerOf(
   const same =
     lines.length === source.length &&
     lines.every((line, i) => line === source[i]);
+
   return same ? UNCHANGED : { kind: 'stripped', lines };
 }
 
@@ -230,11 +254,14 @@ export function withoutComments(file: {
     return NONE;
   }
   const source = file.content.split('\n');
+
   if (file.patch === true) {
     const stripped = strippedPatch(source, file.path);
+
     return stripped === null ? NONE : answerOf(stripped, source);
   }
   const mask = commentMask(file.content, file.path);
+
   return mask === null
     ? NONE
     : answerOf(withoutMasked(file.content, mask), source);

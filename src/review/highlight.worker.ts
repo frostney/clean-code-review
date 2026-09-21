@@ -27,6 +27,7 @@ function highlighter(): Promise<HighlighterCore> {
   ready.catch(() => {
     ready = null;
   });
+
   return ready;
 }
 
@@ -43,10 +44,12 @@ function loadLanguage(shiki: HighlighterCore, lang: string): Promise<void> {
     return Promise.resolve();
   }
   let pending = grammars.get(lang);
+
   if (!pending) {
     pending = (async () => {
       const { bundledLanguages } = await import('shiki/langs');
       const grammar = bundledLanguages[lang as keyof typeof bundledLanguages];
+
       if (grammar) {
         await shiki.loadLanguage(grammar());
       }
@@ -56,6 +59,7 @@ function loadLanguage(shiki: HighlighterCore, lang: string): Promise<void> {
     pending.catch(() => grammars.delete(lang));
     grammars.set(lang, pending);
   }
+
   return pending;
 }
 
@@ -68,11 +72,14 @@ async function tokenise({
   theme,
 }: HighlightRequest): Promise<Token[][]> {
   const shiki = await highlighter();
+
   await loadLanguage(shiki, lang);
   // Loading is done; the page times what follows (see FILE_TIMEOUT_MS).
   const started: HighlightReply = { id, tokenising: true };
+
   self.postMessage(started);
   const { tokens } = shiki.codeToTokens(code, { lang, theme });
+
   return tokens.map((line) =>
     line.map((token) =>
       token.color
@@ -84,11 +91,13 @@ async function tokenise({
 
 self.addEventListener('message', (event: MessageEvent<HighlightRequest>) => {
   const request = event.data;
+
   // Shiki would not start: the page replaces the worker and requeues the file.
   highlighter().then(
     () => answer(request),
     () => {
       const reply: HighlightReply = { id: request.id, unavailable: true };
+
       self.postMessage(reply);
     },
   );
@@ -98,11 +107,13 @@ function answer(request: HighlightRequest) {
   tokenise(request).then(
     (lines) => {
       const reply: HighlightReply = { id: request.id, lines };
+
       self.postMessage(reply);
     },
     () => {
       // The grammar would not load, or shiki threw: the page leaves it plain.
       const reply: HighlightReply = { id: request.id, lines: null };
+
       self.postMessage(reply);
     },
   );

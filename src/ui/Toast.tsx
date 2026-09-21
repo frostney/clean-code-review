@@ -100,8 +100,10 @@ export function ToastRegion({ toasts }: { toasts: readonly ToastItem[] }) {
   // Escape dismisses all, except while a dialog is open: there it is the
   // dialog's. Read through a ref so the listener is not re-added every render.
   const current = useRef(toasts);
+
   current.current = toasts;
   const shown = toasts.length > 0;
+
   useEffect(() => {
     if (!shown) {
       return;
@@ -119,6 +121,7 @@ export function ToastRegion({ toasts }: { toasts: readonly ToastItem[] }) {
       }
     }
     document.addEventListener('keydown', onKeyDown);
+
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [shown]);
 
@@ -126,10 +129,13 @@ export function ToastRegion({ toasts }: { toasts: readonly ToastItem[] }) {
   // on the root restyles every row of every card (the page's longest task).
   const stack = useRef<HTMLElement>(null);
   const [space, setSpace] = useState(0);
+
   useEffect(() => {
     const node = stack.current;
+
     if (!(shown && node)) {
       setSpace(0);
+
       return;
     }
     // Includes the home-indicator inset. `clientHeight`, not `innerHeight`,
@@ -145,8 +151,10 @@ export function ToastRegion({ toasts }: { toasts: readonly ToastItem[] }) {
         ),
       );
     const observer = new ResizeObserver(measure);
+
     observer.observe(node);
     window.addEventListener('resize', measure);
+
     return () => {
       observer.disconnect();
       window.removeEventListener('resize', measure);
@@ -155,6 +163,7 @@ export function ToastRegion({ toasts }: { toasts: readonly ToastItem[] }) {
   useEffect(() => {
     const rail = document.querySelector<HTMLElement>('[data-rail]');
     const room = document.querySelector<HTMLElement>('[data-toast-room]');
+
     if (space) {
       rail?.style.setProperty('--toast-space', `${space}px`);
     } else {
@@ -171,6 +180,7 @@ export function ToastRegion({ toasts }: { toasts: readonly ToastItem[] }) {
       .filter((t) => (t.tone === 'error') === loud && !t.action?.busy)
       .map((t) => <span key={`${t.id}:${t.raised}`}>{t.message} </span>);
   const busy = toasts.some((t) => t.action?.busy);
+
   return (
     <>
       <div className="sr-only" role="alert">

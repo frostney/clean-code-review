@@ -87,10 +87,12 @@ export const TIMED_OUT = {
 
 function timedOut(reason: unknown): string {
   const text = String(reason);
+
   console.warn(`[review] A reviewer call was stopped by its bound: ${text}`);
   if (/first chunk/i.test(text)) {
     return TIMED_OUT.firstChunk;
   }
+
   return /chunk/i.test(text) ? TIMED_OUT.chunk : TIMED_OUT.total;
 }
 
@@ -131,6 +133,7 @@ function reviewerMessage(
         .map(([id, a]) => {
           const q = questionById(id);
           const sc = (a as { score: number }).score;
+
           return [
             q?.label ?? id,
             q?.type === 'score'
@@ -139,6 +142,7 @@ function reviewerMessage(
           ];
         }),
     );
+
     if (mode === 'overall') {
       return {
         findings: findings.slice(0, OVERALL_FINDINGS),
@@ -151,6 +155,7 @@ function reviewerMessage(
       file.content.length > FILE_EXCERPT_CHARS
         ? `${file.content.slice(0, FILE_EXCERPT_CHARS)}\n… (truncated)`
         : file.content;
+
     return {
       code,
       findings,
@@ -159,6 +164,7 @@ function reviewerMessage(
       scales,
     };
   });
+
   return JSON.stringify({
     mode,
     ...(mode === 'overall' && input.pr
@@ -191,6 +197,7 @@ function planParts(input: SummarizeInput): PlannedPart[] {
     role: 'overall' as const,
   };
   const overallMessage = reviewerMessage(input, 'overall');
+
   parts.push({
     // Key order is part of the key: see the note in judge.ts.
     key: cacheKey('review-part', {
@@ -207,6 +214,7 @@ function planParts(input: SummarizeInput): PlannedPart[] {
       (i + 1) * REVIEW_BATCH_SIZE,
     );
     const message = reviewerMessage({ ...input, files }, 'files');
+
     parts.push({
       key: cacheKey('review-part', {
         message,
@@ -217,6 +225,7 @@ function planParts(input: SummarizeInput): PlannedPart[] {
       part: { index: i, paths: files.map((f) => f.path), role: 'files' },
     });
   }
+
   return parts;
 }
 
@@ -227,6 +236,7 @@ export async function planReview(input: SummarizeInput): Promise<ReviewPlan> {
       hit: (await cacheGet<string>(p.key)) || null,
     })),
   );
+
   return { parts };
 }
 
@@ -299,6 +309,7 @@ async function readParts(
   for await (const part of parts) {
     if (part.type === 'text-delta' || part.type === 'reasoning-delta') {
       const delta = part.text ?? '';
+
       seen.chars += delta.length;
       if (part.type === 'text-delta') {
         text.write(delta);
@@ -354,6 +365,7 @@ async function attempt(
     write: signals.write,
   };
   const seen = { chars: 0 };
+
   try {
     await readParts(stream.stream, text, seen, signal);
     const [finishReason, u, meta] = await Promise.all([
@@ -363,6 +375,7 @@ async function attempt(
     ]);
     const input = u?.inputTokens ?? 0;
     const output = u?.outputTokens ?? 0;
+
     usage.inputTokens += input;
     usage.outputTokens += output;
     usage.costUsd += lunaCostUsd(
@@ -370,9 +383,11 @@ async function attempt(
       input,
       output,
     );
+
     return finishReason;
   } catch (err) {
     const stoppedFor = signal.aborted ? signal.reason : undefined;
+
     usage.unreportedUsd += lunaFailedCallUsd(promptChars(p), {
       mayHaveBilled:
         stoppedFor instanceof PartFailed
@@ -387,6 +402,7 @@ async function attempt(
 
 function lastSection(text: string): string | null {
   const parsed = parseSummaryText(text);
+
   return parsed.files.at(-1)?.path ?? (parsed.overall ? OVERALL_SECTION : null);
 }
 
@@ -403,6 +419,7 @@ async function writePart(
 ): Promise<boolean> {
   const ceiling = MAX_OUTPUT_TOKENS[p.part.role];
   let finish = await attempt(p, ceiling, push, usage, signal);
+
   if (finish !== 'length') {
     return finish === 'stop';
   }
@@ -410,6 +427,7 @@ async function writePart(
   // dropped outright; a file section written again replaces its first try.
   push(p.part.role === 'overall' ? `\n${OVERALL_REWRITE_LINE}\n` : '\n');
   let own = '';
+
   finish = await attempt(
     p,
     ceiling * RETRY_CEILING_FACTOR,
@@ -434,7 +452,9 @@ async function writePart(
     ...unreached,
     ...(p.part.role === 'overall' && stopped === null ? [OVERALL_SECTION] : []),
   ];
+
   push(`\n${cut.map(cutOffLine).join('\n')}\n`);
+
   return false;
 }
 
@@ -465,9 +485,11 @@ function startPart(
     }
   };
   const done = writePart(p, push, usage, signal);
+
   // Stops sibling parts rather than paying for them. Also keeps a rejection
   // that is never awaited from crashing the process.
   done.catch(onFailure);
+
   return {
     attach(fn) {
       for (const d of buffer.splice(0)) {
@@ -509,6 +531,7 @@ export async function runReview(
       return { kind: 'hit' as const, p, text: p.hit };
     }
     usage.cached = false;
+
     return startPart(p, usage, combined, stopFor);
   });
   const everyPart = () =>
@@ -519,6 +542,7 @@ export async function runReview(
     chunks.push(delta);
     emit(delta);
   };
+
   try {
     for (const run of runs) {
       if (run.kind === 'hit') {
@@ -526,12 +550,15 @@ export async function runReview(
         continue;
       }
       const from = chunks.length;
+
       run.attach(write);
       const complete = await run.done;
+
       write('\n');
       const own = complete
         ? partText(chunks.slice(from).join(''), run.p.part)
         : null;
+
       if (own) {
         await cacheSet(run.p.key, own, 'luna-review-part');
       }
@@ -541,6 +568,7 @@ export async function runReview(
     await everyPart();
     throw err;
   }
+
   return { text: chunks.join(''), usage };
 }
 
@@ -551,14 +579,17 @@ function ensureTrailingNewline(s: string): string {
 /** Keeps only sections the part owns, so a cached part cannot carry stray ones. */
 function partText(own: string, part: ReviewPart): string | null {
   const parsed = parseSummaryText(own);
+
   if (part.role === 'overall') {
     return parsed.overall
       ? `Decision: ${parsed.decision}\n## Overall\n${parsed.overall}\n`
       : null;
   }
   const sections = parsed.files.filter((f) => ownsSection(part, f.path));
+
   if (!sections.length) {
     return null;
   }
+
   return sections.map((f) => `## ${f.path}\n${f.summary}\n`).join('');
 }

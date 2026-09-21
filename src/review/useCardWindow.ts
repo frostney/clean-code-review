@@ -41,6 +41,7 @@ export function useCardWindow(reviewId: string, paths: readonly string[]) {
   const [drawn, setDrawn] = useState<Readonly<Record<string, true>>>({});
   // Reset during render, not in an effect a frame later.
   const [drawnFor, setDrawnFor] = useState(reviewId);
+
   if (drawnFor !== reviewId) {
     setDrawnFor(reviewId);
     setDrawn({});
@@ -57,6 +58,7 @@ export function useCardWindow(reviewId: string, paths: readonly string[]) {
       return;
     }
     const near = [...nearRef.current];
+
     // Yields to the scroll that brought the card near.
     startTransition(() => {
       setDrawn((current) =>
@@ -75,6 +77,7 @@ export function useCardWindow(reviewId: string, paths: readonly string[]) {
       (entries) => {
         for (const entry of entries) {
           const path = pathsRef.current.get(entry.target);
+
           if (path === undefined) {
             continue;
           }
@@ -88,10 +91,12 @@ export function useCardWindow(reviewId: string, paths: readonly string[]) {
       },
       { rootMargin: NEAR_MARGIN },
     );
+
     observerRef.current = observer;
     for (const element of pathsRef.current.keys()) {
       observer.observe(element);
     }
+
     return () => {
       observer.disconnect();
       observerRef.current = null;
@@ -101,6 +106,7 @@ export function useCardWindow(reviewId: string, paths: readonly string[]) {
   const watch: WatchCard = useCallback((element, path) => {
     pathsRef.current.set(element, path);
     observerRef.current?.observe(element);
+
     return () => {
       pathsRef.current.delete(element);
       nearRef.current.delete(path);
@@ -123,6 +129,7 @@ export function useCardWindow(reviewId: string, paths: readonly string[]) {
         jumpingRef.current = false;
         drawNear();
       };
+
       function onScroll() {
         window.clearTimeout(timer);
         timer = window.setTimeout(done, SCROLL_SETTLE_MS);
@@ -138,12 +145,14 @@ export function useCardWindow(reviewId: string, paths: readonly string[]) {
   // flushSync: the find bar opens as soon as the key is handled, and must
   // already see the code.
   const pathsNowRef = useRef(paths);
+
   pathsNowRef.current = paths;
   useEffect(() => {
     // Matches the browser's own reading of the shortcut: the layout's F (on
     // Dvorak, QWERTY's Y), or the physical F key on non-Latin layouts. Cmd on
     // Mac, where Ctrl+F moves the caret; Ctrl elsewhere.
     const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+
     function isF(event: KeyboardEvent): boolean {
       return (
         event.key.toLowerCase() === 'f' ||
@@ -152,10 +161,12 @@ export function useCardWindow(reviewId: string, paths: readonly string[]) {
     }
     function onKeyDown(event: KeyboardEvent) {
       const modifier = mac ? event.metaKey : event.ctrlKey;
+
       if (!modifier || event.altKey || !isF(event)) {
         return;
       }
       const all = pathsNowRef.current;
+
       flushSync(() => {
         setDrawn((current) =>
           all.every((path) => current[path])
@@ -165,6 +176,7 @@ export function useCardWindow(reviewId: string, paths: readonly string[]) {
       });
     }
     window.addEventListener('keydown', onKeyDown, { capture: true });
+
     return () =>
       window.removeEventListener('keydown', onKeyDown, { capture: true });
   }, []);
@@ -189,14 +201,17 @@ export function useOnScreen(
   ref: RefObject<Element | null>,
 ): RefObject<boolean> {
   const visible = useRef(false);
+
   useEffect(() => {
     const element = ref.current;
+
     if (!element) {
       return;
     }
     screenObserver ??= new IntersectionObserver((entries) => {
       for (const entry of entries) {
         const flag = onScreenFlags.get(entry.target);
+
         if (flag) {
           flag.current = entry.isIntersecting;
         }
@@ -204,10 +219,12 @@ export function useOnScreen(
     });
     onScreenFlags.set(element, visible);
     screenObserver.observe(element);
+
     return () => {
       onScreenFlags.delete(element);
       screenObserver?.unobserve(element);
     };
   }, [ref]);
+
   return visible;
 }

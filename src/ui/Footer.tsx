@@ -15,6 +15,7 @@ export function Footer({ current }: { current?: 'faq' | 'privacy' }) {
           className: CURRENT_CLASS,
         }
       : { className: LINK_CLASS };
+
   return (
     <footer className="mt-8 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-muted">
       <Link {...here('faq')} href="/faq">

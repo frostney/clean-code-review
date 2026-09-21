@@ -42,6 +42,7 @@ export interface SummarizeInput extends ReviewInput {
 
 export function summarizeMessage(input: SummarizeInput): string {
   const clamped = clampReview(input);
+
   return JSON.stringify({
     files: clamped.files,
     judgments: input.judgments,
@@ -75,12 +76,14 @@ function parseJsonMessage(trimmed: string): ParsedMessage | null {
     judgments?: unknown;
     pr?: unknown;
   };
+
   try {
     raw = JSON.parse(trimmed) as typeof raw;
   } catch {
     return null;
   }
   const files = readFiles(raw.files);
+
   if (!files) {
     return null;
   }
@@ -97,6 +100,7 @@ function parseJsonMessage(trimmed: string): ParsedMessage | null {
   if (raw.kind === 'judge' || raw.kind === undefined) {
     return { input: clampReview({ files }, MAX_JUDGED_CHARS), kind: 'judge' };
   }
+
   return null;
 }
 
@@ -106,8 +110,10 @@ function parseJsonMessage(trimmed: string): ParsedMessage | null {
  */
 export function parseMessage(text: string): ParsedMessage {
   const trimmed = text.trim();
+
   if (trimmed.startsWith('{')) {
     const json = parseJsonMessage(trimmed);
+
     if (json) {
       return json;
     }
@@ -127,6 +133,7 @@ export function parseMessage(text: string): ParsedMessage {
       kind: 'judge',
     };
   }
+
   return { kind: 'other', text: trimmed };
 }
 
@@ -145,6 +152,7 @@ function readFiles(raw: unknown): ReviewFile[] | null {
       path: f.path as string,
       ...(f.patch === true ? { patch: true } : {}),
     }));
+
   // Guards callers other than the page; prose is dropped because it is never judged.
   return partitionJudgeable(files).judgeable;
 }
@@ -154,6 +162,7 @@ function looksLikeCode(text: string): boolean {
   if (/^(\[Task state\]|Background task)/.test(text)) {
     return false;
   }
+
   return /[{};=()]|^\s*(def |class |import |function |const |let |var |public |fn |func )/m.test(
     text,
   );

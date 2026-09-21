@@ -6,6 +6,7 @@ import { cappedAt, clampReview, MAX_JUDGED_CHARS } from './review';
 function hasLoneSurrogate(text: string): boolean {
   return [...text].some((c) => {
     const code = c.codePointAt(0) ?? 0;
+
     return code >= 0xd800 && code <= 0xdfff;
   });
 }
@@ -28,6 +29,7 @@ test('the clamp every judge message goes through cuts whole characters', () => {
     { files: [{ content: `${head}🙂${'y'.repeat(5000)}`, path: 'a.ts' }] },
     MAX_JUDGED_CHARS,
   ).files[0].content;
+
   assert.equal(clamped.length, MAX_JUDGED_CHARS - 1);
   assert.ok(!hasLoneSurrogate(clamped));
 });

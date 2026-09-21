@@ -220,6 +220,7 @@ function answerLine(id: string, a: AnswerOutput): string {
         .map(([level, p]) => `${level} ${percent(p)}`)
         .join(', ')}`
     : '';
+
   return `${id} (${a.label}): ${a.level}, score ${a.score.toFixed(2)}${spread}`;
 }
 
@@ -242,6 +243,7 @@ function fileText(file: JudgedFile): string {
     file.truncated ? 'truncated' : null,
     file.reviewIncomplete ? 'review cut off' : null,
   ].filter(Boolean);
+
   return [
     `### ${file.path} (${flags.join(', ')})`,
     file.review ?? '(No paragraph was written for this file.)',
@@ -258,6 +260,7 @@ function sourceText(result: ReviewOutput): string[] {
   if (result.source.kind === 'paste') {
     return ['# Clean Code review of pasted code'];
   }
+
   return [
     `# Clean Code review: ${result.source.title}`,
     `Pull request: ${result.source.url}`,
@@ -267,6 +270,7 @@ function sourceText(result: ReviewOutput): string[] {
 
 function leftOutText(result: ReviewOutput): string[] {
   const lines: string[] = [];
+
   if (result.prose.length) {
     lines.push(
       '## Prose, shown and not judged',
@@ -288,6 +292,7 @@ function leftOutText(result: ReviewOutput): string[] {
         : []),
     );
   }
+
   return lines;
 }
 

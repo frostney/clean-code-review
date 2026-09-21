@@ -13,6 +13,7 @@ function statusFor(message: string): number {
   if (/not a GitHub|not found|too large/.test(message)) {
     return HTTP_BAD_REQUEST;
   }
+
   return /rate limit/.test(message) ? HTTP_TOO_MANY : HTTP_BAD_GATEWAY;
 }
 
@@ -31,14 +32,17 @@ export async function GET(request: Request) {
     );
   }
   const url = new URL(request.url).searchParams.get('url') ?? '';
+
   try {
     const pr = await fetchPullRequest(url);
+
     return Response.json(pr, {
       headers: { 'cache-control': `public, max-age=${CACHE_SECONDS}` },
     });
   } catch (err) {
     const message =
       err instanceof Error ? err.message : 'Could not fetch that pull request.';
+
     return Response.json({ error: message }, { status: statusFor(message) });
   }
 }

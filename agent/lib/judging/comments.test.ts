@@ -21,6 +21,7 @@ function strip(file: {
   patch?: boolean;
 }): string {
   const out = withoutComments(file);
+
   return out.kind === 'stripped' ? strippedText(out.lines) : out.kind;
 }
 
@@ -39,6 +40,7 @@ describe('withoutComments', () => {
   test('keeps comments a tool reads', () => {
     const source =
       '// biome-ignore lint/style/noVar: a reason\nvar a = 1;\n// prose\n';
+
     assert.equal(
       stripTs(source),
       '// biome-ignore lint/style/noVar: a reason\nvar a = 1;\n',
@@ -62,6 +64,7 @@ describe('withoutComments', () => {
 
   test('leaves the code byte for byte', () => {
     const source = 'const r = /a\\/b/; // gone\nconst s = "// kept";\n';
+
     assert.equal(stripTs(source), 'const r = /a\\/b/;\nconst s = "// kept";\n');
   });
 
@@ -128,6 +131,7 @@ describe('withoutComments on a diff', () => {
       '-// was',
       '+// is',
     ].join('\n');
+
     assert.equal(
       strip({ content: commentsOnly, patch: true, path: 'a.ts' }),
       'none',
@@ -140,6 +144,7 @@ describe('withoutComments on a diff', () => {
       '-const a = "// one";',
       '+const a = "// two";',
     ].join('\n');
+
     assert.equal(
       strip({ content: strings, patch: true, path: 'a.ts' }),
       'unchanged',
@@ -149,6 +154,7 @@ describe('withoutComments on a diff', () => {
 
 test('the lean threshold clears the measured noise floor', () => {
   const runToRunNoise = 0.055;
+
   assert.ok(COMMENT_LEAN_THRESHOLD > 3 * runToRunNoise);
 });
 
@@ -166,6 +172,7 @@ function printed(text: string, path: string): string {
     true,
     path.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
+
   return ts
     .createPrinter({ removeComments: true })
     .printFile(source)
@@ -184,15 +191,18 @@ test('stripping changes nothing but the comments, across the repository', () => 
   )
     .split('\n')
     .filter(Boolean);
+
   assert.ok(paths.length > 50);
   const changed = paths.filter((path) => {
     const content = readFileSync(join(root, path), 'utf8');
     const out = withoutComments({ content, path });
+
     return (
       out.kind === 'stripped' &&
       printed(strippedText(out.lines), path) !== printed(content, path)
     );
   });
+
   assert.deepEqual(changed, []);
 });
 
@@ -215,6 +225,7 @@ describe('withoutComments on a git-formatted diff', () => {
       '-// was',
       '+// is',
     );
+
     // The `+++ b/a.ts` header is not a change; without that the stripped diff
     // looks like a change to nothing and pass B judges an empty patch.
     assert.equal(strip({ content: patch, patch: true, path: 'a.ts' }), 'none');
@@ -227,6 +238,7 @@ describe('withoutComments on a git-formatted diff', () => {
       '-// was',
       '+const b = 2; // is',
     );
+
     assert.equal(
       strip({ content: patch, patch: true, path: 'a.ts' }),
       gitPatch('@@ -1,2 +1,2 @@', ' const a = 1;', '+const b = 2;'),

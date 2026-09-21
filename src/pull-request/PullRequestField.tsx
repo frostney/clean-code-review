@@ -55,12 +55,14 @@ export function PullRequestField({ duck }: { duck?: ReactNode }) {
   // boxes when a review closes.
   useEffect(() => {
     const next = `${address.repo}${PULL_INFIX}${address.number}`;
+
     if (next === filled.current || !address.repo) {
       return;
     }
     const typing =
       document.activeElement === repoRef.current ||
       document.activeElement === numberRef.current;
+
     if (typing) {
       return;
     }
@@ -73,11 +75,13 @@ export function PullRequestField({ duck }: { duck?: ReactNode }) {
 
   function takeApart(text: string): boolean {
     const parts = splitPullRequest(text);
+
     if (!parts) {
       return false;
     }
     setRepo(parts.repo);
     setNumber(parts.number);
+
     return true;
   }
 

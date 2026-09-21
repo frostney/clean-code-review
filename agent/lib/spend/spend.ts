@@ -111,6 +111,7 @@ export function jevCallEstimateUsd(stateChars: number): number {
   const chars =
     Math.min(stateChars, 2 * REVIEW_LIMITS.maxCharsPerFile) +
     JEV_QUESTION_CHARS;
+
   return 2 * (chars / CHARS_PER_TOKEN) * JEV_INPUT_USD_PER_TOKEN;
 }
 
@@ -130,6 +131,7 @@ function reportedCost(cost: unknown): number | null {
     typeof cost === 'string' || typeof cost === 'number'
       ? Number(cost)
       : Number.NaN;
+
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
@@ -156,8 +158,10 @@ export function lunaCostUsd(
 
 function httpStatusOf(err: unknown): number | undefined {
   let at: unknown = err;
+
   for (let depth = 0; depth < MAX_CAUSE_DEPTH && at; depth++) {
     const e = at as { statusCode?: unknown; responseHeaders?: unknown };
+
     // The gateway fabricates a 500 without headers for requests that never
     // got a response; only a status with headers is real.
     if (typeof e.statusCode === 'number' && e.responseHeaders) {
@@ -165,6 +169,7 @@ function httpStatusOf(err: unknown): number | undefined {
     }
     at = (at as { cause?: unknown }).cause;
   }
+
   return;
 }
 
@@ -179,13 +184,16 @@ const UNREACHED_CODES = new Set([
 
 function neverReached(err: unknown): boolean {
   let at: unknown = err;
+
   for (let depth = 0; depth < MAX_CAUSE_DEPTH && at; depth++) {
     const code = (at as { code?: unknown }).code;
+
     if (typeof code === 'string' && UNREACHED_CODES.has(code)) {
       return true;
     }
     at = (at as { cause?: unknown }).cause;
   }
+
   return false;
 }
 
@@ -205,9 +213,11 @@ export function failureMayHaveBilled(
     return true;
   }
   const status = httpStatusOf(err);
+
   if (status !== undefined) {
     return !(status >= FIRST_CLIENT_ERROR && status < FIRST_SERVER_ERROR);
   }
+
   return !neverReached(err);
 }
 
@@ -224,6 +234,7 @@ export function lunaFailedCallUsd(promptChars: number, call: FailedCall) {
   if (!call.sent || (call.outputChars === 0 && !call.mayHaveBilled)) {
     return 0;
   }
+
   return (
     lunaPartEstimateUsd(promptChars, 0) +
     (Math.max(0, call.outputChars) / CHARS_PER_TOKEN) *
@@ -235,6 +246,7 @@ export function jevFailedCallUsd(stateChars: number, call: FailedCall) {
   if (!(call.sent && call.mayHaveBilled)) {
     return 0;
   }
+
   return (
     ((Math.max(0, stateChars) + JEV_QUESTION_CHARS) / CHARS_PER_TOKEN) *
     JEV_INPUT_USD_PER_TOKEN
@@ -291,6 +303,7 @@ function logOnce(kind: Trouble, scope: string, err: unknown): void {
   }
   logged.add(kind);
   const cause = err instanceof Error ? err.message : String(err);
+
   console.error(
     `[spend] The ${scope} spend counter ${TROUBLE[kind]} (${cause}). Logged once per instance.`,
   );
@@ -312,11 +325,13 @@ interface Written {
 function amountOf(value: unknown): number | undefined {
   const usd =
     typeof value === 'number' ? value : (value as Counter | null)?.usd;
+
   return typeof usd === 'number' && Number.isFinite(usd) ? usd : undefined;
 }
 
 function writtenOf(value: unknown): Written | null {
   const w = value as Partial<Written> | null | undefined;
+
   return w && typeof w === 'object' && w.v === 1
     ? { day: w.day ?? null, hour: w.hour ?? null, v: 1 }
     : null;
@@ -355,6 +370,7 @@ export function createSpendBrake(
       store.get(hourKey).then(amountOf),
       store.get(dayKey).then(amountOf),
     ]);
+
     return { day, dayKey, hour, hourKey, written };
   }
 
@@ -380,6 +396,7 @@ export function createSpendBrake(
     dayKey: string,
   ): Promise<[number, number]> {
     let read = await readOnce(hourKey, dayKey);
+
     if (read.written === null) {
       await probe(read);
       // A timed-out batch returns null for every key, so re-read now that the
@@ -399,6 +416,7 @@ export function createSpendBrake(
         logOnce('lost', scope, `${hourKey} or ${dayKey}`);
       }
     }
+
     return [read.hour ?? 0, read.day ?? 0];
   }
 
@@ -406,11 +424,13 @@ export function createSpendBrake(
   async function charge(hourKey: string, dayKey: string, usd: number) {
     let hour: number;
     let day: number;
+
     try {
       [hour, day] = await readCounters(hourKey, dayKey);
     } catch (err) {
       // Writing a sum from an unknown base would clobber the real total.
       logOnce('read', scope, err);
+
       return;
     }
     try {
@@ -425,6 +445,7 @@ export function createSpendBrake(
 
   function holdFor(hourKey: string, dayKey: string, reservedUsd: number): Hold {
     let settled = false;
+
     return {
       reservedUsd,
       async settle(actualUsd) {
@@ -436,6 +457,7 @@ export function createSpendBrake(
           return;
         }
         const delta = actualUsd - reservedUsd;
+
         if (Math.abs(delta) > EPSILON_USD) {
           // Into the reservation's windows, even if the hour has turned.
           await charge(hourKey, dayKey, delta);
@@ -450,6 +472,7 @@ export function createSpendBrake(
       const dayKey = `spend:${scope}:day:${dayOf(now)}`;
       const reserved =
         Number.isFinite(estimateUsd) && estimateUsd > 0 ? estimateUsd : 0;
+
       // No read, no refusal; a surprise cost (e.g. a cache entry expiring
       // in between) is still settled.
       if (reserved === 0) {
@@ -457,10 +480,12 @@ export function createSpendBrake(
       }
       let hour: number;
       let day: number;
+
       try {
         [hour, day] = await readCounters(hourKey, dayKey);
       } catch (err) {
         logOnce('read', scope, err);
+
         return {
           capUsd: caps.hourUsd,
           ok: false,
@@ -503,6 +528,7 @@ export function createSpendBrake(
       } catch (err) {
         logOnce('write', scope, err);
       }
+
       return { hold: holdFor(hourKey, dayKey, reserved), ok: true };
     },
   };

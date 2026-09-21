@@ -19,9 +19,11 @@ const PULL_REQUEST_PATH = /^\/[^/]+\/[^/]+\/pull(\/|$)/;
 export function anonymousPath(pathname: string): string {
   const page =
     pathname.length > ROOT_PATH.length ? pathname.replace(/\/$/, '') : pathname;
+
   if (PAGES.has(page)) {
     return pathname;
   }
+
   return PULL_REQUEST_PATH.test(pathname)
     ? PULL_REQUEST_ROUTE
     : NOT_FOUND_ROUTE;
@@ -32,6 +34,7 @@ function anonymousUrl(url: string): string {
   // Not `URL.canParse`: some browsers in Next's default targets lack it.
   try {
     const parsed = new URL(url);
+
     return `${parsed.origin}${anonymousPath(parsed.pathname)}`;
   } catch {
     return anonymousPath(url.split(/[?#]/, 1)[0] ?? url);

@@ -59,6 +59,7 @@ const JSX_EXTENSIONS = new Set(['cjs', 'js', 'jsx', 'mjs', 'tsx']);
 function extensionOf(path: string): string {
   const name = path.slice(path.lastIndexOf('/') + 1);
   const dot = name.lastIndexOf('.');
+
   return dot <= 0 ? '' : name.slice(dot + 1).toLowerCase();
 }
 
@@ -71,12 +72,14 @@ const NOT_FOUND = -1;
 
 function endOfLine(text: string, from: number): number {
   const nl = text.indexOf('\n', from);
+
   return nl === NOT_FOUND ? text.length : nl;
 }
 
 /** The index after the closing delimiter, or the end of the text. */
 function closeOf(text: string, from: number, close: string): number {
   const at = text.indexOf(close, from);
+
   return at === NOT_FOUND ? text.length : at + close.length;
 }
 
@@ -88,6 +91,7 @@ function nestedBlockEnd(
 ): number {
   let depth = 0;
   let i = from;
+
   while (i < text.length) {
     if (text.startsWith(open, i)) {
       depth++;
@@ -102,6 +106,7 @@ function nestedBlockEnd(
       i++;
     }
   }
+
   return text.length;
 }
 
@@ -117,6 +122,7 @@ interface StringSpec {
 /** The index after the string, or the end of the text for an unterminated one. */
 function stringEnd(text: string, from: number, spec: StringSpec): number {
   let i = from + spec.open.length;
+
   while (i < text.length) {
     if (spec.escape && text[i] === '\\') {
       i += 2;
@@ -124,14 +130,17 @@ function stringEnd(text: string, from: number, spec: StringSpec): number {
     }
     if (text.startsWith(spec.close, i)) {
       const after = i + spec.close.length;
+
       if (spec.doubled && text.startsWith(spec.close, after)) {
         i = after + spec.close.length;
         continue;
       }
+
       return after;
     }
     i++;
   }
+
   return text.length;
 }
 
@@ -228,14 +237,17 @@ function specialLiteralEnd(
   syntax: Syntax,
 ): number | null {
   const rest = text.slice(i, i + MAX_RAW_PREFIX_CHARS);
+
   if (syntax.rustRaw) {
     const raw = RUST_RAW.exec(rest);
+
     if (raw) {
       return closeOf(text, i + raw[0].length, `"${raw[1]}`);
     }
   }
   if (syntax.cppRaw) {
     const raw = CPP_RAW.exec(rest);
+
     if (raw) {
       return closeOf(text, i + raw[0].length, `)${raw[1]}"`);
     }
@@ -250,8 +262,10 @@ function specialLiteralEnd(
   }
   if (syntax.rustQuote && text[i] === "'") {
     const char = RUST_CHAR.exec(rest);
+
     return i + (char ? char[0].length : 1);
   }
+
   return null;
 }
 
@@ -261,10 +275,12 @@ function blockCommentEnd(
   syntax: Syntax,
 ): number | null {
   const pair = syntax.block.find(([open]) => text.startsWith(open, i));
+
   if (!pair) {
     return null;
   }
   const [open, close] = pair;
+
   return syntax.nestedBlock
     ? nestedBlockEnd(text, i, open, close)
     : closeOf(text, i + open.length, close);
@@ -275,9 +291,11 @@ const PREFIX_CHARS = /[A-Za-z_]/;
 /** True when the quote at `i` is preceded by an `f` string prefix. */
 function isFormatString(text: string, i: number): boolean {
   let at = i;
+
   while (at > 0 && PREFIX_CHARS.test(text[at - 1])) {
     at--;
   }
+
   return /f/i.test(text.slice(at, i));
 }
 
@@ -292,30 +310,35 @@ const UNSAFE = -1;
 /** A doubled brace is a literal brace, not the start or end of an expression. */
 function braceStep(text: string, i: number): number {
   const ch = text[i];
+
   if (ch !== '{' && ch !== '}') {
     return 0;
   }
   if (text[i + 1] === ch) {
     return 0;
   }
+
   return ch === '{' ? 1 : -1;
 }
 
 function formatStringEnd(text: string, from: number, spec: StringSpec): number {
   let i = from + spec.open.length;
   let depth = 0;
+
   while (i < text.length) {
     if (text[i] === '\\' && spec.escape) {
       i += 2;
       continue;
     }
     const brace = braceStep(text, i);
+
     if (brace === 0 && text.startsWith(spec.close, i)) {
       return depth === 0 ? i + spec.close.length : UNSAFE;
     }
     depth = Math.max(0, depth + brace);
     i += brace === 0 && (text[i] === '{' || text[i] === '}') ? 2 : 1;
   }
+
   return text.length;
 }
 
@@ -323,12 +346,14 @@ function formatStringEnd(text: string, from: number, spec: StringSpec): number {
 function scanSyntax(text: string, syntax: Syntax): CommentRange[] | null {
   const out: CommentRange[] = [];
   let i = 0;
+
   while (i < text.length) {
     if (syntax.cssUrl && CSS_URL.test(text.slice(i, i + CSS_URL_CHARS))) {
       i = closeOf(text, i, ')');
       continue;
     }
     const block = blockCommentEnd(text, i, syntax);
+
     if (block !== null) {
       out.push({ end: block, start: i });
       i = block;
@@ -336,28 +361,34 @@ function scanSyntax(text: string, syntax: Syntax): CommentRange[] | null {
     }
     if (syntax.line.some((open) => text.startsWith(open, i))) {
       const end = endOfLine(text, i);
+
       out.push({ end, start: i });
       i = end;
       continue;
     }
     const next = literalEnd(text, i, syntax);
+
     if (next === UNSAFE) {
       return null;
     }
     i = next !== null && next > i ? next : i + 1;
   }
+
   return out;
 }
 
 function literalEnd(text: string, i: number, syntax: Syntax): number | null {
   const special = specialLiteralEnd(text, i, syntax);
+
   if (special !== null) {
     return special;
   }
   const spec = syntax.strings.find((s) => text.startsWith(s.open, i));
+
   if (spec === undefined) {
     return null;
   }
+
   return syntax.formatStrings && isFormatString(text, i)
     ? formatStringEnd(text, i, spec)
     : stringEnd(text, i, spec);
@@ -435,9 +466,11 @@ const DIGIT = /\d/;
 
 function runEnd(text: string, from: number, part: RegExp): number {
   let i = from;
+
   while (i < text.length && part.test(text[i])) {
     i++;
   }
+
   return i;
 }
 
@@ -445,8 +478,10 @@ function runEnd(text: string, from: number, part: RegExp): number {
 function regexEnd(text: string, from: number): number | null {
   let i = from + 1;
   let inClass = false;
+
   while (i < text.length) {
     const ch = text[i];
+
     if (ch === '\\') {
       i += 2;
       continue;
@@ -463,27 +498,35 @@ function regexEnd(text: string, from: number): number | null {
     }
     i++;
   }
+
   return null;
 }
 
 function slash(s: Scan): void {
   const { text, i } = s;
+
   if (text.startsWith('//', i)) {
     const end = endOfLine(text, i);
+
     s.out.push({ end, start: i });
     s.i = end;
+
     return;
   }
   if (text.startsWith('/*', i)) {
     const end = closeOf(text, i + 2, '*/');
+
     s.out.push({ end, start: i });
     s.i = end;
+
     return;
   }
   const regex = startsValue(s.previous) ? regexEnd(text, i) : null;
+
   if (regex === null) {
     s.i = i + 1;
     s.previous = PUNCTUATION;
+
     return;
   }
   s.i = regex;
@@ -497,6 +540,7 @@ function closeContainer(s: Scan, frame: CodeFrame): void {
   }
   let rest = '';
   let at = frame.container + 1;
+
   for (const range of s.out.slice(frame.found)) {
     rest += s.text.slice(at, range.start);
     at = Math.max(at, range.end);
@@ -533,27 +577,33 @@ function opensElement(s: Scan): boolean {
 function stepCode(s: Scan, frame: CodeFrame): void {
   const { text, i } = s;
   const ch = text[i];
+
   if (ch === '/') {
     slash(s);
+
     return;
   }
   if (ch === '"' || ch === "'") {
     s.i = stringEnd(text, i, { close: ch, escape: true, open: ch });
     s.previous = VALUE;
+
     return;
   }
   if (ch === '`') {
     s.stack.push({ kind: 'template' });
     s.i = i + 1;
+
     return;
   }
   if (ch === '}') {
     closeBrace(s, frame);
+
     return;
   }
   if (ch === '<' && opensElement(s)) {
     s.stack.push({ kind: 'tag' });
     s.i = i + 1;
+
     return;
   }
   stepPlainCode(s, frame);
@@ -562,18 +612,22 @@ function stepCode(s: Scan, frame: CodeFrame): void {
 function stepPlainCode(s: Scan, frame: CodeFrame): void {
   const { text, i } = s;
   const ch = text[i];
+
   if (ch === '{') {
     frame.depth++;
   }
   if (IDENTIFIER_START.test(ch)) {
     const end = runEnd(text, i, IDENTIFIER_PART);
+
     s.previous = { kind: 'word', text: text.slice(i, end) };
     s.i = end;
+
     return;
   }
   if (DIGIT.test(ch)) {
     s.i = runEnd(text, i, /[\w.]/);
     s.previous = VALUE;
+
     return;
   }
   if (ch === ')' || ch === ']') {
@@ -581,6 +635,7 @@ function stepPlainCode(s: Scan, frame: CodeFrame): void {
   } else if ((ch === '+' || ch === '-') && text[i + 1] === ch) {
     s.previous = VALUE;
     s.i = i + 2;
+
     return;
   } else if (!/\s/.test(ch)) {
     s.previous = PUNCTUATION;
@@ -594,35 +649,42 @@ const TAG_CHARS = /[\w$.:=\-\s]/;
 function stepTag(s: Scan): void {
   const { text, i } = s;
   const ch = text[i];
+
   if (ch === '>') {
     s.stack.pop();
     s.stack.push({ kind: 'children' });
     s.i = i + 1;
+
     return;
   }
   if (ch === '/' && text[i + 1] === '>') {
     s.stack.pop();
     s.i = i + 2;
     s.previous = VALUE;
+
     return;
   }
   if (ch === '/' && (text[i + 1] === '/' || text[i + 1] === '*')) {
     // A comment between attributes.
     slash(s);
+
     return;
   }
   if (ch === '"' || ch === "'") {
     s.i = stringEnd(text, i, { close: ch, escape: true, open: ch });
+
     return;
   }
   if (ch === '{') {
     pushCode(s, null);
     s.i = i + 1;
+
     return;
   }
   if (!TAG_CHARS.test(ch)) {
     s.stack.pop();
     s.previous = PUNCTUATION;
+
     return;
   }
   s.i = i + 1;
@@ -630,19 +692,23 @@ function stepTag(s: Scan): void {
 
 function stepChildren(s: Scan): void {
   const { text, i } = s;
+
   if (text[i] === '{') {
     pushCode(s, i);
     s.i = i + 1;
+
     return;
   }
   if (text[i] !== '<') {
     s.i = i + 1;
+
     return;
   }
   if (text[i + 1] === '/') {
     s.stack.pop();
     s.i = closeOf(text, i, '>');
     s.previous = VALUE;
+
     return;
   }
   s.stack.push({ kind: 'tag' });
@@ -651,19 +717,23 @@ function stepChildren(s: Scan): void {
 
 function stepTemplate(s: Scan): void {
   const { text, i } = s;
+
   if (text[i] === '\\') {
     s.i = i + 2;
+
     return;
   }
   if (text[i] === '`') {
     s.stack.pop();
     s.i = i + 1;
     s.previous = VALUE;
+
     return;
   }
   if (text[i] === '$' && text[i + 1] === '{') {
     pushCode(s, null);
     s.i = i + 2;
+
     return;
   }
   s.i = i + 1;
@@ -678,10 +748,12 @@ function scanJs(text: string, jsx: boolean): CommentRange[] {
     stack: [{ container: null, depth: 0, found: 0, kind: 'code' }],
     text,
   };
+
   while (s.i < text.length) {
     const before = s.i;
     const frames = s.stack.length;
     const frame = s.stack.at(-1) as Frame;
+
     if (frame.kind === 'code') {
       stepCode(s, frame);
     } else if (frame.kind === 'template') {
@@ -697,6 +769,7 @@ function scanJs(text: string, jsx: boolean): CommentRange[] {
       s.i = before + 1;
     }
   }
+
   return s.out;
 }
 
@@ -709,6 +782,7 @@ export function commentRanges(
   path: string,
 ): CommentRange[] | null {
   const family = familyOf(path);
+
   if (family === null) {
     return null;
   }
@@ -716,6 +790,7 @@ export function commentRanges(
     family === 'js'
       ? scanJs(text, JSX_EXTENSIONS.has(extensionOf(path)))
       : scanSyntax(text, SYNTAX[family]);
+
   // A JSX container is found after the comments inside it.
   return ranges?.sort((a, b) => a.start - b.start) ?? null;
 }

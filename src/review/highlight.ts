@@ -134,6 +134,7 @@ function drop(w: Worker) {
 function loadFailed(w: Worker) {
   drop(w);
   const job = running;
+
   running = null;
   if (job && !job.cancelled) {
     job.loadFailures += 1;
@@ -155,6 +156,7 @@ function spawn(): Worker | null {
     return worker;
   }
   const wait = retryAt - Date.now();
+
   if (wait > 0) {
     if (!retryPending) {
       retryPending = true;
@@ -163,9 +165,11 @@ function spawn(): Worker | null {
         pump();
       }, wait);
     }
+
     return null;
   }
   let w: Worker;
+
   try {
     w = new Worker(new URL('./highlight.worker.ts', import.meta.url), {
       type: 'module',
@@ -175,26 +179,31 @@ function spawn(): Worker | null {
     retryAt =
       Date.now() +
       Math.min(RETRY_MOST_MS, RETRY_FIRST_MS * 2 ** (failures - 1));
+
     return spawn();
   }
   worker = w;
   w.addEventListener('message', (event: MessageEvent<HighlightReply>) => {
     const reply = event.data;
+
     if (worker !== w || running?.request.id !== reply.id) {
       return;
     }
     stopWatchdog();
     if ('unavailable' in reply) {
       loadFailed(w);
+
       return;
     }
     failures = 0;
     if ('tokenising' in reply) {
       running.tokenising = true;
       watchdog = setTimeout(() => timedOut(w), FILE_TIMEOUT_MS);
+
       return;
     }
     const job = running;
+
     running = null;
     job.done(reply.lines);
     pump();
@@ -212,6 +221,7 @@ function spawn(): Worker | null {
       loadFailed(w);
     }
   });
+
   return w;
 }
 
@@ -222,10 +232,12 @@ function spawn(): Worker | null {
 function timedOut(w: Worker) {
   watchdog = null;
   const job = running;
+
   running = null;
   drop(w);
   if (job) {
     const key = hungKey(job.request);
+
     hung.push(key);
     if (hung.length > HUNG_KEEP) {
       hung.shift();
@@ -245,6 +257,7 @@ function pump() {
     return;
   }
   const w = spawn();
+
   if (!w) {
     return;
   }
@@ -253,6 +266,7 @@ function pump() {
     queue.findIndex((job) => job.urgent()),
   );
   const [job] = queue.splice(at, 1);
+
   running = job;
   watchdog = setTimeout(() => loadFailed(w), LOAD_TIMEOUT_MS);
   w.postMessage(job.request);
@@ -277,15 +291,19 @@ function highlight(
     tokenising: false,
     urgent,
   };
+
   if (hung.includes(hungKey(job.request))) {
     done(null);
+
     return { cancel: () => undefined };
   }
   queue.push(job);
   pump();
+
   return {
     cancel() {
       const at = queue.indexOf(job);
+
       if (at >= 0) {
         queue.splice(at, 1);
       }
@@ -333,11 +351,14 @@ export function useTokens(
         },
       );
     };
+
     if (debounceMs <= 0) {
       start();
+
       return () => ticket?.cancel();
     }
     const timer = setTimeout(start, debounceMs);
+
     return () => {
       clearTimeout(timer);
       ticket?.cancel();

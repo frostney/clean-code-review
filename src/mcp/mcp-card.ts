@@ -65,6 +65,7 @@ const NOT_MODIFIED = 304;
 function documentResponder(document: unknown, type: string) {
   const body = JSON.stringify(document, null, 2);
   const etag = `"${createHash('sha256').update(body).digest('base64url').slice(0, ETAG_CHARS)}"`;
+
   return {
     get(request: Request): Response {
       if (request.headers.get('if-none-match') === etag) {
@@ -73,6 +74,7 @@ function documentResponder(document: unknown, type: string) {
           status: NOT_MODIFIED,
         });
       }
+
       return new Response(body, {
         headers: {
           ...SHARED_HEADERS,

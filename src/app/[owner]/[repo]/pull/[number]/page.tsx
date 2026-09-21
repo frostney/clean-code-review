@@ -40,9 +40,11 @@ const TWITTER_IMAGE = '/twitter-image';
 // Markdown is left in: stripping it properly would mean parsing it.
 function describe(answer: PullRequestAnswer, fallback: string): string {
   const body = answer.ok ? answer.pr.bodyText.replace(/\s+/g, ' ').trim() : '';
+
   if (!body) {
     return fallback;
   }
+
   return body.length > DESCRIPTION_CHARS
     ? `${body.slice(0, DESCRIPTION_CHARS).trimEnd()}…`
     : body;
@@ -61,6 +63,7 @@ export async function generateMetadata({
   const named = await params;
   const ref = refOf(named);
   const robots = { follow: false, index: false };
+
   if (!ref) {
     return { robots };
   }
@@ -71,6 +74,7 @@ export async function generateMetadata({
   // The answer carries the address GitHub redirected to, if any.
   const path =
     (answer.ok ? pullRequestPath(answer.pr.url) : null) ?? pathOf(ref);
+
   return {
     alternates: { canonical: path },
     description,
@@ -107,10 +111,12 @@ export default async function PullRequestPage({
 }) {
   const named = await params;
   const ref = refOf(named);
+
   if (!ref) {
     notFound();
   }
   const answer = await loadPullRequest(ref.url);
+
   return (
     <Shell
       address={{ number: String(ref.number), repo: `${ref.owner}/${ref.repo}` }}

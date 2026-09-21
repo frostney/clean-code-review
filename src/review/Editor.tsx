@@ -71,6 +71,7 @@ function Overlay({
     const el = e.currentTarget;
     const { selectionStart: start, selectionEnd: end, value } = el;
     const next = `${value.slice(0, start)}${INDENT}${value.slice(end)}`;
+
     // Past the limit the indent would cut characters off the end, out of sight.
     if (next.length > REVIEW_LIMITS.maxCharsPerFile) {
       return;
@@ -79,6 +80,7 @@ function Overlay({
     // The controlled value resets the caret on re-render.
     requestAnimationFrame(() => {
       const caret = start + INDENT.length;
+
       el.selectionStart = caret;
       el.selectionEnd = caret;
     });

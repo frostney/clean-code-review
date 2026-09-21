@@ -94,6 +94,7 @@ export function cappedAt(text: string, limit: number): string {
       HIGH_SURROGATE_LAST,
     ) &&
     inRange(text.charCodeAt(limit), LOW_SURROGATE_FIRST, LOW_SURROGATE_LAST);
+
   return text.slice(0, splits ? limit - 1 : limit);
 }
 
@@ -140,6 +141,7 @@ const MAX_CONTROL_SHARE = 0.02;
 
 function looksBinary(content: string): boolean {
   const sample = content.slice(0, BINARY_SAMPLE_CHARS);
+
   if (sample.includes('\0')) {
     return true;
   }
@@ -147,12 +149,15 @@ function looksBinary(content: string): boolean {
     return true;
   }
   let controlCount = 0;
+
   for (let i = 0; i < sample.length; i++) {
     const c = sample.charCodeAt(i);
+
     if (c < FIRST_PRINTABLE && !LAYOUT_CONTROLS.has(c)) {
       controlCount++;
     }
   }
+
   return sample.length > 0 && controlCount / sample.length > MAX_CONTROL_SHARE;
 }
 
@@ -168,6 +173,7 @@ export function skipReason(file: {
   if (GENERATED_PATH.test(file.path)) {
     return 'generated';
   }
+
   return null;
 }
 
@@ -182,8 +188,10 @@ export function partitionJudgeable<T extends { path: string; content: string }>(
   const judgeable: T[] = [];
   const prose: T[] = [];
   const skipped: { path: string; reason: SkipReason }[] = [];
+
   for (const f of files) {
     const reason = skipReason(f);
+
     if (reason) {
       skipped.push({ path: f.path, reason });
     } else if (isProsePath(f.path)) {
@@ -192,5 +200,6 @@ export function partitionJudgeable<T extends { path: string; content: string }>(
       judgeable.push(f);
     }
   }
+
   return { judgeable, prose, skipped };
 }

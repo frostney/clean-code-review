@@ -17,8 +17,10 @@ const TOO_MANY_REQUESTS = 429;
 
 export function describeTurnError(message: string): TurnTrouble {
   const unjudged = UNJUDGED.exec(message);
+
   if (unjudged) {
     const one = unjudged[1] === '1';
+
     return {
       retry: false,
       sentence: `Jev sent no answer for ${one ? 'one file' : `${unjudged[1]} files`}.`,
@@ -47,6 +49,7 @@ export function describeTurnError(message: string): TurnTrouble {
     };
   }
   const status = HTTP_STATUS.exec(message);
+
   if (status) {
     return {
       retry: true,
@@ -65,6 +68,7 @@ export function describeTurnError(message: string): TurnTrouble {
       tone: 'error',
     };
   }
+
   return {
     retry: true,
     sentence: 'Judging stopped before it finished.',
@@ -80,5 +84,6 @@ export function plainReason(message: string): string {
   if (HTTP_STATUS.test(message)) {
     return 'the reviewer answered with an error';
   }
+
   return message;
 }

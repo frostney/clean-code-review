@@ -40,6 +40,7 @@ export function withoutSignalLines(push: (delta: string) => void): {
   let plain = false;
   const settleHeld = () => {
     const head = held.trimStart();
+
     if (
       head.length > 0 &&
       !SIGNAL_START.startsWith(head) &&
@@ -58,6 +59,7 @@ export function withoutSignalLines(push: (delta: string) => void): {
     held = '';
     plain = false;
   };
+
   return {
     end: endLine,
     write(delta) {
@@ -132,15 +134,18 @@ interface SummaryParse {
 /** Null when the line is not a decision line at all. */
 function readDecisionLine(line: string): Decision | 'unrecognised' | null {
   const match = /^\s*\**decision\**\s*[:：]\s*\**\s*([a-z_ ]+)/i.exec(line);
+
   if (!match) {
     return null;
   }
   const named = match[1].trim().toLowerCase().replace(/\s+/g, '_') as Decision;
+
   return DECISIONS.includes(named) ? named : 'unrecognised';
 }
 
 function readHeading(line: string): string | null {
   const heading = /^\s*#{1,6}\s+(.+?)\s*$/.exec(line);
+
   // Models decorate headings: `path`, **path**, _path_.
   return heading ? heading[1].replace(/^[`*_\s]+|[`*_\s]+$/g, '').trim() : null;
 }
@@ -170,6 +175,7 @@ export function onlyOwnSections(
 
   const settleHeld = () => {
     const head = held.trimStart();
+
     if (head.length === 0 || head.startsWith('#')) {
       return;
     }
@@ -182,6 +188,7 @@ export function onlyOwnSections(
   const endLine = (newline: string) => {
     if (keep === null) {
       const title = readHeading(held);
+
       if (title !== null) {
         skipping = !ownsSection(part, title);
       }
@@ -196,6 +203,7 @@ export function onlyOwnSections(
     held = '';
     keep = null;
   };
+
   return {
     end: () => endLine(''),
     write(delta) {
@@ -221,6 +229,7 @@ function flushSection(parse: SummaryParse): void {
       summary: parse.current.join('\n').trim(),
     };
     const earlier = parse.files.findIndex((f) => f.path === section.path);
+
     if (earlier === -1) {
       parse.files.push(section);
     } else {
@@ -233,6 +242,7 @@ function flushSection(parse: SummaryParse): void {
 
 function readSignalLine(parse: SummaryParse, line: string): boolean {
   const trimmed = line.trim();
+
   if (trimmed === OVERALL_REWRITE_LINE) {
     // Ignored after files start: only the overall part, which comes first, may rewrite.
     if (parse.filesStarted) {
@@ -243,9 +253,11 @@ function readSignalLine(parse: SummaryParse, line: string): boolean {
     parse.overall.length = 0;
     parse.overallIncomplete = false;
     parse.current = parse.overall;
+
     return true;
   }
   const cut = CUT_OFF.exec(trimmed)?.[1];
+
   if (cut === undefined) {
     return false;
   }
@@ -254,6 +266,7 @@ function readSignalLine(parse: SummaryParse, line: string): boolean {
   } else {
     parse.incomplete.add(cut);
   }
+
   return true;
 }
 
@@ -263,6 +276,7 @@ function openSection(parse: SummaryParse, title: string): void {
   if (/^overall$/i.test(title)) {
     parse.currentPath = null;
     parse.current = parse.filesStarted ? [] : parse.overall;
+
     return;
   }
   parse.filesStarted = true;
@@ -272,10 +286,12 @@ function openSection(parse: SummaryParse, title: string): void {
 
 function readSummaryLine(parse: SummaryParse, raw: string): void {
   const line = raw.trimEnd();
+
   if (readSignalLine(parse, line)) {
     return;
   }
   const named = readDecisionLine(line);
+
   if (
     named &&
     !parse.filesStarted &&
@@ -285,6 +301,7 @@ function readSummaryLine(parse: SummaryParse, raw: string): void {
     if (named !== 'unrecognised') {
       parse.decision = named;
     }
+
     return;
   }
   // A bare "##" is a heading still arriving: hold it out of the text.
@@ -292,8 +309,10 @@ function readSummaryLine(parse: SummaryParse, raw: string): void {
     return;
   }
   const title = readHeading(line);
+
   if (title !== null) {
     openSection(parse, title);
+
     return;
   }
   parse.current?.push(line);
@@ -310,13 +329,16 @@ export function parseSummaryText(text: string, partial = false): Summary {
     overall: [],
     overallIncomplete: false,
   };
+
   for (const raw of text.replace(/\r\n?/g, '\n').split('\n')) {
     readSummaryLine(parse, raw);
   }
   const writing =
     parse.currentPath ??
     (parse.current === parse.overall ? OVERALL_SECTION : null);
+
   flushSection(parse);
+
   return {
     decision: parse.decision,
     files: [

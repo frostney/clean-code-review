@@ -28,12 +28,14 @@ export const THEME_SCRIPT = `try{var t=localStorage.getItem(${JSON.stringify(THE
 export function readChoice(): ThemeChoice {
   try {
     const stored = localStorage.getItem(THEME_KEY);
+
     if (stored === 'dark' || stored === 'light' || stored === 'system') {
       return stored;
     }
   } catch {
     // Storage unavailable: fall back to system.
   }
+
   return 'system';
 }
 

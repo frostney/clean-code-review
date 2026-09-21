@@ -18,6 +18,7 @@ function Tokens({ line }: { line: TokenLine | undefined }) {
   if (!line || !line.length) {
     return <> </>;
   }
+
   return (
     <>
       {line.map((token, i) => (
@@ -99,6 +100,7 @@ export function useDiffTokens(
         .join('\n'),
     [lines],
   );
+
   return useTokens(stripped, lang, debounceMs, onScreen);
 }
 

@@ -401,11 +401,13 @@ const BY_FILENAME: Record<string, KnownLang> = {
 function extensionOf(path: string): string {
   const base = path.slice(path.lastIndexOf('/') + 1);
   const dot = base.lastIndexOf('.');
+
   return dot <= 0 ? '' : base.slice(dot + 1).toLowerCase();
 }
 
 export function langOf(path: string): Lang {
   const base = path.slice(path.lastIndexOf('/') + 1).toLowerCase();
+
   return BY_EXTENSION[extensionOf(path)] ?? BY_FILENAME[base] ?? 'text';
 }
 
@@ -416,6 +418,7 @@ export function langLabel(lang: Lang): string {
 /** `src/billing/refund.ts` → `["src/billing/", "refund.ts"]`. */
 export function splitPath(path: string): [string, string] {
   const cut = path.lastIndexOf('/');
+
   return cut < 0 ? ['', path] : [path.slice(0, cut + 1), path.slice(cut + 1)];
 }
 
@@ -436,8 +439,10 @@ function shortestExtension(extensions: readonly string[]): string {
  */
 function fenceExtensions(): Record<string, string> {
   const byLang = new Map<Lang, string[]>();
+
   for (const [extension, lang] of Object.entries(BY_EXTENSION)) {
     const known = byLang.get(lang);
+
     if (known) {
       known.push(extension);
     } else {
@@ -445,8 +450,10 @@ function fenceExtensions(): Record<string, string> {
     }
   }
   const names: Record<string, string> = {};
+
   for (const [lang, extensions] of byLang) {
     const extension = shortestExtension(extensions);
+
     for (const name of [
       lang,
       ...(ALIASES_BY_ID.get(lang) ?? []),
@@ -457,6 +464,7 @@ function fenceExtensions(): Record<string, string> {
   }
   // Not a shiki alias.
   names.golang = 'go';
+
   return names;
 }
 
@@ -466,6 +474,7 @@ const EXTENSION_BY_FENCE = fenceExtensions();
 export function extensionFromHint(firstLine: string): string | null {
   const line = firstLine.trim();
   const fence = /^```+\s*([A-Za-z0-9+#-]+)\s*$/.exec(line);
+
   if (fence) {
     return EXTENSION_BY_FENCE[fence[1].toLowerCase()] ?? null;
   }
@@ -481,12 +490,15 @@ export function extensionFromHint(firstLine: string): string | null {
   // e.g. `// src/thing.ts`. Prose names are ignored: `// README.md — usage`
   // above code is about the README, and would make the paste unjudged.
   const named = /^(?:\/\/|#|\/\*)\s*\S*?\.([A-Za-z0-9]+)\b/.exec(line);
+
   if (named) {
     const extension = named[1].toLowerCase();
+
     if (BY_EXTENSION[extension] && !isProsePath(`x.${extension}`)) {
       return extension;
     }
   }
+
   return null;
 }
 
@@ -573,5 +585,6 @@ const CONTENT_RULES: readonly {
  */
 export function extensionFromContent(code: string): string | null {
   const text = code.slice(0, CONTENT_SAMPLE_CHARS);
+
   return CONTENT_RULES.find((rule) => rule.matches(text))?.extension ?? null;
 }

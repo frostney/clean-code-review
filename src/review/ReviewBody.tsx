@@ -60,6 +60,7 @@ export function ReviewBody() {
 
   // Reset during render, not in an effect a frame later.
   const [foldedFor, setFoldedFor] = useState(review.id);
+
   if (foldedFor !== review.id) {
     setFoldedFor(review.id);
     setCollapsed({});
@@ -82,7 +83,9 @@ export function ReviewBody() {
         return current;
       }
       const next = { ...current };
+
       delete next[path];
+
       return next;
     });
     setRevealed({
@@ -189,11 +192,13 @@ export function ReviewBody() {
               onToggle={() =>
                 setCollapsed((current) => {
                   const next = { ...current };
+
                   if (next[file.path]) {
                     delete next[file.path];
                   } else {
                     next[file.path] = true;
                   }
+
                   return next;
                 })
               }
@@ -245,6 +250,7 @@ const CLOCK_TO = 16;
 /** Rounded up, so it never shows a time before the real one. */
 function clock(ms: number): string {
   const minute = Math.ceil(ms / MS_PER_MINUTE) * MS_PER_MINUTE;
+
   return `${new Date(minute).toISOString().slice(CLOCK_FROM, CLOCK_TO)} UTC`;
 }
 
@@ -262,6 +268,7 @@ function ReviewsPaused({ paused }: { paused: LocalPause }) {
   }
   const day = paused.window === 'day';
   const at = day ? 'midnight UTC' : clock(Date.parse(paused.resetsAt));
+
   return (
     <Notice data-budget="paused" data-window={paused.window} tone="warn">
       <strong className="font-semibold">

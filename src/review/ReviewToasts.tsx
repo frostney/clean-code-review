@@ -22,6 +22,7 @@ function useRaised(value: string | null): {
     last: value,
     value,
   });
+
   if (seen.value === value) {
     return seen;
   }
@@ -30,7 +31,9 @@ function useRaised(value: string | null): {
     last: value ?? seen.last,
     value,
   };
+
   setSeen(next);
+
   return next;
 }
 
@@ -40,10 +43,12 @@ function usePullRequestToast(): ToastItem | null {
   // During a retry the old error stays up, busy; it is raised again when the
   // answer lands.
   const raised = useRaised(prError && !retryingPr ? prError : null);
+
   if (!prError) {
     return null;
   }
   const trouble = describePullRequestError(prError);
+
   return {
     action: trouble.retry
       ? {
@@ -79,8 +84,10 @@ function nextPhase(
       return 'running';
     }
     const dropped = !retryable || judge.budgetSpent || judge.error === null;
+
     return dropped ? null : 'waiting';
   }
+
   return phase === 'running' && !judge.asking ? null : phase;
 }
 
@@ -93,6 +100,7 @@ function useJudgeToast(retryable: boolean): ToastItem | null {
   // so the button under the reader's finger never disappears.
   const [retry, setRetry] = useState<RetryPhase>(null);
   const phase = nextPhase(retry, reviewState, retryable);
+
   if (phase !== retry) {
     setRetry(phase);
   }
@@ -103,15 +111,18 @@ function useJudgeToast(retryable: boolean): ToastItem | null {
   const [presses, setPresses] = useState(0);
 
   const error = reviewState.error ?? (phase ? raised.last : null);
+
   if (!error || (phase === null && raised.count === dismissed)) {
     return null;
   }
   const trouble = describeTurnError(error);
+
   // The budget-spent notice supersedes a retryable failure.
   if (trouble.retry && reviewState.budgetSpent) {
     return null;
   }
   const canRetry = trouble.retry && (retryable || phase !== null);
+
   return {
     action: canRetry
       ? {
@@ -146,5 +157,6 @@ export function ReviewToasts({ retryable }: { retryable: boolean }) {
   const pr = usePullRequestToast();
   const judged = useJudgeToast(retryable);
   const toasts = [pr, judged].filter((t): t is ToastItem => t !== null);
+
   return <ToastRegion toasts={toasts} />;
 }

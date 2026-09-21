@@ -44,6 +44,7 @@ export function pausedReply(
     waitMs: Math.max(0, resetsAt.getTime() - now.getTime()),
     window,
   };
+
   // `kind` must stay the first key for `PAUSED_PREFIX` to match.
   return JSON.stringify(reply);
 }
@@ -52,11 +53,13 @@ export function parsePaused(
   text: string | null | undefined,
 ): PausedReply | null {
   const trimmed = text?.trim() ?? '';
+
   if (!trimmed.startsWith(PAUSED_PREFIX)) {
     return null;
   }
   try {
     const reply = JSON.parse(trimmed) as Partial<PausedReply>;
+
     if (
       !(reply.window && WINDOWS.includes(reply.window)) ||
       typeof reply.resetsAt !== 'string' ||
@@ -68,6 +71,7 @@ export function parsePaused(
       typeof reply.waitMs === 'number' && Number.isFinite(reply.waitMs)
         ? Math.max(0, reply.waitMs)
         : Math.max(0, Date.parse(reply.resetsAt) - Date.now());
+
     return {
       kind: 'paused',
       resetsAt: reply.resetsAt,
@@ -82,6 +86,7 @@ export function parsePaused(
 /** True while a partial stream could still become a paused reply, so it is not painted as a review. */
 export function mayBePaused(text: string): boolean {
   const head = text.trimStart();
+
   return head.length < PAUSED_PREFIX.length
     ? PAUSED_PREFIX.startsWith(head) && head.length > 0
     : head.startsWith(PAUSED_PREFIX);

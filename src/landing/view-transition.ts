@@ -20,8 +20,10 @@ let pinned = 0;
 export function switchView(update: () => void): void {
   const doc: Transitional = document;
   const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
   if (still || !doc.startViewTransition) {
     update();
+
     return;
   }
   // The distance is copied once, here, because the keyframes re-read it every
@@ -30,6 +32,7 @@ export function switchView(update: () => void): void {
   // and it is dropped when the animation it belongs to is over.
   const root = document.documentElement;
   const mine = ++pinned;
+
   root.style.setProperty(
     SHIFT,
     getComputedStyle(root).getPropertyValue(TRAVEL).trim() || '0px',
@@ -50,6 +53,7 @@ export function switchView(update: () => void): void {
   const skipped = () => {
     /* The state change already happened. */
   };
+
   transition.ready.catch(skipped);
   // A transition skipped by a second one starting on top must leave that
   // one's copy alone.
@@ -60,6 +64,7 @@ export function switchView(update: () => void): void {
     root.style.removeProperty(SHIFT);
     delete root.dataset.nav;
   };
+
   transition.finished.then(done, () => {
     skipped();
     done();

@@ -39,10 +39,12 @@ export function createThrottle(
 ): (ip: string | null | undefined) => boolean {
   // LRU via Map insertion order: every counted call re-inserts its bucket.
   const seen = new Map<string, number[]>();
+
   return (ip) => {
     const bucket = addressBucket(ip);
     const now = Date.now();
     const recent = (seen.get(bucket) ?? []).filter((t) => now - t < windowMs);
+
     if (recent.length >= limit) {
       return true;
     }
@@ -55,6 +57,7 @@ export function createThrottle(
       }
       seen.delete(oldest);
     }
+
     return false;
   };
 }
@@ -78,6 +81,7 @@ function stopAsking(rule: string, until: number, why: string): false {
   console.warn(
     `[rate-limit] The Firewall rule "${rule}" ${why}; the per-instance throttle is the only bound on this instance.`,
   );
+
   return false;
 }
 
@@ -104,6 +108,7 @@ export async function overSharedLimit(
       headers,
       rateLimitKey: addressBucket(ip),
     });
+
     return error === 'not-found'
       ? stopAsking(
           rule,

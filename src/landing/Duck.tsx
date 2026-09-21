@@ -25,6 +25,7 @@ export function LandingDuck({
   children: ReactNode;
 }) {
   const { open } = useReviewView();
+
   if (open) {
     return null;
   }
@@ -45,6 +46,7 @@ export function LandingDuck({
 export function HomeDuck({ children }: { children: ReactNode }) {
   const { open } = useReviewView();
   const { goHome } = useReviewControls();
+
   if (!open) {
     return null;
   }

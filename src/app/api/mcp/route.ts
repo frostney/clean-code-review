@@ -22,6 +22,7 @@ const BAD_REQUEST = 400;
  */
 async function post(request: Request): Promise<Response> {
   const body = await request.clone().text();
+
   if (body.trimStart().startsWith('[')) {
     return Response.json(
       {
@@ -36,6 +37,7 @@ async function post(request: Request): Promise<Response> {
       { status: BAD_REQUEST },
     );
   }
+
   return handler(request);
 }
 

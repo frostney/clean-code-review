@@ -6,9 +6,11 @@ import { DARK_QUERY, type Theme } from './theme';
 
 function currentTheme(): Theme {
   const chosen = document.documentElement.dataset.theme;
+
   if (chosen === 'dark' || chosen === 'light') {
     return chosen;
   }
+
   return window.matchMedia(DARK_QUERY).matches ? 'dark' : 'light';
 }
 
@@ -25,12 +27,15 @@ export function useTheme(): Theme {
     }
     sync();
     const observer = new MutationObserver(sync);
+
     observer.observe(document.documentElement, {
       attributeFilter: ['data-theme'],
       attributes: true,
     });
     const media = window.matchMedia(DARK_QUERY);
+
     media.addEventListener('change', sync);
+
     return () => {
       observer.disconnect();
       media.removeEventListener('change', sync);

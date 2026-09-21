@@ -23,6 +23,7 @@ export default async function Image() {
     join(process.cwd(), 'public', 'icons', 'icon-512.png'),
   );
   const duckSrc = `data:image/png;base64,${duck.toString('base64')}`;
+
   return new ImageResponse(
     <div
       style={{

@@ -56,6 +56,7 @@ function storedBytes(pr: PullRequestReview): number {
 export const loadPullRequest = cache(
   async (input: string): Promise<PullRequestAnswer> => {
     const ref = parsePullRequest(input);
+
     if (!ref) {
       return { error: NOT_A_PULL_REQUEST, ok: false };
     }
@@ -67,11 +68,13 @@ export const loadPullRequest = cache(
           if (await githubFetchThrottled(await headers())) {
             throw new Error(THROTTLE_MESSAGE);
           }
+
           return fetchPullRequest(ref.url);
         },
         CACHE_SECONDS,
         storedBytes,
       );
+
       return {
         ok: true,
         pr: {

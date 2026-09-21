@@ -22,16 +22,19 @@ export const NO_ADDRESS: PullRequestAddress = { number: '', repo: '' };
 export function splitPullRequest(pasted: string): PullRequestAddress | null {
   const text = pasted.trim();
   const url = PR_URL.exec(text) ?? PR_PATH.exec(text);
+
   return url ? { number: url[2], repo: url[1].replace(/\.git$/i, '') } : null;
 }
 
 export function pullRequestUrl(repo: string, number: string): string {
   const owner = repo.trim().replace(/^\/+|\/+$/g, '');
+
   return `https://${HOST_PREFIX}${owner}${PULL_INFIX}${number.trim()}`;
 }
 
 export function pullRequestPath(url: string): string | null {
   const parts = splitPullRequest(url);
+
   // Lower case, matching the server's cache keys and canonical link.
   return parts
     ? `/${parts.repo.toLowerCase()}${PULL_INFIX}${parts.number}`

@@ -263,6 +263,7 @@ const PAGES = new Map<string, string>([
 
 function pullRequestMarkdown(owner: string, repo: string, id: number): string {
   const path = `/${owner}/${repo}/pull/${id}`;
+
   return `# ${owner}/${repo}#${id} · ${SITE.name}
 
 \`${path}\` is where this site keeps its review of
@@ -296,9 +297,11 @@ ${INDEXES}
 function pullRequestAt(pathname: string) {
   const parts = pathname.split('/');
   const [, owner, repo, pull, id] = parts;
+
   if (parts.length !== PULL_PATH_SEGMENTS || pull !== 'pull') {
     return null;
   }
+
   return parsePullRequest(pullRequestUrl(`${owner}/${repo}`, id));
 }
 
@@ -316,10 +319,12 @@ function normalize(pathname: string): string {
 export function markdownFor(pathname: string): string | null {
   const path = normalize(pathname);
   const page = PAGES.get(path);
+
   if (page) {
     return page;
   }
   const pr = pullRequestAt(path);
+
   return pr ? pullRequestMarkdown(pr.owner, pr.repo, pr.number) : null;
 }
 

@@ -32,6 +32,7 @@ console.log('model', (await client.info()).agent.model.id);
 
 function headline(a: Answers, id: string): string {
   const x = a[id];
+
   if (!x) {
     return '—';
   }
@@ -41,6 +42,7 @@ function headline(a: Answers, id: string): string {
   if (x.type === 'score') {
     return x.score.toFixed(1);
   }
+
   return x.choice;
 }
 
@@ -48,10 +50,12 @@ let session:
   | Awaited<ReturnType<typeof client.sessions.create>>['session']
   | undefined;
 let failures = 0;
+
 for (const preset of PRESETS) {
   const started = performance.now();
   let response: MessageResponse;
   const message = judgeMessage({ files: preset.files });
+
   if (!session) {
     ({ session, response } = await client.sessions.create({ message }));
   } else {
@@ -70,6 +74,7 @@ for (const preset of PRESETS) {
       Object.keys(review?.files[file.path]?.answers ?? {}).length ===
       questionsFor(file).length,
   );
+
   if (
     result.status === 'failed' ||
     budgetPrompt ||

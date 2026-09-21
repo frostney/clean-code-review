@@ -9,17 +9,20 @@ export function filesFromPatch(patch: string): ReviewFile[] {
     ? /^(?=diff --git )/m
     : /^(?=--- (?:a\/|\S))(?=[^\n]*\n\+\+\+ )/m;
   const sections = text.split(splitter).filter((s) => s.trim());
+
   for (const section of sections) {
     // No hunk: binary files, pure renames, mode changes.
     if (!/^@@ /m.test(section)) {
       continue;
     }
     const target = /^\+\+\+ (?:b\/)?([^\t\n]+)/m.exec(section)?.[1]?.trim();
+
     if (target === '/dev/null') {
       continue;
     }
     const header = /^diff --git a\/(.+?) b\/(.+)$/m.exec(section);
     const path = target || header?.[2] || header?.[1];
+
     if (!path) {
       continue;
     }
@@ -28,11 +31,13 @@ export function filesFromPatch(patch: string): ReviewFile[] {
       patch: true,
       path: path.trim(),
     };
+
     if (skipReason(file) !== null) {
       continue;
     }
     files.push(file);
   }
+
   return files;
 }
 
@@ -67,6 +72,7 @@ export function leavesHunk(line: string, next: string | undefined): boolean {
   if (!HUNK_MARKERS.includes(line[0])) {
     return true;
   }
+
   // `diff -u` output has no `diff --git` line to give the change away.
   return line.startsWith('--- ') && next?.startsWith('+++ ') === true;
 }
@@ -76,6 +82,7 @@ function afterLine(line: string): string | null {
   if (line.startsWith('+') || line.startsWith(' ')) {
     return line.slice(1);
   }
+
   return line === '' ? '' : null;
 }
 
@@ -87,21 +94,25 @@ export function afterImage(patch: string): string {
   const out: string[] = [];
   let inHunk = false;
   const lines = patch.replace(/\r\n?/g, '\n').split('\n');
+
   lines.forEach((line, i) => {
     if (isHunkHeader(line)) {
       if (inHunk) {
         out.push('');
       }
       inHunk = true;
+
       return;
     }
     if (inHunk && leavesHunk(line, lines[i + 1])) {
       inHunk = false;
     }
     const after = inHunk ? afterLine(line) : null;
+
     if (after !== null) {
       out.push(after);
     }
   });
+
   return out.join('\n');
 }

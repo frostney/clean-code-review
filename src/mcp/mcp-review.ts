@@ -97,17 +97,20 @@ function until(when: Date, now: Date): string {
     hours ? `${hours} hour${hours === 1 ? '' : 's'}` : '',
     rest ? `${rest} minute${rest === 1 ? '' : 's'}` : '',
   ].filter(Boolean);
+
   return `in ${parts.join(' ')}`;
 }
 
 function budgetSpent(check: SpendRefusal): string {
   const now = new Date();
   const at = check.resetsAt.toISOString().slice(CLOCK_FROM, CLOCK_TO);
+
   if (check.window === 'unavailable') {
     return `This endpoint cannot read its model budget right now, so it is not starting new model work. Call again ${until(check.resetsAt, now)}; a review whose answers are all cached is served meanwhile.`;
   }
   const window = check.window === 'hour' ? 'this hour' : 'today (UTC)';
   const per = check.window === 'hour' ? 'per hour' : 'per UTC day';
+
   return `This endpoint's model budget for ${window} is spent: ${dollars(check.capUsd)} ${per}, shared by every caller. It resets at ${at} UTC, ${until(check.resetsAt, now)}. Call again after that; a review whose answers are all cached is served even while the budget is spent.`;
 }
 
@@ -129,6 +132,7 @@ async function fetchCachedPullRequest(
   input: string,
 ): Promise<{ pr: PullRequestReview; hit: boolean; url: string }> {
   const ref = parsePullRequest(input);
+
   if (!ref) {
     throw new ReviewError(NOT_A_PULL_REQUEST);
   }
@@ -140,9 +144,11 @@ async function fetchCachedPullRequest(
       PULL_REQUEST_CACHE_SECONDS,
       storedBytes,
     );
+
     return { hit, pr: value, url: ref.url };
   } catch (err) {
     const message = err instanceof Error ? err.message : '';
+
     throw new ReviewError(
       GITHUB_MESSAGES.test(message)
         ? message
@@ -155,6 +161,7 @@ async function fetchCachedPullRequest(
 function sectionPath(section: string): string | null {
   const target = /^\+\+\+ (?:b\/)?([^\t\n]+)/m.exec(section)?.[1]?.trim();
   const header = /^diff --git a\/(.+?) b\/(.+)$/m.exec(section);
+
   return target === '/dev/null'
     ? (header?.[1] ?? null)
     : target || header?.[2] || null;
@@ -167,6 +174,7 @@ function droppedReason(section: string, path: string): NotJudgedReason {
   if (!/^@@ /m.test(section)) {
     return 'no_hunks';
   }
+
   return skipReason({ content: section, path }) ?? 'generated';
 }
 
@@ -181,12 +189,15 @@ function droppedFromDiff(
     .split(/^(?=diff --git )/m)
     .filter((s) => s.startsWith('diff --git '));
   const dropped: Opened['dropped'] = [];
+
   for (const section of sections) {
     const path = sectionPath(section);
+
     if (path && !keptPaths.has(path)) {
       dropped.push({ path, reason: droppedReason(section, path) });
     }
   }
+
   return { dropped, sections: sections.length };
 }
 
@@ -212,11 +223,13 @@ async function openPullRequest(input: string): Promise<Opened> {
       ? ('over_prose_cap' as const)
       : ('over_code_cap' as const),
   }));
+
   if (!review) {
     throw new ReviewError(
       'Nothing in that pull request is code to judge: every file it changes is prose, generated, binary or deleted.',
     );
   }
+
   return {
     dropped: [...dropped, ...capped],
     pr: { body: pr.body, title: pr.title, url: pr.url },
@@ -235,6 +248,7 @@ async function openPullRequest(input: string): Promise<Opened> {
 
 function openPaste(text: string): Opened {
   const review = fromPaste(text, 'mcp');
+
   if (!review) {
     throw new ReviewError('The paste holds no code to judge.');
   }
@@ -250,6 +264,7 @@ function openPaste(text: string): Opened {
         ? ('over_prose_cap' as const)
         : ('over_code_cap' as const),
     }));
+
   return {
     dropped: [
       ...review.skipped.map((s) => ({ path: s.path, reason: s.reason })),
@@ -266,9 +281,11 @@ function openPaste(text: string): Opened {
 function sentFiles(review: OpenReview): ReviewFile[] {
   return review.files.map((file) => {
     const header = review.headers[file.path];
+
     if (!file.patch || !header || !file.content.trim()) {
       return file;
     }
+
     return { ...file, content: withPatchHeader(header, file.content) };
   });
 }
@@ -279,16 +296,19 @@ type LabelledAnswer = ReviewOutput['files'][number]['answers'][string];
 
 function labelledAnswer(id: string, a: Answers[string]): LabelledAnswer | null {
   const q = questionById(id);
+
   if (!q) {
     return null;
   }
   const group = GROUPS.find((g) => g.id === q.group)?.title ?? q.group;
+
   if (a.type === 'noul') {
     return { group, label: q.label, probability: a.noul, type: 'noul' };
   }
   if (a.type !== 'score' || q.type !== 'score') {
     return null;
   }
+
   return {
     group,
     label: q.label,
@@ -303,12 +323,15 @@ function labelledAnswer(id: string, a: Answers[string]): LabelledAnswer | null {
 
 function labelled(answers: Answers): Record<string, LabelledAnswer> {
   const out: Record<string, LabelledAnswer> = {};
+
   for (const [id, a] of Object.entries(answers)) {
     const row = labelledAnswer(id, a);
+
     if (row) {
       out[id] = row;
     }
   }
+
   return out;
 }
 
@@ -331,6 +354,7 @@ async function writeReview(
   const none = { summary: null, usage: { cached: false, costUsd: 0 } };
   const plan = await planReview(input);
   const admission = await spend.reserve(reviewEstimateUsd(plan));
+
   if (!admission.ok) {
     return {
       ...none,
@@ -339,6 +363,7 @@ async function writeReview(
   }
   const timeout = AbortSignal.timeout(REVIEW_TIMEOUT_MS);
   const usage = emptyReviewUsage();
+
   try {
     const written = await runReview(
       plan,
@@ -348,6 +373,7 @@ async function writeReview(
       AbortSignal.any([signal, timeout]),
       usage,
     );
+
     return { summary: parseSummaryText(written.text), usage: written.usage };
   } catch {
     if (signal.aborted) {
@@ -355,6 +381,7 @@ async function writeReview(
     }
     const retry =
       "Jev's answers are complete. Call again to retry: the answers come back from the cache.";
+
     return {
       ...none,
       notice: timeout.aborted
@@ -368,9 +395,11 @@ async function writeReview(
 
 function cutOffWhat(files: number, overall: boolean): string {
   const paragraphs = `the paragraphs marked reviewIncomplete (${files})`;
+
   if (files && overall) {
     return `the overall paragraph and ${paragraphs} are`;
   }
+
   return files ? `${paragraphs} are` : 'the overall paragraph is';
 }
 
@@ -387,17 +416,20 @@ async function reviewOpened(
   const empty = sent
     .filter((f) => !(isProsePath(f.path) || f.content.trim()))
     .map((f) => ({ path: f.path, reason: 'empty' as const }));
+
   if (!code.length) {
     throw new ReviewError('Nothing in that input is code to judge.');
   }
 
   // Estimates uncached files only, so a fully cached review is always served.
   const admission = await spend.reserve(await judgeEstimateUsd(code));
+
   if (!admission.ok) {
     throw new ReviewError(budgetSpent(admission));
   }
 
   let judged: Awaited<ReturnType<typeof judgeReview>>;
+
   try {
     judged = await judgeReview({ files: code }, signal);
   } catch (err) {
@@ -433,6 +465,7 @@ async function reviewOpened(
     pr: opened.pr,
   };
   const written = await writeReview(reviewInput, signal);
+
   if (written.notice) {
     notices.push(written.notice);
   }
@@ -442,6 +475,7 @@ async function reviewOpened(
   const cutOff = new Set(
     summary?.files.filter((f) => f.incomplete).map((f) => f.path),
   );
+
   if (cutOff.size || summary?.overallIncomplete) {
     notices.push(
       `Luna ran into its output limit twice on part of this review, so ${cutOffWhat(
@@ -459,6 +493,7 @@ async function reviewOpened(
     reviewIncomplete: cutOff.has(f.path),
     truncated: opened.review.truncated[f.path] === true,
   }));
+
   return {
     cache: {
       judgedFromCache: files.filter((f) => f.cached).length,
@@ -495,6 +530,7 @@ export async function reviewPullRequest(
   signal: AbortSignal,
 ): Promise<ReviewOutput> {
   const started = performance.now();
+
   return reviewOpened(await openPullRequest(url), signal, started);
 }
 
@@ -504,5 +540,6 @@ export async function reviewPaste(
   signal: AbortSignal,
 ): Promise<ReviewOutput> {
   const started = performance.now();
+
   return reviewOpened(openPaste(text), signal, started);
 }

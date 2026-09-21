@@ -19,6 +19,7 @@ function arrival(index: number): {
   viewTransitionName: string;
 } {
   const step = Math.min(index, LAST_STEP);
+
   return {
     viewTransitionClass: step ? `faq faq-step-${step}` : 'faq',
     viewTransitionName: `faq-${index}`,
@@ -29,9 +30,11 @@ function arrival(index: number): {
 function answerNodes(answer: string): ReactNode[] {
   return answer.split(FAQ_LINK_PATTERN).map((part) => {
     const link = FAQ_LINKS.find((item) => item.text === part);
+
     if (!link) {
       return part;
     }
+
     return (
       <a
         className={LINK_CLASS}

@@ -71,6 +71,7 @@ export function FilePath({
   className?: string;
 }) {
   const [dir, base] = splitPath(path);
+
   if (stacked) {
     return (
       <span
@@ -82,6 +83,7 @@ export function FilePath({
       </span>
     );
   }
+
   return (
     <span
       className={`flex min-w-0 font-mono text-xs ${className}`}
@@ -298,9 +300,11 @@ function FindingGroup({
   questions: readonly Question[];
 }) {
   const rows = questions.filter((q) => q.group === group.id);
+
   if (!rows.length) {
     return null;
   }
+
   return (
     <div className="@container/group mb-2 last:mb-0">
       <div className="mb-1 flex flex-wrap items-center gap-x-2 border-b border-line px-1.5 pb-1">
@@ -347,6 +351,7 @@ function codeSpace(
   if (!editable) {
     return;
   }
+
   return {
     containIntrinsicBlockSize: `auto ${lines * CODE_ROW_PX + CODE_PAD_PX}px`,
     contentVisibility: 'auto',
@@ -374,6 +379,7 @@ function BodySpace({
     '--space-lines': lines,
     '--space-rows': rows,
   } as CSSProperties;
+
   // Not a scroll anchor: it is about to be replaced.
   return (
     <div
@@ -461,6 +467,7 @@ export function FileCard({
 
   useEffect(() => {
     const article = articleRef.current;
+
     return deferred && article ? watch(article, file.path) : undefined;
   }, [deferred, watch, file.path]);
 

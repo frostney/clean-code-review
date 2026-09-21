@@ -35,6 +35,7 @@ export function ThemeToggle() {
         // From storage, not state: two clicks in one task would otherwise step
         // off the same stale value.
         const next = nextChoice(readChoice());
+
         applyChoice(next);
         setChoice(next);
       }}

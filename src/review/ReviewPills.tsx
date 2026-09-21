@@ -50,6 +50,7 @@ export function ReviewPills({
 // Says which model is working, since Jev and Luna take very different times.
 function ReviewStatus({ review }: { review: ReviewState }) {
   const base = 'flex items-center gap-1.5 text-xs';
+
   if (review.budgetSpent) {
     return (
       <span className={`${base} text-muted`} data-status="budget-spent">
@@ -85,5 +86,6 @@ function ReviewStatus({ review }: { review: ReviewState }) {
       </span>
     );
   }
+
   return null;
 }

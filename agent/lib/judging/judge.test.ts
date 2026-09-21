@@ -14,6 +14,7 @@ function lines(chars: number): string {
 describe('judgePlan', () => {
   test('a short file is one window of each pass', () => {
     const plan = judgePlan({ content: '// why\nconst a = 1;\n', path: 'a.ts' });
+
     assert.equal(plan.a.length, 1);
     assert.equal(plan.b.length, 1);
     assert.equal(plan.cut, false);
@@ -21,12 +22,14 @@ describe('judgePlan', () => {
 
   test('a file without comments is judged once, with a lean of zero', () => {
     const plan = judgePlan({ content: LINE, path: 'a.ts' });
+
     assert.equal(plan.b.length, 0);
     assert.equal(plan.leanWithoutB, 0);
   });
 
   test('a language with no scanner is judged once, with no lean', () => {
     const plan = judgePlan({ content: '-- why\nselect 1;\n', path: 'a.sql' });
+
     assert.equal(plan.b.length, 0);
     assert.equal(plan.leanWithoutB, undefined);
   });
@@ -35,9 +38,11 @@ describe('judgePlan', () => {
     // Short of three full windows, because each one stops at a line boundary.
     const content = lines(2.5 * REVIEW_LIMITS.maxCharsPerFile);
     const plan = judgePlan({ content, path: 'a.ts' });
+
     assert.equal(plan.a.length, 3);
     assert.equal(plan.cut, false);
     const windows = plan.a.map((call) => call.file.content);
+
     assert.equal(windows.join('\n'), content);
     for (const window of windows) {
       assert.ok(window.length <= REVIEW_LIMITS.maxCharsPerFile);
@@ -47,6 +52,7 @@ describe('judgePlan', () => {
   test('both passes are cut at the same lines', () => {
     const body = `${LINE}// why\n`.repeat(2000);
     const plan = judgePlan({ content: body, path: 'a.ts' });
+
     assert.ok(plan.a.length > 1);
     assert.equal(plan.b.length, plan.a.length);
     // Window n of each pass is the same code, with and without its comments.
@@ -68,6 +74,7 @@ describe('judgePlan', () => {
       content: lines(5 * MAX_JUDGED_CHARS),
       path: 'a.ts',
     });
+
     assert.equal(plan.a.length, REVIEW_LIMITS.maxWindowsPerFile);
     assert.equal(plan.cut, true);
   });
@@ -76,6 +83,7 @@ describe('judgePlan', () => {
     const content = `// why\n${lines(2 * REVIEW_LIMITS.maxCharsPerFile)}`;
     const plan = judgePlan({ content, path: 'a.ts' });
     const keys = [...plan.a, ...plan.b].map((call) => call.key);
+
     assert.equal(new Set(keys).size, keys.length);
   });
 });
@@ -83,6 +91,7 @@ describe('judgePlan', () => {
 test('a windowed diff carries its hunk header into every window', () => {
   const hunk = `@@ -1,1 +1,1 @@\n${LINE.replace('const', '+const').repeat(2000)}`;
   const plan = judgePlan({ content: hunk, patch: true, path: 'a.ts' });
+
   assert.ok(plan.a.length > 1);
   for (const call of plan.a) {
     assert.ok(call.file.content.startsWith('@@ '));
@@ -114,6 +123,7 @@ describe('judgePlan on a windowed diff', () => {
 
   test('every window past the first begins with a hunk header', () => {
     const plan = judgePlan({ content: patch, patch: true, path: 'a.ts' });
+
     assert.ok(plan.a.length > 1);
     assert.ok(plan.a[0].file.content.startsWith('diff --git '));
     for (const call of plan.a.slice(1)) {
@@ -126,6 +136,7 @@ describe('judgePlan on a windowed diff', () => {
     const seen = plan.a.flatMap((call) =>
       afterImage(call.file.content).split('\n').filter(Boolean),
     );
+
     assert.equal(seen.length, 1440);
     assert.ok(seen.includes('const v0 = 0;'));
     assert.ok(seen.includes('const v1399 = 1399;'));
@@ -136,6 +147,7 @@ describe('judgePlan on a windowed diff', () => {
 test('a line longer than a window is cut, not sent whole', () => {
   const content = `const a = "${'x'.repeat(3 * REVIEW_LIMITS.maxCharsPerFile)}";`;
   const plan = judgePlan({ content, path: 'a.ts' });
+
   assert.equal(plan.a.length, 1);
   assert.equal(plan.a[0].file.content.length, REVIEW_LIMITS.maxCharsPerFile);
   assert.equal(plan.cut, true);
@@ -155,6 +167,7 @@ describe('the per-window cap', () => {
     for (const context of [0, 200, 9_000]) {
       const patch = [longHeader(context), ...body(3000)].join('\n');
       const plan = judgePlan({ content: patch, patch: true, path: 'a.ts' });
+
       assert.ok(plan.a.length > 1);
       for (const call of plan.a) {
         assert.ok(
@@ -173,6 +186,7 @@ describe('the per-window cap', () => {
     const lines = body(3000).flatMap((line, i) => [`+// note ${i}`, line]);
     const patch = [longHeader(400), ...lines].join('\n');
     const plan = judgePlan({ content: patch, patch: true, path: 'a.ts' });
+
     for (const call of [...plan.a, ...plan.b]) {
       assert.ok(call.file.content.length <= REVIEW_LIMITS.maxCharsPerFile);
     }
@@ -183,6 +197,7 @@ describe('the per-window cap', () => {
     const head = 'x'.repeat(REVIEW_LIMITS.maxCharsPerFile - 1);
     const plan = judgePlan({ content: `${head}🙂${head}`, path: 'a.ts' });
     const sent = plan.a[0].file.content;
+
     assert.ok(sent.length < REVIEW_LIMITS.maxCharsPerFile);
     assert.equal([...sent].length, sent.length);
   });
@@ -192,6 +207,7 @@ describe('the per-window cap', () => {
 function hasLoneSurrogate(text: string): boolean {
   return [...text].some((c) => {
     const code = c.codePointAt(0) ?? 0;
+
     return code >= 0xd800 && code <= 0xdfff;
   });
 }
@@ -206,6 +222,7 @@ describe('cuts fall on code-point boundaries', () => {
       ...Array.from({ length: 3000 }, (_, i) => `+x[${i}];`),
     ].join('\n');
     const plan = judgePlan({ content: patch, patch: true, path: 'a.ts' });
+
     assert.ok(plan.a.length > 1);
     for (const call of plan.a) {
       assert.ok(!hasLoneSurrogate(call.file.content));
@@ -220,6 +237,7 @@ test('a long line that still fits with its header is not reported as cut', () =>
     patch: true,
     path: 'a.ts',
   });
+
   // Nothing was dropped: the long line arrives whole in its own window, with
   // the header put back in front of it.
   assert.equal(plan.cut, false);
@@ -228,8 +246,10 @@ test('a long line that still fits with its header is not reported as cut', () =>
 
 test('every reader agrees where a hunk starts', () => {
   const combined = ['@@@ -1,1 -1,1 +1,2 @@@', '+ const a = 1;'].join('\n');
+
   assert.ok(isHunkHeader(combined.split('\n')[0]));
   assert.ok(afterImage(combined).includes('const a = 1;'));
   const plan = judgePlan({ content: combined, patch: true, path: 'a.ts' });
+
   assert.ok(afterImage(plan.a[0].file.content).includes('const a = 1;'));
 });

@@ -24,8 +24,10 @@ const which = process.argv[3] ?? '1';
 const client = new Client({ host });
 let files = PRESETS[Number(which)]?.files;
 let pr: { title: string; body: string; url: string } | undefined;
+
 if (which.startsWith('http')) {
   const fetched = await fetchPullRequest(which);
+
   files = selectReviewFiles(filesFromPatch(fetched.diff)).kept.filter(
     (f) => !isProsePath(f.path),
   );
@@ -43,6 +45,7 @@ const { session, response } = await client.sessions.create({
 });
 const judged = await response.result();
 const review = parseReview(judged.message);
+
 console.log(
   `judge: ${judged.status} ${Math.round(performance.now() - t0)} ms files=${Object.keys(review?.files ?? {}).length}`,
 );
@@ -55,6 +58,7 @@ const judgments = Object.fromEntries(
 );
 const t1 = performance.now();
 const ms = () => Math.round(performance.now() - t1);
+
 await session.clear();
 const resp = await session.send(summarizeMessage({ files, judgments, pr }));
 let buffer = '';
@@ -65,6 +69,7 @@ let final = '';
 let meta: { cached?: boolean; model?: string } | undefined;
 let cost = 0;
 let status = 'streaming';
+
 for await (const e of resp) {
   if (e.type === 'message.appended') {
     buffer += String(e.data.messageDelta ?? '');
@@ -99,6 +104,7 @@ console.log(
   `summarize: ${status}; deltas=${deltas} first=${firstDeltaMs} ms last=${lastDeltaMs} ms done=${ms()} ms; cached=${meta?.cached ?? '?'} model=${meta?.model ?? '?'} cost=$${cost.toFixed(COST_DIGITS)}`,
 );
 const summary = parseSummaryText(final || buffer);
+
 console.log('decision:', summary.decision);
 console.log('overall:', summary.overall.slice(0, OVERALL_PREVIEW_CHARS));
 for (const f of summary.files) {
@@ -109,6 +115,7 @@ for (const f of summary.files) {
 const missing = files
   .filter((f) => !summary.files.some((s) => s.path === f.path))
   .map((f) => f.path);
+
 console.log(
   `files summarised: ${summary.files.length}/${files.length}${missing.length ? ` — missing: ${missing.join(', ')}` : ''}`,
 );

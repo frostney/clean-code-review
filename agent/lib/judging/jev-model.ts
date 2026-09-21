@@ -49,6 +49,7 @@ async function admit(
   estimateUsd: number,
 ): Promise<{ hold: Hold } | { paused: string }> {
   const admission = await pageSpend.reserve(estimateUsd);
+
   return admission.ok
     ? { hold: admission.hold }
     : { paused: pausedReply(admission.window, admission.resetsAt) };
@@ -62,6 +63,7 @@ async function reviewWithin(
   signal: AbortSignal | undefined,
 ) {
   const usage = emptyReviewUsage();
+
   try {
     return await runReview(plan, emit, signal, usage);
   } finally {
@@ -71,11 +73,13 @@ async function reviewWithin(
 
 async function admitReview(input: SummarizeInput) {
   const plan = await planReview(input);
+
   return { plan, ...(await admit(reviewEstimateUsd(plan))) };
 }
 
 function lastUserText(options: LanguageModelV4CallOptions): string {
   const last = [...options.prompt].reverse().find((m) => m.role === 'user');
+
   return last?.role === 'user'
     ? last.content.map((p) => (p.type === 'text' ? p.text : '')).join('\n')
     : '';
@@ -120,10 +124,12 @@ async function judge(
   input: Parameters<typeof judgeReview>[0],
 ): Promise<LanguageModelV4GenerateResult> {
   const admitted = await admit(await judgeEstimateUsd(input.files));
+
   if ('paused' in admitted) {
     return textResult(admitted.paused);
   }
   let judged: Awaited<ReturnType<typeof judgeReview>>;
+
   try {
     judged = await judgeReview(input, options.abortSignal);
   } catch (err) {
@@ -135,6 +141,7 @@ async function judge(
   }
   await admitted.hold.settle(judgeSettleUsd(judged));
   const { result, cost, warnings, errors } = judged;
+
   return textResult(JSON.stringify({ kind: 'judged', ...result }), {
     // eve's per-session cost limit and the page footer read this.
     providerMetadata: {
@@ -155,6 +162,7 @@ async function generate(
   options: LanguageModelV4CallOptions,
 ): Promise<LanguageModelV4GenerateResult> {
   const parsed = parseMessage(lastUserText(options));
+
   if (parsed.kind === 'other') {
     return textResult(JSON.stringify({ kind: 'ack' }));
   }
@@ -162,6 +170,7 @@ async function generate(
     return judge(options, parsed.input);
   }
   const admitted = await admitReview(parsed.input);
+
   if ('paused' in admitted) {
     return textResult(admitted.paused);
   }
@@ -173,6 +182,7 @@ async function generate(
     },
     options.abortSignal,
   );
+
   return textResult(text, {
     providerMetadata: reviewMetadata(usage),
     response: { modelId: REVIEWER_MODEL, timestamp: new Date() },
@@ -185,6 +195,7 @@ export function jev(): LanguageModelV4 {
     doGenerate: generate,
     async doStream(options) {
       const parsed = parseMessage(lastUserText(options));
+
       if (parsed.kind !== 'summarize') {
         const r = await generate(options);
         const text = r.content[0]?.type === 'text' ? r.content[0].text : '';
@@ -201,6 +212,7 @@ export function jev(): LanguageModelV4 {
             usage: r.usage,
           },
         ];
+
         return {
           stream: new ReadableStream({
             start: (c) => {
@@ -218,6 +230,7 @@ export function jev(): LanguageModelV4 {
       const signal = options.abortSignal
         ? AbortSignal.any([options.abortSignal, readerGone.signal])
         : readerGone.signal;
+
       return {
         stream: new ReadableStream<LanguageModelV4StreamPart>({
           cancel() {
@@ -232,6 +245,7 @@ export function jev(): LanguageModelV4 {
                 readerGone.abort();
               }
             };
+
             send({ type: 'stream-start', warnings: [] });
             send({
               modelId: REVIEWER_MODEL,
@@ -252,6 +266,7 @@ export function jev(): LanguageModelV4 {
                 usage: usageOf(0, 0),
               });
               controller.close();
+
               return;
             }
             try {
@@ -261,6 +276,7 @@ export function jev(): LanguageModelV4 {
                 (delta) => send({ delta, id: 'review', type: 'text-delta' }),
                 signal,
               );
+
               send({ id: 'review', type: 'text-end' });
               send({
                 finishReason: finished,

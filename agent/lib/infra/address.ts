@@ -16,6 +16,7 @@ const HEX = 16;
 /** Expands `::` and a trailing dotted IPv4; null when not IPv6. */
 function ipv6Groups(address: string): string[] | null {
   const [head, tail, extra] = address.split('::');
+
   if (extra !== undefined) {
     return null;
   }
@@ -24,20 +25,24 @@ function ipv6Groups(address: string): string[] | null {
   const front = groups(head);
   const back = groups(tail);
   const missing = IPV6_GROUPS - front.length - back.length;
+
   if (missing < 0 || (tail === undefined && missing !== 0)) {
     return null;
   }
   const all = [...front, ...Array<string>(missing).fill('0'), ...back];
+
   return all.every((g) => /^[0-9a-f]{1,4}$/.test(g)) ? all : null;
 }
 
 function embeddedIpv4(group: string): string[] {
   const octets = group.split('.');
+
   if (octets.length !== IPV4_OCTETS) {
     return [group];
   }
   const [a, b, c, d] = octets.map(Number);
   const pair = (x: number, y: number) => (x * BYTE + y).toString(HEX);
+
   return [pair(a, b), pair(c, d)];
 }
 
@@ -48,6 +53,7 @@ export function addressBucket(ip: string | null | undefined): string {
     .toLowerCase()
     .replace(/^\[|\]$/g, '')
     .replace(/%.*$/, '');
+
   if (!address) {
     return UNKNOWN;
   }
@@ -55,10 +61,12 @@ export function addressBucket(ip: string | null | undefined): string {
     return address;
   }
   const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(address);
+
   if (mapped) {
     return mapped[1];
   }
   const groups = ipv6Groups(address);
+
   return groups
     ? `${groups
         .slice(0, PREFIX_GROUPS)

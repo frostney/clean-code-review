@@ -41,13 +41,16 @@ function firewallAnswers(answer: () => Response | Promise<Response>): Answered {
       environment.VERCEL_ENV = was.vercel;
     },
   };
+
   // The SDK short-circuits outside production before it reaches the network.
   environment.NODE_ENV = 'production';
   environment.VERCEL_ENV = 'production';
   globalThis.fetch = (async () => {
     state.calls++;
+
     return await answer();
   }) as typeof fetch;
+
   return state;
 }
 
@@ -60,6 +63,7 @@ test('the in-process throttle counts a whole IPv6 /64 as one caller', () => {
     '2001:db8:1:2::9',
     '2001:db8:1:2:aaaa::1',
   ];
+
   for (const address of inOneBlock) {
     assert.equal(throttled(address), false, address);
   }
@@ -69,6 +73,7 @@ test('the in-process throttle counts a whole IPv6 /64 as one caller', () => {
 
 test('the in-process throttle refuses only past the limit', () => {
   const throttled = createThrottle(LIMIT, WINDOW_MS);
+
   for (let call = 0; call < LIMIT; call++) {
     assert.equal(throttled('203.0.113.7'), false, `call ${call}`);
   }
@@ -79,6 +84,7 @@ test('the in-process throttle refuses only past the limit', () => {
 test('a rule that is not configured limits nobody and is asked rarely', async () => {
   const firewall = firewallAnswers(status(404));
   const clock = Date.now;
+
   try {
     assert.equal(
       await overSharedLimit('absent-rule', headers, '203.0.113.7'),
@@ -106,6 +112,7 @@ test('a Firewall that cannot be reached limits nobody', async () => {
   const firewall = firewallAnswers(() => {
     throw new Error('connection refused');
   });
+
   try {
     assert.equal(
       await overSharedLimit('unreachable-rule', headers, '203.0.113.7'),
@@ -119,6 +126,7 @@ test('a Firewall that cannot be reached limits nobody', async () => {
 test('a Firewall that failed once is asked again after the cooldown', async () => {
   const firewall = firewallAnswers(status(502));
   const clock = Date.now;
+
   try {
     assert.equal(
       await overSharedLimit('flaky-rule', headers, '203.0.113.7'),
@@ -143,6 +151,7 @@ test('a Firewall that failed once is asked again after the cooldown', async () =
 
 test('a configured rule limits the caller it counts over', async () => {
   const firewall = firewallAnswers(status(429));
+
   try {
     assert.equal(
       await overSharedLimit('counting-rule', headers, '203.0.113.7'),
@@ -155,6 +164,7 @@ test('a configured rule limits the caller it counts over', async () => {
 
 test('a configured rule passes the caller it counts under', async () => {
   const firewall = firewallAnswers(status(204));
+
   try {
     assert.equal(
       await overSharedLimit('passing-rule', headers, '203.0.113.7'),
@@ -167,6 +177,7 @@ test('a configured rule passes the caller it counts under', async () => {
 
 test('nothing is asked of the Firewall outside production', async () => {
   const firewall = firewallAnswers(status(429));
+
   environment.VERCEL_ENV = 'preview';
   try {
     assert.equal(

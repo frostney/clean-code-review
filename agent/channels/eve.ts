@@ -35,6 +35,7 @@ function sessionCreationBrake(): AuthFn<Request> {
     const url = new URL(request.url);
     const isCreate =
       request.method === 'POST' && /\/eve\/v1\/session\/?$/.test(url.pathname);
+
     if (!isCreate) {
       return null;
     }
@@ -50,6 +51,7 @@ function sessionCreationBrake(): AuthFn<Request> {
       request.headers.get('x-vercel-forwarded-for')?.split(',')[0]?.trim() ||
       request.headers.get('x-real-ip') ||
       forwarded.at(-1);
+
     if (!ip) {
       return null;
     }
@@ -62,6 +64,7 @@ function sessionCreationBrake(): AuthFn<Request> {
           'Too many new sessions from this address. Try again in a few minutes.',
       });
     }
+
     return null; // Not an identity: fall through to the real auth entries.
   };
 }

@@ -65,9 +65,11 @@ const HOOK = 'useTutorial';
 
 function useTutorial(): Tutorial {
   const value = useContext(TutorialContext);
+
   if (!value) {
     throw new Error(`${HOOK} must be used inside <TutorialProvider>`);
   }
+
   return value;
 }
 
@@ -178,8 +180,10 @@ function useFootTaps(): boolean {
         setReady(true);
       }
     };
+
     if (footTapsReady !== null) {
       footTapsReady.then(settle, () => undefined);
+
       return () => {
         live = false;
       };
@@ -187,6 +191,7 @@ function useFootTaps(): boolean {
 
     const start = () => {
       const image = new window.Image();
+
       image.src = FOOT_TAPS;
       footTapsReady = image.decode();
       footTapsReady.then(settle, () => {
@@ -222,8 +227,10 @@ function useFootTaps(): boolean {
 function afterFirstPaint(then: () => void): () => void {
   const painted = () =>
     performance.getEntriesByName('first-contentful-paint').length > 0;
+
   if (painted()) {
     then();
+
     return () => undefined;
   }
 
@@ -234,6 +241,7 @@ function afterFirstPaint(then: () => void): () => void {
     let frame = requestAnimationFrame(() => {
       frame = requestAnimationFrame(then);
     });
+
     return () => cancelAnimationFrame(frame);
   }
 
@@ -243,7 +251,9 @@ function afterFirstPaint(then: () => void): () => void {
       then();
     }
   });
+
   observer.observe({ buffered: true, type: 'paint' });
+
   return () => observer.disconnect();
 }
 
@@ -270,13 +280,16 @@ function useDuckLoop(): DuckLoop {
     const show = (next: DuckLoop) => {
       setLoop(next);
       const loops = next === 'wink' ? WINK_LOOPS : FOOT_TAP_LOOPS;
+
       timer = setTimeout(
         () => show(next === 'wink' ? 'foot-taps' : 'wink'),
         loops * LOOP_MS,
       );
     };
+
     // The wink has been playing since the page painted; let it finish.
     timer = setTimeout(() => show('foot-taps'), WINK_LOOPS * LOOP_MS);
+
     return () => clearTimeout(timer);
   }, [ready]);
 
@@ -327,6 +340,7 @@ const ERROR_BUBBLE_ROOM = 'max-lg:min-h-[103px]';
 function useBubbleFloor(fetching: boolean, prError: string | null) {
   const ref = useRef<HTMLDivElement>(null);
   const [height, setHeight] = useState(0);
+
   useLayoutEffect(() => {
     if (fetching && ref.current) {
       setHeight(ref.current.offsetHeight);
@@ -334,6 +348,7 @@ function useBubbleFloor(fetching: boolean, prError: string | null) {
       setHeight(0);
     }
   }, [fetching, prError]);
+
   return { height, ref };
 }
 
@@ -461,6 +476,7 @@ function DuckTrouble({ message }: { message: string }) {
           data-tutorial="dismiss"
           onClick={(event) => {
             const pressed = document.activeElement === event.currentTarget;
+
             dismissPrError();
             if (pressed) {
               requestAnimationFrame(() =>

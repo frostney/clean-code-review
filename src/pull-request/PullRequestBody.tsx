@@ -28,8 +28,10 @@ function walk(node: HastNode, visit: (node: HastNode) => void): void {
 function rehypeNeutralIds() {
   return (tree: HastNode) => {
     const renamed = new Map<string, string>();
+
     walk(tree, (node) => {
       const id = node.properties?.id;
+
       if (typeof id === 'string' && !renamed.has(id)) {
         renamed.set(id, `pr-note-${renamed.size + 1}`);
       }
@@ -48,6 +50,7 @@ function neutralise(
 ): void {
   const rename = (ref: unknown) =>
     typeof ref === 'string' ? (renamed.get(ref) ?? ref) : ref;
+
   if (typeof props.id === 'string') {
     props.id = rename(props.id);
   }

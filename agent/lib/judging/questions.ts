@@ -352,14 +352,17 @@ export function questionsFor(file: {
   patch?: boolean;
 }): Question[] {
   const test = isTestPath(file.path);
+
   return QUESTIONS.filter((q) => {
     const scope = q.appliesTo ?? 'all';
+
     if (scope === 'patch') {
       return file.patch === true;
     }
     if (scope === 'test') {
       return test;
     }
+
     return true;
   });
 }

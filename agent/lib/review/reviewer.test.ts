@@ -67,6 +67,7 @@ type Outcome = Promise<Error | null>;
 
 async function stillRunning(outcome: Outcome): Promise<boolean> {
   const done = outcome.then(() => 'done');
+
   return (
     (await Promise.race([done, settle().then(() => 'running')])) === 'running'
   );
@@ -97,8 +98,10 @@ async function stalledReview(model: MockLanguageModelV4): Promise<Stalled> {
     () => null,
     (err: Error) => err,
   );
+
   // The bounds are only armed once the parts have reached the model.
   await settle();
+
   return { outcome, reservedUsd: reviewEstimateUsd(plan), usage };
 }
 
@@ -108,18 +111,22 @@ async function failedAt(stalled: Stalled, bound: number): Promise<Error> {
   mock.timers.tick(2);
   await settle();
   const error = await stalled.outcome;
+
   assert.ok(error, 'the stalled review resolved instead of failing');
   assert.ok(
     reviewSettleUsd(stalled.usage) < stalled.reservedUsd,
     'settled at or above the reservation',
   );
+
   return error;
 }
 
 test('a first chunk that never arrives fails within the bound', async () => {
   const stalled = await stalledReview(stalling([]));
+
   try {
     const error = await failedAt(stalled, REVIEWER_TIMEOUT.firstChunkMs);
+
     // What the reader is shown, so it names no timer and carries no advice.
     assert.equal(error.message, TIMED_OUT.firstChunk);
     assert.equal(stalled.usage.outputTokens, 0);
@@ -138,8 +145,10 @@ test('a stream that stops mid-answer fails within the bound', async () => {
   const stalled = await stalledReview(
     stalling(['Decision: comment\n', '## Overall\nThe review starts']),
   );
+
   try {
     const error = await failedAt(stalled, REVIEWER_TIMEOUT.chunkMs);
+
     assert.equal(error.message, TIMED_OUT.chunk);
     assert.ok(
       stalled.usage.unreportedUsd > 0,

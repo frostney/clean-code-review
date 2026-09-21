@@ -13,19 +13,23 @@ const REPO = fileURLToPath(new URL('../../..', import.meta.url));
 
 function stripped(text: string, path: string): string {
   const ranges = commentRanges(text, path);
+
   if (ranges === null) {
     throw new Error(`no scanner for ${path}`);
   }
   const mask = new Uint8Array(text.length);
+
   for (const { start, end } of ranges) {
     mask.fill(1, start, end);
   }
+
   return [...text].filter((_, i) => !mask[i]).join('');
 }
 
 /** What the scanner must not touch: every trap is code that looks like a comment. */
 function keeps(path: string, text: string, ...traps: string[]): void {
   const out = stripped(text, path);
+
   for (const trap of traps) {
     assert.ok(out.includes(trap), `${trap} was taken out of ${out}`);
   }
@@ -218,21 +222,26 @@ function typescriptRanges(text: string, path: string): Set<string> {
   const out = new Set<string>();
   const visit = (node: ts.Node): void => {
     const children = node.getChildren(source);
+
     if (children.length === 0) {
       const at = node.getFullStart();
+
       for (const r of [
         ...(ts.getLeadingCommentRanges(text, at) ?? []),
         ...(ts.getTrailingCommentRanges(text, at) ?? []),
       ]) {
         out.add(`${r.pos}:${r.end}`);
       }
+
       return;
     }
     for (const child of children) {
       visit(child);
     }
   };
+
   visit(source);
+
   return out;
 }
 
@@ -245,15 +254,18 @@ function disagreements(path: string, text: string): string[] {
   const out = [...expected]
     .filter((range) => !found.has(range))
     .map((range) => `${path} missed ${range}`);
+
   for (const range of found) {
     const [start, end] = range.split(':').map(Number);
     const slice = text.slice(start, end);
+
     // An extra range is allowed only for a `{/* … */}` container, which this
     // scanner removes whole.
     if (!expected.has(range) && !/^\{[\s\S]*\}$/.test(slice)) {
       out.push(`${path} invented ${range}: ${JSON.stringify(slice)}`);
     }
   }
+
   return out;
 }
 
@@ -274,6 +286,7 @@ describe('against the TypeScript scanner', () => {
     const disagreed = paths.flatMap((path) =>
       disagreements(path, readFileSync(join(REPO, path), 'utf8')),
     );
+
     assert.deepEqual(disagreed, []);
   });
 });

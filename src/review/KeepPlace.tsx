@@ -10,8 +10,10 @@ interface Place {
 /** The first card whose top is on screen, else the one filling the screen. */
 function placeOf(column: Element): Place | null {
   let straddling: Place | null = null;
+
   for (const card of column.children) {
     const { top, bottom } = card.getBoundingClientRect();
+
     if (top >= 0) {
       return { card, top };
     }
@@ -19,6 +21,7 @@ function placeOf(column: Element): Place | null {
       straddling = { card, top };
     }
   }
+
   return straddling;
 }
 
@@ -53,6 +56,7 @@ export class KeepPlace extends Component<
     if (previous.drawn === this.props.drawn || !this.column) {
       return null;
     }
+
     return placeOf(this.column);
   }
 
@@ -61,6 +65,7 @@ export class KeepPlace extends Component<
       return;
     }
     const moved = place.card.getBoundingClientRect().top - place.top;
+
     if (Math.abs(moved) >= 1) {
       window.scrollBy(0, moved);
     }

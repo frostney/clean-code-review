@@ -34,14 +34,17 @@ export function useChanges(
     }
     const changed: string[] = [];
     const delta: Record<string, string> = {};
+
     for (const m of meta) {
       const before = prev.current[m.id];
       const after = answers[m.id];
+
       if (!isMeaningfulChange(before, after)) {
         continue;
       }
       changed.push(m.id);
       const text = deltaText(m, before, after);
+
       if (text) {
         delta[m.id] = text;
       }
@@ -63,10 +66,13 @@ export function useChanges(
       timers.current[id] = setTimeout(() => {
         setState((s) => {
           const next = { ...s.changed };
+
           delete next[id];
           // A later flash with no delta must not inherit this one's text.
           const delta = { ...s.delta };
+
           delete delta[id];
+
           return { changed: next, delta };
         });
       }, ROW_LIT_MS);

@@ -17,6 +17,7 @@ export function levelsOf(meta: Question): readonly string[] {
 
 function nearestLevel(levels: readonly string[], score: number): string {
   const i = Math.max(0, Math.min(levels.length - 1, Math.round(score)));
+
   return levels[i];
 }
 
@@ -36,6 +37,7 @@ export function answerHeadline(
     return answer.choice;
   }
   const levels = levelsOf(meta);
+
   return levels.length
     ? nearestLevel(levels, answer.score)
     : answer.score.toFixed(2);
@@ -49,6 +51,7 @@ export function answerDetail(answer: Answer | undefined): string {
   if (answer.type === 'noul') {
     return pct(answer.noul);
   }
+
   return answer.confidence === undefined
     ? ''
     : `${pct(answer.confidence)} sure`;
@@ -79,6 +82,7 @@ export function isMeaningfulChange(
   if (prev.type === 'choice' && next.type === 'choice') {
     return prev.choice !== next.choice;
   }
+
   return false;
 }
 
@@ -89,13 +93,16 @@ export function deltaText(meta: Question, prev: Answer, next: Answer): string {
   }
   if (prev.type === 'score' && next.type === 'score') {
     const levels = levelsOf(meta);
+
     if (!levels.length) {
       return '';
     }
     const from = nearestLevel(levels, prev.score);
     const to = nearestLevel(levels, next.score);
+
     return from === to ? '' : `${from} → ${to}`;
   }
+
   // A choice flip flashes but prints no delta: the new headline says it all.
   return '';
 }
@@ -172,6 +179,7 @@ function verdictOf(score: number | null): Verdict {
   if (score >= TIDY_AT) {
     return VERDICTS.tidy;
   }
+
   return VERDICTS.changes;
 }
 
@@ -198,6 +206,7 @@ export function fileVerdict(
   if (score === null && state.stalled) {
     return VERDICTS.failed;
   }
+
   return verdictOf(score);
 }
 
@@ -215,19 +224,23 @@ export function reviewVerdict(
     return VERDICTS.empty;
   }
   const mean = meanVerdict(scores);
+
   if (mean === null && paused) {
     return VERDICTS.paused;
   }
+
   return mean === null && stalled ? VERDICTS.failed : verdictOf(mean);
 }
 
 export function verdictScore(answers: Answers | undefined): number | null {
   const answer = answers?.verdict;
+
   return answer?.type === 'score' ? answer.score : null;
 }
 
 export function verdictConfidence(answers: Answers | undefined): number | null {
   const answer = answers?.verdict;
+
   return answer?.type === 'score' && answer.confidence !== undefined
     ? answer.confidence
     : null;
@@ -235,6 +248,7 @@ export function verdictConfidence(answers: Answers | undefined): number | null {
 
 function meanVerdict(scores: readonly (number | null)[]): number | null {
   const known = scores.filter((s): s is number => s !== null);
+
   return known.length ? known.reduce((a, b) => a + b, 0) / known.length : null;
 }
 
@@ -254,11 +268,13 @@ export function smellCount(answers: Answers | undefined): number {
     return 0;
   }
   let n = 0;
+
   for (const id of SMELL_IDS) {
     if (isFinding(answers[id])) {
       n++;
     }
   }
+
   return n;
 }
 
@@ -266,6 +282,7 @@ export function smellLabel(count: number): string {
   if (count === 0) {
     return 'no smells';
   }
+
   return count === 1 ? '1 smell' : `${count} smells`;
 }
 
@@ -346,6 +363,7 @@ export function overallSummaryStatus(summary: SummaryView): SummaryStatus {
   if (summary.overall) {
     return 'ready';
   }
+
   // A settled review without an overall will not write one later.
   return summary.failed || summary.settled ? 'failed' : 'pending';
 }
@@ -355,6 +373,7 @@ export function fileSummaryStatus(
   path: string,
 ): SummaryStatus {
   const text = summary.files[path];
+
   if (summary.streaming && summary.replacing[path]) {
     return text ? 'streaming' : 'pending';
   }
@@ -364,6 +383,7 @@ export function fileSummaryStatus(
   if (text) {
     return 'ready';
   }
+
   return summary.failed || summary.settled ? 'failed' : 'pending';
 }
 

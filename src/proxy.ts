@@ -32,17 +32,21 @@ const IMAGE_ROUTES = new Set(['/opengraph-image', '/twitter-image']);
 
 export function proxy(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
+
   if (IMAGE_ROUTES.has(pathname)) {
     return NextResponse.next();
   }
 
   if (!wantsMarkdown(request.headers.get('accept'))) {
     const html = NextResponse.next();
+
     html.headers.append('Vary', 'Accept');
+
     return html;
   }
 
   const page = markdownFor(pathname);
+
   return new NextResponse(page ?? notFoundMarkdown(pathname), {
     headers: {
       // The next deploy may add the missing page.

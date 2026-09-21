@@ -71,6 +71,7 @@ export function answerMarkdown(answer: string): string {
     .split(FAQ_LINK_PATTERN)
     .map((part) => {
       const link = FAQ_LINKS.find((item) => item.text === part);
+
       return link ? `[${part}](${link.href})` : part;
     })
     .join('');

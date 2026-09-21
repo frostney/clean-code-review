@@ -4,6 +4,7 @@ import { useReviewView } from './ReviewProvider';
 
 export function ReviewStats() {
   const { open, review, reviewState, lineCount } = useReviewView();
+
   if (!open) {
     return null;
   }

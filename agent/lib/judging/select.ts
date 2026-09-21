@@ -3,6 +3,7 @@ import { partitionJudgeable, REVIEW_LIMITS } from '../review/review';
 
 function changedLines(patch: string): number {
   let n = 0;
+
   for (const line of patch.split('\n')) {
     if (
       (line[0] === '+' && !line.startsWith('+++')) ||
@@ -11,6 +12,7 @@ function changedLines(patch: string): number {
       n++;
     }
   }
+
   return n;
 }
 
@@ -34,6 +36,7 @@ export function selectReviewFiles<T extends { path: string; content: string }>(
   const candidates = files.filter(
     (f) => !skipped.some((s) => s.path === f.path),
   );
+
   return {
     kept: candidates.filter((f) => keep.has(f.path)),
     overCap: candidates.filter((f) => !keep.has(f.path)).map((f) => f.path),

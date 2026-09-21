@@ -44,6 +44,7 @@ function loadTurnRuntime(): Promise<TurnRuntime> {
   turnRuntimeLoading ??= import('./turn-runtime').then(
     (module) => {
       turnRuntime = module.turnRuntime;
+
       return module.turnRuntime;
     },
     (err: unknown) => {
@@ -51,6 +52,7 @@ function loadTurnRuntime(): Promise<TurnRuntime> {
       throw err;
     },
   );
+
   return turnRuntimeLoading;
 }
 
@@ -149,6 +151,7 @@ function localPause(reply: PausedReply): LocalPause {
 
 function pausedIn(text: string | null | undefined): LocalPause | null {
   const reply = parsePaused(text);
+
   return reply ? localPause(reply) : null;
 }
 
@@ -180,6 +183,7 @@ function costOf(events: readonly { type: string; data?: unknown }[]): number {
     .reduce((total, e) => {
       const usage = (e.data as { usage?: { costUsd?: number } } | undefined)
         ?.usage;
+
       return total + (usage?.costUsd ?? 0);
     }, 0);
 }
@@ -195,6 +199,7 @@ function unjudgedError(
   if (!unjudged) {
     return null;
   }
+
   return `${unjudged} ${unjudged === 1 ? 'file' : 'files'} came back unjudged`;
 }
 
@@ -203,9 +208,11 @@ function without(
   paths: readonly string[],
 ): Record<string, true> {
   const next = { ...map };
+
   for (const path of paths) {
     delete next[path];
   }
+
   return next;
 }
 
@@ -219,6 +226,7 @@ function judgmentMoved(before: Answers | undefined, after: Answers): boolean {
   }
   for (const [id, answer] of Object.entries(after)) {
     const prev = before[id];
+
     if (!prev || prev.type !== answer.type) {
       return true;
     }
@@ -226,6 +234,7 @@ function judgmentMoved(before: Answers | undefined, after: Answers): boolean {
       return true;
     }
   }
+
   return false;
 }
 
@@ -269,28 +278,35 @@ function applySummaryEvent(
     case 'step.completed':
       run.steps += 1;
       run.costUsd += event.data.usage?.costUsd ?? 0;
+
       return false;
     // eve's cost-cap prompt waits for an Approve/Stop the page never sends.
     case 'input.requested':
       run.parked = true;
+
       return true;
     case 'message.appended':
       run.buffer += event.data.messageDelta;
       onText(run.buffer);
+
       return false;
     case 'message.completed':
       run.complete = String(event.data.message ?? '');
+
       return false;
     case 'turn.cancelled':
       run.cancelled = true;
+
       return true;
     case 'turn.failed':
     case 'session.failed': {
       run.failed = true;
       const message = event.data.message.trim();
+
       if (message) {
         run.error ??= message;
       }
+
       return true;
     }
     case 'session.waiting':
@@ -323,6 +339,7 @@ function settledText(run: SummaryRun): Summary | null {
     return null;
   }
   const next = parseSummaryText(run.complete || run.buffer);
+
   return next.overall || next.files.length ? next : null;
 }
 
@@ -334,6 +351,7 @@ function writingSection(
   if (parsed.writing !== null && asked.has(parsed.writing)) {
     return parsed.writing;
   }
+
   return parsed.overall ? OVERALL_BLOCK : null;
 }
 
@@ -346,6 +364,7 @@ function withStreamedSummary(
   const files = { ...s.summary.files };
   // A rewritten block replaces any earlier run's cut-off mark.
   const incomplete = { ...s.summary.incomplete };
+
   for (const file of parsed.files) {
     if (asked.has(file.path)) {
       files[file.path] = file.summary;
@@ -367,6 +386,7 @@ function withStreamedSummary(
   const done = (open === -1 ? parsed.files : parsed.files.slice(0, open))
     .map((f) => f.path)
     .filter((path) => asked.has(path));
+
   return {
     ...s,
     summary: {
@@ -437,6 +457,7 @@ function settledIncomplete(
     before,
     next.overall ? [...rewritten, OVERALL_BLOCK] : rewritten,
   );
+
   return {
     ...kept,
     ...Object.fromEntries(
@@ -512,6 +533,7 @@ function freshJudgments(
   current: ReadonlyMap<string, string>,
 ): Record<string, FileJudgment> {
   const fresh: Record<string, FileJudgment> = {};
+
   for (const [path, judgment] of Object.entries(review?.files ?? {})) {
     if (current.get(path) !== sent.get(path)) {
       continue;
@@ -521,6 +543,7 @@ function freshJudgments(
     }
     fresh[path] = judgment;
   }
+
   return fresh;
 }
 
@@ -636,19 +659,23 @@ function withoutStalePaths(
   const notes = Object.keys(s.summary.files).filter(stale);
   const waiting = Object.keys(s.pausedFiles).filter(stale);
   const letGo = Object.keys(s.stalled).filter(stale);
+
   if (
     [gone, orphaned, cleared, notes, waiting, letGo].every((l) => !l.length)
   ) {
     return s;
   }
   const judgments = { ...s.judgments };
+
   for (const path of gone) {
     delete judgments[path];
   }
   const summaryFiles = { ...s.summary.files };
+
   for (const path of notes) {
     delete summaryFiles[path];
   }
+
   return withPauseReconciled({
     ...s,
     givenUp: without(s.givenUp, cleared),
@@ -712,6 +739,7 @@ export function useReview(
    * `spentUsd` and `budgetSpent` survive; the budget is the tab's.
    */
   const [shownReviewId, setShownReviewId] = useState(reviewId);
+
   if (reviewId !== shownReviewId) {
     setShownReviewId(reviewId);
     setState((s) => ({
@@ -763,17 +791,21 @@ export function useReview(
   const cancellingRef = useRef<Promise<void> | null>(null);
   const cancelRequestedRef = useRef(false);
   const prRef = useRef<PullRequestContext | undefined>(pr);
+
   prRef.current = pr;
   /** For the resume timer, which runs outside any render. */
   const stateRef = useRef(state);
+
   stateRef.current = state;
 
   const client = useCallback(async (): Promise<Client> => {
     if (!clientRef.current) {
       const runtime = await loadTurnRuntime();
+
       // Same origin: `withEve` mounts the agent at /eve/v1 on this very host.
       clientRef.current ??= new runtime.Client({ host: '' });
     }
+
     return clientRef.current;
   }, []);
 
@@ -783,16 +815,20 @@ export function useReview(
         // An expired session reports `no_active_session` here rather than
         // throwing, but send() on its retired id would throw.
         const cleared = await sessionRef.current.clear();
+
         if (cleared.status === 'no_active_session') {
           sessionRef.current = null;
         }
       }
       if (sessionRef.current) {
         const session = sessionRef.current;
+
         return { response: await session.send(message), session };
       }
       const created = await (await client()).sessions.create({ message });
+
       sessionRef.current = created.session;
+
       return { response: created.response, session: created.session };
     },
     [client],
@@ -803,6 +839,7 @@ export function useReview(
   useEffect(() => {
     function onPageHide() {
       const session = sessionRef.current;
+
       if (!session) {
         return;
       }
@@ -820,6 +857,7 @@ export function useReview(
       });
     }
     window.addEventListener('pagehide', onPageHide);
+
     return () => window.removeEventListener('pagehide', onPageHide);
   }, []);
 
@@ -846,6 +884,7 @@ export function useReview(
    */
   const cancelSummary = useCallback(async () => {
     const session = sessionRef.current;
+
     if (!summaryRunningRef.current || !session) {
       return;
     }
@@ -853,10 +892,12 @@ export function useReview(
     // second caller waits on the first request.
     if (cancelRequestedRef.current) {
       await cancellingRef.current;
+
       return;
     }
     cancelRequestedRef.current = true;
     const pending = session.cancel();
+
     summaryAbortRef.current?.abort();
     const settled: Promise<void> = pending.then(
       () => {
@@ -866,6 +907,7 @@ export function useReview(
         /* Rethrown to this caller below. */
       },
     );
+
     cancellingRef.current = settled;
     settled
       .then(() => {
@@ -887,6 +929,7 @@ export function useReview(
 
   const awaitCancel = useCallback(async () => {
     const pending = cancellingRef.current;
+
     if (pending) {
       await pending;
     }
@@ -919,18 +962,23 @@ export function useReview(
       timedOut: boolean,
     ) => {
       const next = settledText(run);
+
       if (next) {
         const written = new Set(
           next.files.filter((f) => !f.incomplete).map((f) => f.path),
         );
+
         forgetSummarized(paths.filter((path) => !written.has(path)));
         // A step that cost nothing made no Luna call: served from the agent's cache.
         const cached = run.steps > 0 && run.costUsd === 0;
+
         setState((s) => withSettledSummary(s, next, asked, run, cached));
+
         return;
       }
       forgetSummarized(paths);
       const error = timedOut ? (run.error ?? SUMMARY_TIMEOUT_ERROR) : run.error;
+
       setState((s) =>
         withAbandonedSummary(s, run, error, summaryRetrying(run, timedOut)),
       );
@@ -940,8 +988,10 @@ export function useReview(
 
   const beginSummary = useCallback((paths: readonly string[]) => {
     const judgments: Record<string, Answers> = {};
+
     for (const path of paths) {
       const answers = judgmentsRef.current[path]?.answers ?? {};
+
       judgments[path] = answers;
       summarizedRef.current.set(path, answers);
     }
@@ -957,6 +1007,7 @@ export function useReview(
         writingBlock: null,
       },
     }));
+
     return judgments;
   }, []);
 
@@ -1005,6 +1056,7 @@ export function useReview(
       const judgments = beginSummary(paths);
 
       const abort = new AbortController();
+
       summaryAbortRef.current = abort;
       let timer: ReturnType<typeof setTimeout> | null = null;
       let timedOut = false;
@@ -1022,15 +1074,18 @@ export function useReview(
           return;
         }
         const parsed = parseSummaryText(buffer, true);
+
         setState((s) => withStreamedSummary(s, parsed, asked, decisionSeen));
       };
 
       const run = emptyRun();
+
       try {
         await awaitCancel();
         const { response, session } = await sendTurn(
           summarizeMessage({ files: batch, judgments, pr: prRef.current }),
         );
+
         // The stream takes no abort signal, so time out by cancelling the turn.
         timer = setTimeout(() => {
           timedOut = true;
@@ -1053,16 +1108,19 @@ export function useReview(
         budgetSpentRef.current = true;
         queuedRef.current.clear();
         setState((s) => withBudgetSpentSummary(s, run.costUsd));
+
         return;
       }
       if (generation !== reviewGenRef.current) {
         dropSummary(run.costUsd);
+
         return;
       }
 
       const paused = run.cancelled
         ? null
         : pausedIn(run.complete || run.buffer);
+
       if (paused) {
         // Asked again after the reset: see `resumeRef`.
         forgetSummarized(paths);
@@ -1091,18 +1149,22 @@ export function useReview(
     }
     if (inFlightRef.current) {
       summaryWantedRef.current = true;
+
       return;
     }
     const batch = filesRef.current.filter((file) => {
       const judgment = judgmentsRef.current[file.path];
+
       if (!judgment || !Object.keys(judgment.answers).length) {
         return false;
       }
+
       return judgmentMoved(
         summarizedRef.current.get(file.path),
         judgment.answers,
       );
     });
+
     if (!batch.length) {
       return;
     }
@@ -1145,12 +1207,14 @@ export function useReview(
       batch: readonly ReviewFile[],
     ): string[] => {
       const failed: string[] = [];
+
       for (const path of paths) {
         if (!unjudged.includes(path)) {
           unjudgedRef.current.delete(path);
           continue;
         }
         const tries = (unjudgedRef.current.get(path) ?? 0) + 1;
+
         unjudgedRef.current.set(path, tries);
         if (tries > 1) {
           failed.push(path);
@@ -1158,10 +1222,12 @@ export function useReview(
         }
         sentRef.current.delete(path);
         const file = batch.find((f) => f.path === path);
+
         if (file) {
           queuedRef.current.set(path, file);
         }
       }
+
       return failed;
     },
     [],
@@ -1177,20 +1243,24 @@ export function useReview(
       parseReview: TurnRuntime['parseReview'],
     ) => {
       const costUsd = costOf(result.events);
+
       // eve's cost-cap prompt waits for an Approve/Stop the page never sends.
       if (result.events.some((e) => e.type === 'input.requested')) {
         budgetSpentRef.current = true;
         queuedRef.current.clear();
         setState((s) => withBudgetSpentTurn(s, paths, costUsd));
+
         return;
       }
       const paused =
         result.status === 'failed' ? null : pausedIn(result.message);
+
       if (result.status === 'failed' || paused) {
         // Forget what was sent so the files can be retried (a refusal by
         // `resumeRef`, a failure by Retry or an edit).
         pruneKeys(sentRef.current, (path) => paths.includes(path));
         setState((s) => withUnansweredTurn(s, paths, paused, costUsd));
+
         return;
       }
       const review = parseReview(result.message);
@@ -1203,6 +1273,7 @@ export function useReview(
       const judged = Object.values(fresh);
       const cached =
         judged.length > 0 && judged.every((j) => j.cached === true);
+
       judgmentsRef.current = { ...judgmentsRef.current, ...fresh };
       setState((s) =>
         withJudgeTurn(s, {
@@ -1255,6 +1326,7 @@ export function useReview(
       turnRuntime && err instanceof turnRuntime.ClientError
         ? `HTTP ${err.status}`
         : String(err);
+
     // The session may be what failed (a retired id throws), so open a fresh
     // one. Unless sent is forgotten, `unsent` reads these files as judged.
     sessionRef.current = null;
@@ -1280,23 +1352,29 @@ export function useReview(
       }
       if (inFlightRef.current) {
         await queueBehind(batch);
+
         return;
       }
       inFlightRef.current = true;
       clearSummaryTimer();
       const summaryWanted = summaryWantedRef.current;
+
       summaryWantedRef.current = false;
       const paths = batch.map((f) => f.path);
       const sent = new Map(batch.map((f) => [f.path, f.content]));
+
       markSent(batch);
       const started = performance.now();
+
       try {
         const message = judgeMessage({ files: batch });
+
         await awaitCancel();
         const { response } = await sendTurn(message);
         const result = await response.result();
         const ms = Math.round(performance.now() - started);
         const { parseReview } = await loadTurnRuntime();
+
         applyJudgeResult(result, batch, paths, sent, ms, parseReview);
       } catch (err) {
         failTurn(err, paths);
@@ -1325,15 +1403,18 @@ export function useReview(
       return;
     }
     const queued = [...queuedRef.current.values()];
+
     queuedRef.current.clear();
     const live = new Map(filesRef.current.map((f) => [f.path, f.content]));
     const next = queued.filter(
       (f) => live.get(f.path) === f.content && f.content.trim(),
     );
+
     if (next.length) {
       startTurn(next).catch(() => {
         /* startTurn puts its own failures on screen. */
       });
+
       return;
     }
     if (!summaryWantedRef.current) {
@@ -1350,11 +1431,14 @@ export function useReview(
   const resumeRef = useRef<() => void>(() => {
     /* Replaced below, before any timer can fire. */
   });
+
   resumeRef.current = () => {
     const s = stateRef.current;
     const live = new Map(filesRef.current.map((f) => [f.path, f]));
+
     for (const path of Object.keys(s.pausedFiles)) {
       const file = live.get(path);
+
       sentRef.current.delete(path);
       if (file?.content.trim()) {
         queuedRef.current.set(path, file);
@@ -1375,6 +1459,7 @@ export function useReview(
   };
 
   const resumeAt = state.paused?.resumeAt;
+
   useEffect(() => {
     if (resumeAt === undefined) {
       return;
@@ -1383,6 +1468,7 @@ export function useReview(
       () => resumeRef.current(),
       Math.max(resumeAt - Date.now(), MIN_RESUME_MS),
     );
+
     return () => clearTimeout(timer);
   }, [resumeAt]);
 
@@ -1426,6 +1512,7 @@ export function useReview(
       files.filter((f) => !f.content.trim()).map((f) => f.path),
     );
     const stale = (path: string) => !paths.has(path) || emptied.has(path);
+
     pruneKeys(sentRef.current, stale);
     pruneKeys(queuedRef.current, stale);
     pruneKeys(unjudgedRef.current, stale);
@@ -1437,6 +1524,7 @@ export function useReview(
     }
     setState((s) => withoutStalePaths(s, stale));
     const dirty = unsent(files, sentRef.current);
+
     if (!dirty.length) {
       return;
     }
@@ -1451,6 +1539,7 @@ export function useReview(
         /* startTurn puts its own failures on screen. */
       });
     }, DEBOUNCE_MS);
+
     return () => clearTimeout(timer);
   }, [files, startTurn]);
 
@@ -1462,12 +1551,14 @@ export function useReview(
     const next = unsent(filesRef.current, sentRef.current).filter(
       (f) => waiting[f.path] !== true,
     );
+
     if (!next.length) {
       return false;
     }
     startTurn(next).catch(() => {
       /* startTurn puts its own failures on screen. */
     });
+
     return true;
   }, [startTurn]);
 
