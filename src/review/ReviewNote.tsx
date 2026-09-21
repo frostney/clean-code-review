@@ -37,6 +37,7 @@ export function ReviewNote({
   tone?: 'overall' | 'file';
 }) {
   const badge = decision ? DECISIONS[decision] : null;
+
   return (
     <section
       className={`rounded-md border border-line ${tone === 'overall' ? 'bg-surface' : 'bg-page'} px-3 py-2`}
@@ -116,12 +117,14 @@ function Body({
   }
   if (!text) {
     const why = error ? plainReason(error.trim()).slice(0, ERROR_CHARS) : '';
+
     return (
       <p className="text-base text-muted lg:text-sm">
         {why ? `No review: ${why}` : 'No review yet'}
       </p>
     );
   }
+
   return (
     <>
       <p
@@ -148,7 +151,7 @@ function ticked(text: string): ReactNode[] {
   return text.split(/(`[^`\n]+`)/g).map((part, i) =>
     part.length > 2 && part.startsWith('`') && part.endsWith('`') ? (
       <code
-        className="rounded bg-track px-1 py-px font-mono text-xs text-ink lg:text-[0.9em]"
+        className="rounded bg-track px-1 py-px font-mono text-xs text-ink"
         // Index alone would keep a stale node while the text streams in.
         key={`${i}:${part}`}
       >
