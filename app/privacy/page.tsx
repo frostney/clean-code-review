@@ -24,6 +24,7 @@ import {
   GITHUB_FETCH_WINDOW_MS,
   GITHUB_FETCHES_PER_WINDOW,
 } from '@/src/pull-request/throttle';
+import { OG_IMAGE, TWITTER_IMAGE } from '@/src/site/og';
 import { SITE } from '@/src/site/site';
 import { Footer } from '@/src/ui/Footer';
 import { PageHeader } from '@/src/ui/PageHeader';
@@ -46,15 +47,26 @@ export const metadata: Metadata = {
   alternates: { canonical: '/privacy' },
   description:
     'Nothing here identifies you. What leaves the browser when you paste code, who processes it, how long anything is kept, and what Vercel measures.',
+  // Naming the card again: a page's own `openGraph` replaces the layout's,
+  // the file-convention image included.
   openGraph: {
     description:
       'What leaves the browser when you paste code into Clean Code Review, who processes it, and how long anything is kept.',
+    images: [OG_IMAGE],
+    siteName: SITE.name,
     title: `Privacy · ${SITE.name}`,
     type: 'article',
     url: `${SITE.url}/privacy`,
   },
   robots: { follow: true, index: true },
   title: 'Privacy',
+  twitter: {
+    card: 'summary_large_image',
+    description:
+      'What leaves the browser when you paste code into Clean Code Review, who processes it, and how long anything is kept.',
+    images: [TWITTER_IMAGE],
+    title: `Privacy · ${SITE.name}`,
+  },
 };
 
 function Section({

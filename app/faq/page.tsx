@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 
 import { Faq } from '@/src/site/Faq';
 import { FAQ } from '@/src/site/faq-content';
+import { OG_IMAGE, TWITTER_IMAGE } from '@/src/site/og';
 import { SITE } from '@/src/site/site';
 import { Footer } from '@/src/ui/Footer';
 import { PageHeader } from '@/src/ui/PageHeader';
@@ -13,14 +14,15 @@ const TITLE = 'Questions about this page';
 const DESCRIPTION = `What ${SITE.name} judges, which models do the work, what happens to your code and what it costs.`;
 
 /**
- * A child's openGraph replaces the layout's whole block; `images` stays unset
- * so the file-convention card is kept. Indexed, unlike review permalinks.
+ * A page's own `openGraph` replaces the layout's block, the file-convention
+ * card included, so the card is named again here. Indexed, unlike permalinks.
  */
 export const metadata: Metadata = {
   alternates: { canonical: '/faq' },
   description: DESCRIPTION,
   openGraph: {
     description: DESCRIPTION,
+    images: [OG_IMAGE],
     siteName: SITE.name,
     title: TITLE,
     type: 'article',
@@ -31,6 +33,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     description: DESCRIPTION,
+    images: [TWITTER_IMAGE],
     title: TITLE,
   },
 };

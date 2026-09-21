@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import type { ReactNode } from 'react';
 
@@ -24,6 +24,15 @@ const mono = Geist_Mono({
 });
 
 // `metadataBase` makes every relative URL absolute, the OG image's included.
+// The browser chrome follows the page, which is the one visible difference a
+// phone shows between the two themes.
+export const viewport: Viewport = {
+  themeColor: [
+    { color: '#0d1117', media: '(prefers-color-scheme: dark)' },
+    { color: '#ffffff', media: '(prefers-color-scheme: light)' },
+  ],
+};
+
 export const metadata: Metadata = {
   alternates: { canonical: '/' },
   applicationName: SITE.name,
