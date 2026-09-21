@@ -6,6 +6,7 @@ import { Measurement } from '@/src/site/Measurement';
 import { SITE } from '@/src/site/site';
 import { ThemeToggle } from '@/src/theme/ThemeToggle';
 import { THEME_SCRIPT } from '@/src/theme/theme';
+import { NavigationDirection } from '@/src/ui/NavigationDirection';
 import './globals.css';
 
 const sans = Geist({
@@ -81,6 +82,9 @@ export default function RootLayout({
           // biome-ignore lint/security/noDangerouslySetInnerHtml: an inline script is the only thing that runs before paint, and every byte of it is written in src/theme/theme.ts
           dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }}
         />
+        {/* Draws nothing: it names which way a navigation is travelling, for
+            the view transition in `globals.css`. */}
+        <NavigationDirection />
         {/* Overlaid rather than given a row: the corner is empty on every page
             except the code view below `lg`, where `Shell` makes room. First in
             the DOM so it is the first Tab stop, matching its position. */}

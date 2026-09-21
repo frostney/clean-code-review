@@ -51,7 +51,10 @@ export default function FaqPage() {
   return (
     <>
       <div className="mx-auto max-w-[1280px] px-4 py-5">
-        <main>
+        {/* Centred as one column, header and questions together, so the page
+            sits where the landing column does. The text inside stays ranged
+            left. */}
+        <main className="mx-auto max-w-[70ch]">
           <PageHeader title={TITLE}>
             <p>{SITE.tagline}</p>
           </PageHeader>

@@ -11,6 +11,12 @@ type Transitional = Document & {
   startViewTransition?: (update: () => void) => Transition;
 };
 
+const SHIFT = '--nav-shift';
+const TRAVEL = '--nav-travel';
+
+/** Which transition owns the copied distance; a later one takes it over. */
+let pinned = 0;
+
 export function switchView(update: () => void): void {
   const doc: Transitional = document;
   const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -18,6 +24,16 @@ export function switchView(update: () => void): void {
     update();
     return;
   }
+  // The distance is copied once, here, because the keyframes re-read it every
+  // frame: left pointing at the live direction, a click or a traversal
+  // landing mid-flight would snap the slide. Nothing else writes this copy,
+  // and it is dropped when the animation it belongs to is over.
+  const root = document.documentElement;
+  const mine = ++pinned;
+  root.style.setProperty(
+    SHIFT,
+    getComputedStyle(root).getPropertyValue(TRAVEL).trim() || '0px',
+  );
   const transition = doc.startViewTransition(() => {
     try {
       flushSync(update);
@@ -35,5 +51,17 @@ export function switchView(update: () => void): void {
     /* The state change already happened. */
   };
   transition.ready.catch(skipped);
-  transition.finished.catch(skipped);
+  // A transition skipped by a second one starting on top must leave that
+  // one's copy alone.
+  const done = () => {
+    if (mine !== pinned) {
+      return;
+    }
+    root.style.removeProperty(SHIFT);
+    delete root.dataset.nav;
+  };
+  transition.finished.then(done, () => {
+    skipped();
+    done();
+  });
 }

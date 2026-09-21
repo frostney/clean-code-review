@@ -5,6 +5,7 @@ import { PullRequestField } from '@/src/pull-request/PullRequestField';
 import { PullRequestSummary } from '@/src/pull-request/PullRequestSummary';
 import { ReviewStats } from '@/src/review/ReviewStats';
 import { SITE } from '@/src/site/site';
+import { LANDING_HEADER } from '@/src/ui/view-transition-names';
 
 import { HomeDuck, LandingDuck } from './Duck';
 import { PasteButton } from './PasteButton';
@@ -32,7 +33,12 @@ const COLUMN =
  */
 export function Hero() {
   return (
-    <header className="group/hero mb-4">
+    /* Named, so the box travels to its own narrower shape when a review opens
+       (the two snapshots crossfade at the size each was taken, see
+       `globals.css`) and fades rather than vanishing when a prose page
+       replaces it. Not the name `PageHeader` uses: see
+       `view-transition-names`. */
+    <header className="group/hero mb-4" style={LANDING_HEADER}>
       <h1 className="sr-only">{SITE.name}</h1>
       <TutorialProvider>
         {/* Centred above the field: at 375px there is no room beside it. The

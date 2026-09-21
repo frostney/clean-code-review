@@ -262,22 +262,153 @@ body {
   }
 }
 
-/* The duck keeps the browser's default timing; only the root crossfade is
-   shortened. Reduced motion never starts this transition. */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation-duration: 180ms;
+/* Everything a navigation animates sits under `no-preference`, so the reduce
+   rule below stays the whole story for a reader who asked for less motion and
+   needs no name of its own adding to it.
+
+   Two kinds of transition reach these rules, and they animate different
+   parts. The page starts one itself when a review opens or closes
+   (`landing/view-transition`), and there the whole page is `root` and the
+   rules below carry it. A route change (`/`, `/faq`, `/privacy`) is started
+   by React, which sets `view-transition-name: none` on `<html>` and holds
+   `::view-transition-group(root)` at opacity 0 for the duration (measured;
+   react-dom does it in its commit), so on those only the named parts
+   animate — the duck, the two headers, the title and the answers — and the
+   `root` rules paint nothing. */
+@media (prefers-reduced-motion: no-preference) {
+  /* How far the page slides and which way. `--nav-travel` is where the reader
+     is going, named on `<html>` by `ui/NavigationDirection`;
+     `landing/view-transition` copies it to `--nav-shift` as the transition
+     starts and drops that copy when it ends. The keyframes read only the
+     copy, because a running animation re-reads a custom property every frame
+     and a later write would otherwise snap the slide. Custom properties reach
+     the `::view-transition` tree from `:root`, the element it hangs off.
+
+     In practice only Back and Forward between the landing view and a
+     permalink arrive with a direction: a review opened or closed with a
+     button is an in-place change, and the click that starts it clears the
+     name, so the page crossfades without moving. */
+  :root {
+    --nav-travel: 0px;
+    --nav-shift: 0px;
+  }
+
+  :root[data-nav="forward"] {
+    --nav-travel: 24px;
+  }
+
+  :root[data-nav="back"] {
+    --nav-travel: -24px;
+  }
+
+  ::view-transition-old(root) {
+    animation:
+      180ms ease-in both pageFade reverse,
+      260ms ease-in both pageLeave;
+  }
+
+  ::view-transition-new(root) {
+    animation:
+      180ms ease-out both pageFade,
+      260ms ease-out both pageEnter;
+  }
+
+  /* Each header and the title travel to their new position rather than
+     dissolving where they stand. The landing header is clipped to that
+     travelling box: it is the whole hero, and at its size it would otherwise
+     hang several hundred pixels below the field row it shrinks to, lightened
+     over the code view by the blending the browser crossfades with. */
+  ::view-transition-group(landing-header),
+  ::view-transition-group(page-header),
+  ::view-transition-group(page-title) {
+    animation-duration: 260ms;
+  }
+
+  ::view-transition-group(landing-header) {
+    overflow: clip;
+  }
+
+  /* A snapshot is stretched to its group's animating width by default, which
+     on text reads as a zoom: `/privacy`'s title is a third the width of
+     `/faq`'s. Drawn at the size it was captured instead, the box travels and
+     the words keep their size. */
+  ::view-transition-old(landing-header),
+  ::view-transition-new(landing-header),
+  ::view-transition-old(page-header),
+  ::view-transition-new(page-header),
+  ::view-transition-old(page-title),
+  ::view-transition-new(page-title) {
+    block-size: auto;
+    inline-size: auto;
+    object-fit: none;
+    object-position: 0 0;
+  }
+
+  /* The answers arrive one after another. The step classes are capped in
+     `src/site/Faq.tsx`, so a longer list still lands within one beat. */
+  ::view-transition-old(*.faq) {
+    animation: 120ms ease-in both pageFade reverse;
+  }
+
+  ::view-transition-new(*.faq) {
+    animation:
+      200ms ease-out both pageFade,
+      240ms ease-out both faqRise;
+  }
+
+  ::view-transition-new(*.faq-step-1) {
+    animation-delay: 30ms;
+  }
+
+  ::view-transition-new(*.faq-step-2) {
+    animation-delay: 60ms;
+  }
+
+  ::view-transition-new(*.faq-step-3) {
+    animation-delay: 90ms;
+  }
+
+  ::view-transition-new(*.faq-step-4) {
+    animation-delay: 120ms;
+  }
 }
 
-/* React starts the `/` to `/faq` transitions (`DuckTransition` only names the
-   duck), so reduced motion is honoured here. `root` is listed because the named rule above is
-   more specific than `*`. */
+@keyframes pageFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pageLeave {
+  to {
+    translate: calc(var(--nav-shift) * -1);
+  }
+}
+
+@keyframes pageEnter {
+  from {
+    translate: var(--nav-shift);
+  }
+}
+
+@keyframes faqRise {
+  from {
+    translate: 0 6px;
+  }
+}
+
+/* React starts the route transitions (`DuckTransition` only names the duck),
+   so reduced motion is honoured here rather than at the call. `*` is enough:
+   it outranks nothing but the browser's own animations, which an author rule
+   beats at any specificity, and every rule above is written under
+   `no-preference` and never reaches this reader. */
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*),
   ::view-transition-old(*),
-  ::view-transition-new(*),
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
+  ::view-transition-new(*) {
     animation: none;
   }
 }
