@@ -367,3 +367,46 @@ export function questionsFor(file: {
 export function questionById(id: string): Question | undefined {
   return QUESTIONS.find((q) => q.id === id);
 }
+
+/** TypeSafe's "noul" is the SDK's "boolean". */
+export function questionsOf(rows: readonly Question[]) {
+  return Object.fromEntries(
+    rows.map((q) =>
+      q.type === 'noul'
+        ? [q.id, { instructions: q.ask, type: 'boolean' as const }]
+        : [
+            q.id,
+            {
+              criteria: [...q.levels],
+              instructions: q.ask,
+              type: 'score' as const,
+            },
+          ],
+    ),
+  );
+}
+
+/** Sent beside a diff so Jev judges the code after the change, not the markers. */
+const DIFF_NOTE =
+  "Judge the code as it stands after this change. The diff shows what changed: '+' lines were added, '-' lines removed.";
+
+/**
+ * The keys a call sends beside the questions, with the code itself left empty:
+ * the one definition of the payload's shape. `evaluateFile` spreads it and
+ * fills the code in, and the spend estimate measures it, so a key added here
+ * reaches both.
+ */
+export const JUDGE_STATE = {
+  patch: { code_after_change: '', diff: '', note: DIFF_NOTE, path: '' },
+  whole: { code: '', path: '' },
+} as const;
+
+/**
+ * Everything one call carries besides the code itself, measured rather than
+ * guessed at, so the spend estimate follows a change of wording. The path is
+ * counted separately by the caller.
+ */
+export const QUESTIONS_OVERHEAD_CHARS = JSON.stringify({
+  questions: questionsOf(QUESTIONS),
+  state: JUDGE_STATE.patch,
+}).length;
