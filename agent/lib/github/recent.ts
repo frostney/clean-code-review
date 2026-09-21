@@ -96,8 +96,8 @@ const CANDIDATES = 60;
  * Hard ceiling per refresh, beside the one search call. Set against a measured
  * walk, not a rate: one live refresh took 13 calls to reach five chips, so a
  * ceiling below that buys a four-chip row to save one call. At
- * `RECENT_REFRESH_SECONDS` this is still at most half of GitHub's 60 core
- * calls an hour, and less if that window widens.
+ * `RECENT_REFRESH_SECONDS` that is a quarter of GitHub's 60 core calls an
+ * hour, per region, leaving the rest for readers pasting their own.
  */
 const MAX_DETAIL_CALLS = 15;
 
@@ -114,7 +114,13 @@ const MAX_PER_REPOSITORY = 2;
 const MIN_ADDED_LINES = 30;
 const MAX_CHANGED_FILES = 24;
 
-export const RECENT_REFRESH_SECONDS = 1_800;
+/**
+ * An hour, because freshness buys the row nothing — a pull request opened
+ * yesterday is as good an example as one opened since the last refresh — while
+ * every refresh draws on the same 60 calls an hour that a reader's own pasted
+ * pull request draws on. One walk an hour leaves that budget mostly for them.
+ */
+export const RECENT_REFRESH_SECONDS = 3_600;
 
 /**
  * Bounds the walk in time as well as in calls: `MAX_DETAIL_CALLS` sequential

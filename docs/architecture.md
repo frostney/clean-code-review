@@ -217,7 +217,7 @@ hash of their content; the pull request cache is keyed by a public URL.
 | Jev's answers for one file | 1 hour | the file's content, path, question ids and a question-set version | the answers only; the code is in the key and no further |
 | One Luna review part | 1 hour | the exact prompt, the model id and a review version | the written part |
 | A fetched pull request | 1 minute | its GitHub URL | the whole `PullRequestReview`: title, description, diff, avatar URL and changed-file count |
-| The recent pull request list | 30 minutes | one fixed key | up to five `{repo, number, title, url}`, or an empty list; claimed for 3 minutes before the refresh walks, so instances that miss together do not each spend GitHub's anonymous budget |
+| The recent pull request list | 1 hour | one fixed key | up to five `{repo, number, title, url}`, or an empty list; claimed for 3 minutes before the refresh walks, so instances that miss together do not each spend GitHub's anonymous budget |
 
 The Vercel Runtime Cache backs all four on a deployment: per region, shared
 across instances, and it survives deploys. Off Vercel, or when the Runtime Cache
