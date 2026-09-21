@@ -1,5 +1,5 @@
 /**
- * Recently merged pull requests for the landing page's example chips.
+ * Open pull requests for the landing page's example chips.
  *
  * There is no GitHub token, so every reader spends one anonymous budget. The
  * two halves of it are counted apart: the search call comes from GitHub's
@@ -16,11 +16,11 @@
  * rather than degrade to per-instance memory — the same fail-closed rule
  * `../spend/spend.ts` applies to the spend counters.
  *
- * Merged only, and only from `REPOSITORIES`: a merged pull request's title and
- * diff have been through the maintainers of a repository we picked, and the
- * fixed list means the search can never hand the page a stranger's repository.
- * Whatever this returns is rendered under our name, so the title is clamped
- * here — this is the last place that can.
+ * Only from `REPOSITORIES`, and only from someone who has already had work
+ * merged into the one they are writing to: the fixed list means the search can
+ * never hand the page a stranger's repository, and `LANDED_WORK` means it
+ * cannot hand it a stranger's title either. Whatever this returns is rendered
+ * under our name, so the title is clamped here — the last place that can.
  */
 import { cacheGetStrict, cacheSetStrict } from '../infra/cache';
 import { parsePullRequest } from './github';
@@ -64,10 +64,9 @@ const MS_PER_DAY = 86_400_000;
 const DATE_CHARS = 10;
 
 /**
- * `sort=updated` is the closest the issue search comes to "recently merged",
- * and on its own it floats year-old pull requests up on a new comment, so the
- * window is a qualifier as well: without it most of the candidate list is
- * spent on merges the filter then throws away.
+ * `sort=updated` alone floats a long-dead pull request up on a single new
+ * comment, so the window is a qualifier too: without it most of the candidate
+ * list is spent on pull requests the filter then throws away.
  *
  * Exported so a test can hold it under GitHub's 256-character query limit.
  */
@@ -76,7 +75,7 @@ export function searchQuery(now: Date): string {
     .toISOString()
     .slice(0, DATE_CHARS);
 
-  return `is:pr is:merged merged:>=${since} ${REPOSITORY_FILTER}`;
+  return `is:pr is:open draft:false updated:>=${since} ${REPOSITORY_FILTER}`;
 }
 
 const SEARCH_URL = 'https://api.github.com/search/issues';
@@ -149,7 +148,9 @@ interface PullRequestFacts {
   draft: boolean;
   login: string;
   userType: string;
-  mergedAt: string | null;
+  updatedAt: string | null;
+  /** GitHub's `author_association`; `LANDED_WORK` says which count. */
+  association: string;
 }
 
 export interface PullRequestDetails extends PullRequestFacts {
@@ -172,19 +173,34 @@ function isBot(facts: PullRequestFacts): boolean {
   return facts.userType === 'Bot' || facts.login.endsWith('[bot]');
 }
 
-function recentlyMerged(mergedAt: string | null, now: Date): boolean {
-  const at = mergedAt === null ? Number.NaN : Date.parse(mergedAt);
+function recentlyUpdated(updatedAt: string | null, now: Date): boolean {
+  const at = updatedAt === null ? Number.NaN : Date.parse(updatedAt);
 
   return Number.isFinite(at) && now.getTime() - at <= RECENT_DAYS * MS_PER_DAY;
 }
 
 /**
- * Everything but the size, which only the pull-request call can answer. Merged
- * only, deliberately: an open pull request's title is whatever a stranger
- * typed, and nothing but a maintainer's merge vouches for what a chip shows.
+ * An allowlist, so an association GitHub adds later is a stranger until it is
+ * named here. These four have all had work merged into that repository, which
+ * is what keeps a title off the page that someone wrote only to put it there:
+ * opening a pull request against a famous project costs nothing, and the title
+ * is rendered under our name.
+ */
+const LANDED_WORK = new Set(['COLLABORATOR', 'CONTRIBUTOR', 'MEMBER', 'OWNER']);
+
+/**
+ * Everything but the size, which only the pull-request call can answer. Open,
+ * not merged: this page answers "request changes" or "approved", and on a
+ * merged pull request that verdict is weeks late — an example should look like
+ * the job.
  */
 function worthFetching(facts: PullRequestFacts, now: Date): boolean {
-  return !facts.draft && !isBot(facts) && recentlyMerged(facts.mergedAt, now);
+  return (
+    !facts.draft &&
+    !isBot(facts) &&
+    LANDED_WORK.has(facts.association) &&
+    recentlyUpdated(facts.updatedAt, now)
+  );
 }
 
 function qualifies(details: PullRequestDetails, now: Date): boolean {
@@ -304,14 +320,14 @@ interface SearchItem {
   html_url?: string;
   title?: string;
   draft?: boolean;
+  updated_at?: string | null;
+  author_association?: string;
   user?: { login?: string; type?: string };
-  pull_request?: { merged_at?: string | null };
 }
 
 interface PullRequestPayload extends SearchItem {
   additions?: number;
   changed_files?: number;
-  merged_at?: string | null;
 }
 
 /**
@@ -334,9 +350,10 @@ export function candidateOf(item: SearchItem): Candidate | null {
 
   return {
     facts: {
+      association: item.author_association ?? '',
       draft: item.draft === true,
       login: item.user?.login ?? '',
-      mergedAt: item.pull_request?.merged_at ?? null,
+      updatedAt: item.updated_at ?? null,
       userType: item.user?.type ?? '',
     },
     number: ref.number,
@@ -377,11 +394,12 @@ function safeTitle(raw: string): string {
 export function detailsFrom(payload: PullRequestPayload): PullRequestDetails {
   return {
     additions: payload.additions ?? 0,
+    association: payload.author_association ?? '',
     changedFiles: payload.changed_files ?? Number.POSITIVE_INFINITY,
     draft: payload.draft === true,
     login: payload.user?.login ?? '',
-    mergedAt: payload.merged_at ?? null,
     title: safeTitle(payload.title ?? ''),
+    updatedAt: payload.updated_at ?? null,
     userType: payload.user?.type ?? '',
   };
 }

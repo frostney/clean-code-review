@@ -101,7 +101,7 @@ export function Hero() {
           <div className="mt-1.5 h-12 lg:h-10">
             <RecentPullRequests>
               <span className="shrink-0 whitespace-nowrap text-xs text-muted">
-                Recently merged:
+                Open right now:
               </span>
             </RecentPullRequests>
           </div>

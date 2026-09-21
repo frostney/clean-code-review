@@ -39,9 +39,10 @@ function candidate(
 
   return {
     facts: {
+      association: 'CONTRIBUTOR',
       draft: false,
       login: 'contributor',
-      mergedAt: daysAgo(1),
+      updatedAt: daysAgo(1),
       userType: 'User',
       ...facts,
     },
@@ -91,7 +92,10 @@ test('the search query fits what GitHub will accept', () => {
     query.length <= MAX_QUERY_CHARS,
     `the query is ${query.length} characters`,
   );
-  assert.match(query, /merged:>=2026-09-07\b/);
+  assert.match(query, /updated:>=2026-09-07\b/);
+  // Open, and never a draft: the two the row exists to show.
+  assert.match(query, /\bis:open\b/);
+  assert.match(query, /\bdraft:false\b/);
 });
 
 test('every repository on the list is in the query', () => {
@@ -114,10 +118,11 @@ test('every repository on the list is in the query', () => {
 /* --- The boundary that keeps a stranger's repository off the page --- */
 
 const searchItem = (htmlUrl: string) => ({
+  author_association: 'CONTRIBUTOR',
   draft: false,
   html_url: htmlUrl,
-  pull_request: { merged_at: daysAgo(1) },
   title: 'A change',
+  updated_at: daysAgo(1),
   user: { login: 'contributor', type: 'User' },
 });
 
@@ -144,9 +149,10 @@ test('a listed repository keeps its own casing and a rebuilt url', () => {
 
   assert.deepEqual(found, {
     facts: {
+      association: 'CONTRIBUTOR',
       draft: false,
       login: 'contributor',
-      mergedAt: daysAgo(1),
+      updatedAt: daysAgo(1),
       userType: 'User',
     },
     number: 1234,
@@ -160,11 +166,12 @@ test('a listed repository keeps its own casing and a rebuilt url', () => {
 test('a payload missing everything fails the filter rather than passing it', () => {
   assert.deepEqual(detailsFrom({}), {
     additions: 0,
+    association: '',
     changedFiles: Number.POSITIVE_INFINITY,
     draft: false,
     login: '',
-    mergedAt: null,
     title: '',
+    updatedAt: null,
     userType: '',
   });
 });
@@ -266,11 +273,11 @@ test('drafts and bots are dropped before they cost a call', async () => {
   );
 });
 
-test('only a recent merge is worth a call', async () => {
+test('only a recent pull request from a past contributor is worth a call', async () => {
   const candidates = [
-    candidate('a/one', { mergedAt: daysAgo(40) }),
-    // Never merged: open or closed, nobody vouched for it.
-    candidate('b/two', { mergedAt: null }),
+    candidate('a/one', { updatedAt: daysAgo(40) }),
+    // A first pull request to this repository: nobody has vouched for them.
+    candidate('b/two', { association: 'NONE' }),
     candidate('c/three'),
     candidate('d/four'),
     candidate('e/five'),
@@ -282,6 +289,29 @@ test('only a recent merge is worth a call', async () => {
   assert.deepEqual(
     chosen.map((pr) => pr.repo),
     ['c/three', 'd/four', 'e/five'],
+  );
+});
+
+test('an association nobody has named is a stranger', async () => {
+  // The four that count are named; anything else, including one GitHub adds
+  // after this was written, has to fail rather than pass.
+  const candidates = [
+    candidate('a/one', { association: 'FIRST_TIME_CONTRIBUTOR' }),
+    candidate('b/two', { association: 'MANNEQUIN' }),
+    candidate('c/three', { association: '' }),
+    candidate('d/four', { association: 'SOME_FUTURE_ROLE' }),
+    candidate('e/five', { association: 'contributor' }),
+    candidate('f/six', { association: 'OWNER' }),
+    candidate('g/seven', { association: 'MEMBER' }),
+    candidate('h/eight', { association: 'COLLABORATOR' }),
+  ];
+  const fetcher = counted((c) => detailsOf(c));
+  const chosen = await selectPullRequests(candidates, fetcher.fetch, NOW);
+
+  assert.equal(fetcher.calls.length, 3);
+  assert.deepEqual(
+    chosen.map((pr) => pr.repo),
+    ['f/six', 'g/seven', 'h/eight'],
   );
 });
 
