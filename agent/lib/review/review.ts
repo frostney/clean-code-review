@@ -22,6 +22,20 @@ export interface FileJudgment {
   usage: Usage;
   ms: number;
   cached?: boolean;
+  /**
+   * How much of the verdict rests on the file's comments: the verdict of the
+   * file as written minus the verdict of the same file with its comments
+   * removed. Both passes read the same lines in the same windows, with one
+   * exception: a window whose every line was a comment is not sent at all in
+   * the second pass, so a file that holds one is compared over one window
+   * fewer. That window has no code to fault, so it understates the lean rather
+   * than inventing one. Absent when the file was judged in one pass.
+   */
+  commentLean?: number;
+  /** Windows of the file that answered; above one, it was read in parts. */
+  windows?: number;
+  /** The file was longer than `maxJudgedChars`; the rest was not judged. */
+  cut?: boolean;
 }
 
 export interface ReviewResult {
@@ -43,12 +57,57 @@ export const REVIEW_LIMITS = {
   maxFiles: 24,
   /** Not judged, so not counted against `maxFiles`. */
   maxProseFiles: 10,
+  /**
+   * A longer file is judged in this many windows of `maxCharsPerFile` and cut
+   * after them. Four covers the largest source in this repository (43,685
+   * characters) with a window to spare, and bounds one file's judging at eight
+   * model calls once both passes are counted.
+   */
+  maxWindowsPerFile: 4,
 } as const;
 
-export function clampReview(input: ReviewInput): ReviewInput {
+/** The most of one file any judgement reads. */
+export const MAX_JUDGED_CHARS =
+  REVIEW_LIMITS.maxCharsPerFile * REVIEW_LIMITS.maxWindowsPerFile;
+
+const HIGH_SURROGATE_FIRST = 0xd800;
+const HIGH_SURROGATE_LAST = 0xdbff;
+const LOW_SURROGATE_FIRST = 0xdc00;
+const LOW_SURROGATE_LAST = 0xdfff;
+
+function inRange(code: number, first: number, last: number): boolean {
+  return code >= first && code <= last;
+}
+
+/**
+ * Cuts on a code-point boundary, so an emoji is dropped rather than halved.
+ * Every cut of code on its way to a judgement goes through this.
+ */
+export function cappedAt(text: string, limit: number): string {
+  if (text.length <= limit) {
+    return text;
+  }
+  const splits =
+    inRange(
+      text.charCodeAt(limit - 1),
+      HIGH_SURROGATE_FIRST,
+      HIGH_SURROGATE_LAST,
+    ) &&
+    inRange(text.charCodeAt(limit), LOW_SURROGATE_FIRST, LOW_SURROGATE_LAST);
+  return text.slice(0, splits ? limit - 1 : limit);
+}
+
+/**
+ * `maxChars` is `maxCharsPerFile` for anything that reads a file whole, and
+ * `MAX_JUDGED_CHARS` for the judge, which reads a long file in windows.
+ */
+export function clampReview(
+  input: ReviewInput,
+  maxChars: number = REVIEW_LIMITS.maxCharsPerFile,
+): ReviewInput {
   return {
     files: input.files.slice(0, REVIEW_LIMITS.maxFiles).map((f) => ({
-      content: f.content.slice(0, REVIEW_LIMITS.maxCharsPerFile),
+      content: cappedAt(f.content, maxChars),
       path: f.path,
       ...(f.patch ? { patch: true } : {}),
     })),

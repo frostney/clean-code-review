@@ -24,6 +24,7 @@
  * lost writes go uncounted.
  */
 import { cacheGetStrict, cacheSetStrict } from '../infra/cache';
+import { QUESTIONS_OVERHEAD_CHARS } from '../judging/questions';
 import { REVIEW_LIMITS } from '../review/review';
 
 /**
@@ -75,22 +76,43 @@ const JEV_INPUT_USD_PER_TOKEN = 0.000_000_042;
 const LUNA_INPUT_USD_PER_TOKEN = 0.000_000_44;
 const LUNA_OUTPUT_USD_PER_TOKEN = 0.000_002_64;
 
-/** Below English prose's ratio, so estimates from characters err high. */
+/**
+ * Below English prose's ratio, so estimates from characters err high — but not
+ * for every source. CJK, Cyrillic and Greek identifiers and strings run closer
+ * to one token per character, so a file written in them is under-counted here
+ * and only the retry doubling keeps the reservation ahead of the bill.
+ */
 const CHARS_PER_TOKEN = 3;
 
-/** Generous allowance for the questions, path and note sent beside the code. */
-const JEV_QUESTION_CHARS = 6000;
+/** Longer than any path GitHub will serve. */
+const MAX_PATH_CHARS = 512;
 
-/** Post-change code and diff, each up to the per-file cap, plus the questions. */
-const JEV_MAX_STATE_CHARS =
-  2 * REVIEW_LIMITS.maxCharsPerFile + JEV_QUESTION_CHARS;
+/** Room for a question's wording to grow before the estimate has to be revisited. */
+const JEV_QUESTION_MARGIN = 1.25;
 
 /**
+ * The questions, the note and the path sent beside the code, measured from the
+ * question set rather than guessed at, since up to eight calls per file
+ * multiply any slack.
+ */
+export const JEV_QUESTION_CHARS = Math.ceil(
+  JEV_QUESTION_MARGIN * (QUESTIONS_OVERHEAD_CHARS + MAX_PATH_CHARS),
+);
+
+/**
+ * One call: one window of one pass. A file costs this once per window of each
+ * of its two passes, which is what `judgeEstimateUsd` adds up. `stateChars` is
+ * the code sent, counting a diff's after-image and the diff itself separately;
+ * one window is never more than `REVIEW_LIMITS.maxCharsPerFile` of either.
  * Doubled because a stuck first attempt is retried once and may have been
  * billed too. Jev charges nothing for output.
  */
-export const JEV_FILE_ESTIMATE_USD =
-  2 * (JEV_MAX_STATE_CHARS / CHARS_PER_TOKEN) * JEV_INPUT_USD_PER_TOKEN;
+export function jevCallEstimateUsd(stateChars: number): number {
+  const chars =
+    Math.min(stateChars, 2 * REVIEW_LIMITS.maxCharsPerFile) +
+    JEV_QUESTION_CHARS;
+  return 2 * (chars / CHARS_PER_TOKEN) * JEV_INPUT_USD_PER_TOKEN;
+}
 
 export function lunaPartEstimateUsd(
   promptChars: number,

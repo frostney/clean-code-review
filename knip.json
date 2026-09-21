@@ -9,6 +9,7 @@
     "agent/subagents/**/*.ts",
     "agent/**/*.test.ts",
     "scripts/*.ts",
+    "agent/**/*.test.ts",
     "src/**/*.test.ts"
   ],
   "ignoreDependencies": ["server-only", "vercel"],

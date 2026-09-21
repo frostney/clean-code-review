@@ -3,6 +3,7 @@ import { QUESTIONS } from '../judging/questions';
 import type { Answers } from '../judging/schema';
 import {
   clampReview,
+  MAX_JUDGED_CHARS,
   partitionJudgeable,
   REVIEW_LIMITS,
   type ReviewFile,
@@ -28,7 +29,10 @@ export function buildInstructions(): string {
 }
 
 export function judgeMessage(input: ReviewInput): string {
-  return JSON.stringify({ kind: 'judge', ...clampReview(input) });
+  return JSON.stringify({
+    kind: 'judge',
+    ...clampReview(input, MAX_JUDGED_CHARS),
+  });
 }
 
 export interface SummarizeInput extends ReviewInput {
@@ -91,7 +95,7 @@ function parseJsonMessage(trimmed: string): ParsedMessage | null {
     };
   }
   if (raw.kind === 'judge' || raw.kind === undefined) {
-    return { input: clampReview({ files }), kind: 'judge' };
+    return { input: clampReview({ files }, MAX_JUDGED_CHARS), kind: 'judge' };
   }
   return null;
 }
@@ -110,13 +114,16 @@ export function parseMessage(text: string): ParsedMessage {
   }
   if (looksLikePatch(trimmed)) {
     return {
-      input: clampReview({ files: filesFromPatch(trimmed) }),
+      input: clampReview({ files: filesFromPatch(trimmed) }, MAX_JUDGED_CHARS),
       kind: 'judge',
     };
   }
   if (looksLikeCode(trimmed)) {
     return {
-      input: clampReview({ files: [{ content: trimmed, path: 'snippet' }] }),
+      input: clampReview(
+        { files: [{ content: trimmed, path: 'snippet' }] },
+        MAX_JUDGED_CHARS,
+      ),
       kind: 'judge',
     };
   }

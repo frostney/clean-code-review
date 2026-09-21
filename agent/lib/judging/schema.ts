@@ -49,8 +49,11 @@ const fileSchema = z.object({
   // Rows are validated one by one below, so one odd answer cannot sink the rest.
   answers: z.record(z.string(), z.unknown()),
   cached: z.boolean().optional(),
+  commentLean: z.number().optional(),
+  cut: z.boolean().optional(),
   ms: z.number(),
   usage: usageSchema,
+  windows: z.number().optional(),
 });
 
 const resultSchema = z.object({
