@@ -1,5 +1,5 @@
 import { QUESTION_COUNT } from '@/agent/lib/judging/questions';
-import { REVIEW_LIMITS } from '@/agent/lib/review/review';
+import { MAX_JUDGED_CHARS, REVIEW_LIMITS } from '@/agent/lib/review/review';
 import {
   dollars,
   MCP_DAILY_BUDGET_USD,
@@ -25,7 +25,7 @@ ${SITE.name} judges code against the chapters of Robert C. Martin's *Clean Code*
 
 Reach for ${SITE.name} when there is a public GitHub pull request, a unified diff or a single file, and the question is how well the code is written rather than whether it runs. It answers three jobs well: deciding whether a change is ready to merge, finding which files in a change carry the most smells, and comparing two ways of writing the same function by editing the code on the page and watching the answers move.
 
-It is not a linter, a type checker, a test runner or a security scanner, and it never executes the code it reads. It judges at most ${REVIEW_LIMITS.maxFiles} code files in one review, ${REVIEW_LIMITS.maxCharsPerFile.toLocaleString('en-US')} characters each, from public repositories only.
+It is not a linter, a type checker, a test runner or a security scanner, and it never executes the code it reads. It judges at most ${REVIEW_LIMITS.maxFiles} code files in one review, ${MAX_JUDGED_CHARS.toLocaleString('en-US')} characters each, from public repositories only.
 
 An agent can open a review directly at ${SITE.url}/owner/repo/pull/123, and can read any page of this site as Markdown by sending the header \`Accept: text/markdown\`.
 

@@ -24,7 +24,9 @@ export function Shell({
       initialPullRequest={pullRequest}
     >
       {/* Below `lg` the code view shares the top-right corner with the theme
-          switch, so its top padding grows to 40px, the switch's height. */}
+          switch, so its top padding grows to 40px, the switch's height. The
+          home duck marks that view, and arrives with the press that asks for
+          it, so this 20px is never a shift the reader did not cause. */}
       <div className="mx-auto max-w-[1280px] px-4 py-5 max-lg:has-[[data-duck=home]]:pt-10">
         <main>
           <Hero />

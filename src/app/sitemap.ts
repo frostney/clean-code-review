@@ -11,6 +11,8 @@ const SUPPORTING_PAGE_PRIORITY = 0.6;
 const LEGAL_PAGE_PRIORITY = 0.3;
 
 // Permalinks are deliberately absent: `noindex`, and disallowed in robots.txt.
+// So is `/review`, which is an address a pasted review is given rather than a
+// page with anything to index.
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
     {

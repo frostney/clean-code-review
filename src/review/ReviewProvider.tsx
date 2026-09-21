@@ -27,7 +27,7 @@ import {
   pullRequestUrl,
   splitPullRequest,
 } from '@/src/pull-request/address';
-import { SITE } from '@/src/site/site';
+import { REVIEW_PATH, SITE } from '@/src/site/site';
 
 import { withPatchHeader } from './diff';
 import {
@@ -72,6 +72,15 @@ interface ReviewView {
   review: OpenReview;
   /** False on the landing view. */
   open: boolean;
+  /**
+   * The page has given the review its layout: a review is open, or one was
+   * asked for and the answer — the pull request, or a refusal — has not sent
+   * the reader back to the start. The room is held from the press, so nothing
+   * the answer brings moves anything (the page's whole cumulative layout shift
+   * used to be this one change, landing ~700ms after the click and so outside
+   * the 500ms a browser forgives).
+   */
+  committed: boolean;
   reviewState: ReviewState;
   lineCount: number;
   prError: string | null;
@@ -234,6 +243,12 @@ export function ReviewProvider({
   const [prError, setPrError] = useState<string | null>(opened.error);
   const [fetching, setFetching] = useState(false);
   const [retryingPr, setRetryingPr] = useState(false);
+  /**
+   * The reader asked this page for a review. True from the press until the
+   * page goes back to the start, so a refusal is answered in the review's
+   * layout rather than by putting the landing view back under the reader.
+   */
+  const [asked, setAsked] = useState(false);
   /** What Retry asks for again; seeded by a permalink that failed on the server. */
   const lastAskedRef = useRef<{ url: string; entry: string | null } | null>(
     opened.error && initialAddress.repo
@@ -317,6 +332,7 @@ export function ReviewProvider({
       generationRef.current += 1;
       switchView(() => {
         setReview(next);
+        setAsked(next.id !== NO_REVIEW.id);
         setPasting(false);
         setPrError(null);
         setFetching(false);
@@ -364,7 +380,7 @@ export function ReviewProvider({
       if (!preset) {
         return;
       }
-      show(fromPreset(preset, nextId(label)), '/');
+      show(fromPreset(preset, nextId(label)), REVIEW_PATH);
     },
     [nextId, show],
   );
@@ -376,7 +392,7 @@ export function ReviewProvider({
       if (!next) {
         return;
       }
-      show(next, '/');
+      show(next, REVIEW_PATH);
     },
     [nextId, show],
   );
@@ -418,6 +434,11 @@ export function ReviewProvider({
       const generation = generationRef.current;
 
       lastAskedRef.current = { entry, url };
+      // Not inside `switchView`: this is where the page takes the review's
+      // shape, and it has to be painted while the browser still credits the
+      // press for it. A transition holds the new layout back behind its
+      // snapshots, and the change lands as a shift nobody asked for.
+      setAsked(true);
       // A retry keeps the error shown so it does not blink away and back.
       if (!retrying) {
         setPrError(null);
@@ -454,7 +475,24 @@ export function ReviewProvider({
     }
   }, [open]);
 
-  const dismissPrError = useCallback(() => setPrError(null), []);
+  /**
+   * The way out of a refusal, whether the duck is saying it or the review's
+   * layout is: it puts the landing view back, which is a view change and one
+   * the press pays for. The generation is bumped as `goHome` bumps it, because
+   * a retry may still be in flight and its answer must not arrive on top of a
+   * reader who has left — as a review, or as the refusal just dismissed. The
+   * review itself stays: a refused second pull request is dismissed from an
+   * open review without closing it.
+   */
+  const dismissPrError = useCallback(() => {
+    generationRef.current += 1;
+    switchView(() => {
+      setPrError(null);
+      setAsked(false);
+      setFetching(false);
+      setRetryingPr(false);
+    });
+  }, []);
 
   /**
    * Next does not re-render the route for entries this page pushed, so the
@@ -482,7 +520,13 @@ export function ReviewProvider({
 
       if (parts) {
         open(pullRequestUrl(parts.repo, parts.number), path);
+
+        return;
       }
+      // A pasted review is not kept anywhere, so its address, and any other
+      // this page pushed, falls back to the landing view rather than leaving
+      // the page under an address it cannot fill.
+      show(NO_REVIEW, '/', true);
     }
     window.addEventListener('popstate', onPopState);
 
@@ -584,29 +628,33 @@ export function ReviewProvider({
     ],
   );
 
-  const view = useMemo<ReviewView>(
-    () => ({
+  const view = useMemo<ReviewView>(() => {
+    // Not `open`: that name is the callback that fetches a pull request.
+    const showing = review.id !== NO_REVIEW.id;
+
+    return {
+      committed: showing || asked,
       edit,
       lineCount,
-      open: review.id !== NO_REVIEW.id,
+      open: showing,
       pasting,
       prError,
       retryingPr,
       review,
       reviewState,
       stopPasting,
-    }),
-    [
-      review,
-      reviewState,
-      lineCount,
-      prError,
-      retryingPr,
-      pasting,
-      stopPasting,
-      edit,
-    ],
-  );
+    };
+  }, [
+    review,
+    reviewState,
+    lineCount,
+    asked,
+    prError,
+    retryingPr,
+    pasting,
+    stopPasting,
+    edit,
+  ]);
 
   return (
     <ControlsContext.Provider value={controls}>

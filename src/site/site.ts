@@ -1,3 +1,9 @@
+/**
+ * Where a pasted or example review is shown. One address for all of them: it
+ * makes opening one a page view like any other, and names no code.
+ */
+export const REVIEW_PATH = '/review';
+
 // The one source for metadata, OG image, robots, sitemap, llms.txt and footer.
 export const SITE = {
   author: 'https://cleancoder.com',

@@ -4,10 +4,12 @@
  * 404 name, never a query or fragment. The privacy page promises exactly this.
  */
 
+import { REVIEW_PATH } from './site';
+
 const ROOT_PATH = '/';
 
 /** Route handlers are not page views. */
-const PAGES = new Set([ROOT_PATH, '/faq', '/privacy']);
+const PAGES = new Set([ROOT_PATH, '/faq', '/privacy', REVIEW_PATH]);
 
 const PULL_REQUEST_ROUTE = '/[owner]/[repo]/pull/[number]';
 

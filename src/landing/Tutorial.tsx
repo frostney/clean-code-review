@@ -9,7 +9,6 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -334,22 +333,21 @@ const BUBBLE = 'bg-bubble text-bubble-ink';
 const ERROR_BUBBLE_ROOM = 'max-lg:min-h-[103px]';
 
 /**
- * Holds the bubble's height from fetch through a refusal, so a shorter refusal
- * does not pull the field up. Measured before paint.
+ * A press that removes the button it came from leaves the focus on `<body>`
+ * unless it is handed somewhere. `selector` is where the page carries on.
+ *
+ * A task, not a frame: React has committed the press's DOM by the next one,
+ * and a page the browser is not painting — a hidden tab, a background window —
+ * produces no frames at all, so `requestAnimationFrame` may never run and the
+ * focus would be dropped exactly where nobody is watching to notice.
  */
-function useBubbleFloor(fetching: boolean, prError: string | null) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [height, setHeight] = useState(0);
-
-  useLayoutEffect(() => {
-    if (fetching && ref.current) {
-      setHeight(ref.current.offsetHeight);
-    } else if (!(fetching || prError)) {
-      setHeight(0);
-    }
-  }, [fetching, prError]);
-
-  return { height, ref };
+function handOn(control: HTMLElement, selector: string): void {
+  if (document.activeElement !== control) {
+    return;
+  }
+  setTimeout(() => {
+    document.querySelector<HTMLElement>(selector)?.focus();
+  }, 0);
 }
 
 const PIXEL_BUTTON = `${pixel.className} inline-flex min-h-6 min-w-6 cursor-pointer items-center justify-end rounded-sm px-1 text-[8px]! text-bubble-ink [font-variant-ligatures:none]! underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-bubble-ink focus-visible:outline-offset-2 aria-disabled:cursor-default aria-disabled:no-underline`;
@@ -362,8 +360,6 @@ const PIXEL_BUTTON = `${pixel.className} inline-flex min-h-6 min-w-6 cursor-poin
 export function TutorialBubble() {
   const { line, canAdvance, next, focusTarget, step } = useTutorial();
   const { prError } = useReviewView();
-  const { fetching } = useReviewControls();
-  const floor = useBubbleFloor(fetching, prError);
 
   const advance = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -373,24 +369,16 @@ export function TutorialBubble() {
     [next, focusTarget, step],
   );
 
+  // A first fetch takes the duck off the landing view altogether, so there is
+  // nothing to hold room for: only a retry speaks while fetching.
   if (!(line || prError)) {
-    // On a phone a refusal bubble sits in the flow above the field; hold its
-    // room from the press on so the answer does not push the field down.
-    return fetching ? (
-      <div
-        aria-hidden="true"
-        className={`invisible mt-3 w-full max-w-[22rem] lg:hidden ${ERROR_BUBBLE_ROOM}`}
-        data-tutorial="room"
-      />
-    ) : null;
+    return null;
   }
 
   return (
     <div
       className={`relative mt-3 flex w-full max-w-[22rem] flex-col justify-between rounded-md px-3 py-2.5 lg:absolute lg:top-1/2 lg:left-[calc(50%+8.75rem)] lg:mt-0 lg:w-80 lg:-translate-y-1/2 ${prError ? ERROR_BUBBLE_ROOM : ''} ${BUBBLE}`}
       data-tutorial={prError ? 'error' : 'bubble'}
-      ref={floor.ref}
-      style={floor.height ? { minHeight: floor.height } : undefined}
     >
       {/* Two tails: up at the duck on a phone, left at it from `lg`. */}
       <span
@@ -464,8 +452,18 @@ function DuckTrouble({ message }: { message: string }) {
             aria-disabled={retryingPr}
             className={PIXEL_BUTTON}
             data-tutorial="retry"
-            // Not `disabled`: a disabled button drops the focus that pressed it.
-            onClick={retryingPr ? undefined : retryPullRequest}
+            // Not `disabled`: a disabled button drops the focus that pressed
+            // it. Neither may the press itself: asking again takes the page
+            // into the review's layout, where the refusal carries on being
+            // answered, so the focus goes to the button that answers it.
+            onClick={
+              retryingPr
+                ? undefined
+                : (event) => {
+                    handOn(event.currentTarget, '[data-pr-refused="retry"]');
+                    retryPullRequest();
+                  }
+            }
             type="button"
           >
             {retryingPr ? 'Retrying...' : 'Retry >'}
@@ -475,16 +473,8 @@ function DuckTrouble({ message }: { message: string }) {
           className={PIXEL_BUTTON}
           data-tutorial="dismiss"
           onClick={(event) => {
-            const pressed = document.activeElement === event.currentTarget;
-
+            handOn(event.currentTarget, '[data-pr-repo]');
             dismissPrError();
-            if (pressed) {
-              requestAnimationFrame(() =>
-                document
-                  .querySelector<HTMLInputElement>('[data-pr-repo]')
-                  ?.focus(),
-              );
-            }
           }}
           type="button"
         >

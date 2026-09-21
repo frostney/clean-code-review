@@ -60,8 +60,8 @@ export const REVIEW_LIMITS = {
   /**
    * A longer file is judged in this many windows of `maxCharsPerFile` and cut
    * after them. Four covers the largest source in this repository (43,685
-   * characters) with a window to spare, and bounds one file's judging at eight
-   * model calls once both passes are counted.
+   * characters) with a window to spare; `MAX_JUDGE_CALLS_PER_FILE` is what it
+   * costs.
    */
   maxWindowsPerFile: 4,
 } as const;
@@ -69,6 +69,22 @@ export const REVIEW_LIMITS = {
 /** The most of one file any judgement reads. */
 export const MAX_JUDGED_CHARS =
   REVIEW_LIMITS.maxCharsPerFile * REVIEW_LIMITS.maxWindowsPerFile;
+
+/**
+ * Every window is read as written and again with its comments removed, which
+ * is how `commentLean` is measured; `judge.ts` skips the second pass when
+ * there is nothing to remove.
+ */
+const JUDGE_PASSES = 2;
+
+/**
+ * The most calls judging one file plans. Not the most requests it makes:
+ * `withOneRetry` in `judge.ts` sends a second attempt for a call that times
+ * out or comes back 408, 429 or 5xx, so the gateway can see twice this, each
+ * carrying the same window again. Quoted by `/privacy`, which says both.
+ */
+export const MAX_JUDGE_CALLS_PER_FILE =
+  REVIEW_LIMITS.maxWindowsPerFile * JUDGE_PASSES;
 
 const HIGH_SURROGATE_FIRST = 0xd800;
 const HIGH_SURROGATE_LAST = 0xdbff;

@@ -19,9 +19,9 @@ import {
 } from './Tutorial';
 
 /**
- * Keyed on the home duck's presence (it renders exactly when a review is open)
- * so this header stays a server component and a permalink's first paint
- * already has the code view's width.
+ * Keyed on the home duck's presence (it renders exactly when the page has taken
+ * the review's shape) so this header stays a server component and a permalink's
+ * first paint already has the code view's width.
  */
 const COLUMN =
   'lg:mx-auto lg:w-1/2 lg:group-has-[[data-duck=home]]/hero:mx-0 lg:group-has-[[data-duck=home]]/hero:w-4/5';
@@ -66,7 +66,8 @@ export function Hero() {
           />
         </div>
         {/* Hidden by the same server-rendered switch as the width, so a
-            permalink paints without them rather than losing them a frame later. */}
+            permalink paints without them rather than losing them a frame
+            later, and a press for a review loses them with the press. */}
         <div className={`${COLUMN} group-has-[[data-duck=home]]/hero:hidden`}>
           <p className="mt-1.5 text-xs text-muted">
             Public repositories only. The code is judged file by file against

@@ -230,35 +230,30 @@ body {
    exact for the code, estimated for the judgment per card layout. Close is
    enough: scroll anchoring keeps the reader's place. */
 .card-space {
-  --space-judgment: calc(
-    var(--space-judged) *
-    (
-      var(--space-base) +
-      var(--space-groups) *
-      var(--space-group) +
-      var(--space-rows) *
-      var(--space-row)
-    )
+  --space-judgment: calc(var(--space-judged) * var(--space-base));
+  --space-window-bar: calc(var(--space-window) * var(--space-bar));
+  /* Measured on a real pull request, unjudged, from 375px to 1440px. The
+     question rows are not in it: they are folded away until asked for, so what
+     is left is a heading, one line of review and the toggle, and only the type
+     scale below moves it. `--space-bar` is the row a long file carries, saying
+     how much of it the card draws. That row is a sentence, so below `lg` it
+     wraps with the card's width: 103px at 375 down to 49px at 1023, and 85 is
+     the middle of that. One line either way, which scroll anchoring absorbs. */
+  --space-base: 154px;
+  --space-bar: 85px;
+  height: calc(
+    var(--space-lines) *
+    20px +
+    16px +
+    var(--space-judgment) +
+    var(--space-window-bar)
   );
-  /* Measured on a real pull request, unjudged, at 375px, 1100px and 1350px. */
-  --space-base: 231px;
-  --space-group: 30px;
-  --space-row: 39px;
-  height: calc(var(--space-lines) * 20px + 16px + var(--space-judgment));
 }
 
-@container space (width >= 420px) {
+@media (width >= 64rem) {
   .card-space {
-    --space-base: 218px;
-    --space-row: 28px;
-  }
-}
-
-@container space (width >= 800px) {
-  .card-space {
-    --space-base: 308px;
-    --space-group: 15px;
-    --space-row: 15px;
+    --space-base: 130px;
+    --space-bar: 26px;
   }
 }
 

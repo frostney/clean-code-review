@@ -11,7 +11,12 @@ import {
   SESSIONS_PER_WINDOW,
 } from '@/agent/lib/infra/session-facts';
 import { QUESTION_COUNT } from '@/agent/lib/judging/questions';
-import { REVIEW_LIMITS } from '@/agent/lib/review/review';
+import {
+  MAX_JUDGE_CALLS_PER_FILE,
+  MAX_JUDGED_CHARS,
+  REVIEW_LIMITS,
+} from '@/agent/lib/review/review';
+import { FILE_EXCERPT_CHARS } from '@/agent/lib/review/reviewer';
 import { REVIEWER_MODEL } from '@/agent/lib/review/summary';
 import {
   dollars,
@@ -34,7 +39,7 @@ import {
 } from '@/src/pull-request/throttle';
 
 import { answerMarkdown, FAQ } from './faq-content';
-import { SITE } from './site';
+import { REVIEW_PATH, SITE } from './site';
 
 export const MARKDOWN_TYPE = 'text/markdown; charset=utf-8';
 
@@ -66,7 +71,7 @@ const INDEXES = [
 const LIMITS = [
   '- Public GitHub repositories only. There is no account and nothing to sign in to.',
   `- One turn judges at most ${REVIEW_LIMITS.maxFiles} code files, the largest changes first.`,
-  `- Each file is read up to ${REVIEW_LIMITS.maxCharsPerFile.toLocaleString('en-US')} characters. Anything past that is cut.`,
+  `- Each file is read up to ${MAX_JUDGED_CHARS.toLocaleString('en-US')} characters, in windows of ${REVIEW_LIMITS.maxCharsPerFile.toLocaleString('en-US')}. Anything past that is cut.`,
   `- Up to ${REVIEW_LIMITS.maxProseFiles} prose files (Markdown, plain text) are shown beside the review and never judged.`,
   '- Images, binaries, lockfiles, minified files and generated files never become a card.',
   '- Identical work comes back from a cache for one hour rather than being judged again.',
@@ -111,6 +116,7 @@ ${LIMITS}
 - [/faq](${url('/faq')}): what it judges, which models do the work, whether code is stored.
 - [/privacy](${url('/privacy')}): what leaves the browser, who processes it, how long it is kept.
 - [/owner/repo/pull/123](${url('/owner/repo/pull/123')}): the review of one pull request.
+- [${REVIEW_PATH}](${url(REVIEW_PATH)}): where a review of pasted code or an example is shown.
 
 ## Machine-readable
 
@@ -151,7 +157,11 @@ to ${QUESTION_COUNT} questions. Jev's findings and that file's text then go to L
 
 That is the whole path: the gateway and the two model providers behind it, and
 nothing else. One turn sends at most ${REVIEW_LIMITS.maxFiles} code files, each cut to
-${REVIEW_LIMITS.maxCharsPerFile.toLocaleString('en-US')} characters. Up to ${REVIEW_LIMITS.maxProseFiles} prose files are shown beside them and
+${MAX_JUDGED_CHARS.toLocaleString('en-US')} characters. Jev is given a longer file in windows of
+${REVIEW_LIMITS.maxCharsPerFile.toLocaleString('en-US')}, and each window twice — once as written, once with its
+comments removed — so one file is judged in up to ${MAX_JUDGE_CALLS_PER_FILE} calls, and a call that
+fails is retried once. Luna is given its first ${FILE_EXCERPT_CHARS.toLocaleString('en-US')} characters and Jev's
+findings for the rest. Up to ${REVIEW_LIMITS.maxProseFiles} prose files are shown beside them and
 never sent.
 
 ## Pull requests
@@ -235,11 +245,13 @@ and goes as \`/[not-found]\`. No query and no fragment is ever sent.
 | Kept by Vercel for | At least the reporting window of this site's plan, one month on the free plan and one or two years on paid ones. Vercel says it may keep them longer | Not published. The dashboard this site's owner reads shows the last seven days, or longer on Vercel's paid tier |
 | Vercel's own account | [What Web Analytics collects](https://vercel.com/docs/analytics/privacy-policy) | [What Speed Insights collects](https://vercel.com/docs/speed-insights/privacy-policy) |
 
-The element is a short selector of tag names, style class names and at most one
-id, such as \`main>img\` or \`#file-3>div.flex\`. No id or class here carries a
-file name, a repository or words from a pull request: the file cards are
-numbered, and a pull request description's ids and code-language classes are
-renumbered or dropped.
+The element is a selector of tag names, style class names and at most one id,
+such as \`main>img\` or \`#file-3>div.flex\`. It is often longer than that: with
+no id and no named ancestor to lean on, one element's whole class list is the
+selector, which on this site runs into the hundreds of characters of styling. No id or
+class here carries a file name, a repository or words from a pull request: the
+file cards are numbered, and a pull request description's ids and code-language
+classes are renumbered or dropped.
 
 ## What is not here
 
@@ -255,11 +267,39 @@ The whole application is open source, so none of this has to be taken on trust:
 ${INDEXES}
 `;
 
+// The twin of `src/app/review/page.tsx`: an address, not a document.
+const REVIEW = `# A pasted review · ${SITE.name}
+
+\`${REVIEW_PATH}\` is the address a review of pasted code or one of the examples
+is shown at. It names no code and no repository, so it is the same address for
+every one of them, and opening one counts as a page view like any other.
+
+Nothing about a review is stored, so this address cannot bring one back: opening
+it, or reloading it, redirects to [/](${SITE.url}), which is what it would have
+shown anyway. A review worth sending to someone is a pull request's, at
+\`/owner/repo/pull/123\`.
+
+## Limits
+
+${LIMITS}
+
+## Machine-readable
+
+${INDEXES}
+`;
+
 const PAGES = new Map<string, string>([
   ['/', HOME],
   ['/faq', FAQ_PAGE],
   ['/privacy', PRIVACY],
+  [REVIEW_PATH, REVIEW],
 ]);
+
+/**
+ * Every address that is a page here. The allowlist in `src/site/analytics.ts`
+ * has to report each of them as itself, which `analytics.test.ts` checks.
+ */
+export const PAGE_PATHS: readonly string[] = [...PAGES.keys()];
 
 function pullRequestMarkdown(owner: string, repo: string, id: number): string {
   const path = `/${owner}/${repo}/pull/${id}`;

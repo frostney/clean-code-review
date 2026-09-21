@@ -98,12 +98,12 @@ MCP surface and every limit and budget are in
 
 ## Limits
 
-24 code files per review, the largest changes first, 16,000 characters per
-file, public GitHub repositories only. Images, binaries, lockfiles, minified
-and generated files are skipped. Markdown, plain text, reStructuredText and
-AsciiDoc are prose: up to 10 of them are shown with the review, read-only, and
-neither model sees them. Around sixty-five file types are highlighted, each
-grammar fetched the first time a review needs it.
+24 code files per review, the largest changes first, 64,000 characters per file
+read in windows of 16,000, public GitHub repositories only. Images, binaries,
+lockfiles, minified and generated files are skipped. Markdown, plain text,
+reStructuredText and AsciiDoc are prose: up to 10 of them are shown with the
+review, read-only, and neither model sees them. Around sixty-five file types
+are highlighted, each grammar fetched the first time a review needs it.
 
 The page and the MCP server talk to the models anonymously, so the deployment
 carries brakes at every layer: Vercel Firewall rate limits per client IP, a $15

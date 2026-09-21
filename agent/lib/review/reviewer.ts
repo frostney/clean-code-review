@@ -38,8 +38,8 @@ import {
 /** Bump when the reviewer's instructions or output handling change, so cached parts expire. */
 const REVIEW_VERSION = 11;
 
-/** The findings cover the rest of the file. */
-const FILE_EXCERPT_CHARS = 8_000;
+/** The findings cover the rest of the file. Quoted by `/privacy` and its twin. */
+export const FILE_EXCERPT_CHARS = 8_000;
 
 const PR_BODY_CHARS = 2_000;
 

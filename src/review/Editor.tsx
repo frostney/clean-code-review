@@ -9,7 +9,7 @@ import {
   useRef,
 } from 'react';
 
-import { REVIEW_LIMITS } from '@/agent/lib/review/review';
+import { MAX_JUDGED_CHARS } from '@/agent/lib/review/review';
 
 import {
   CodeRows,
@@ -32,19 +32,24 @@ const INDENT = '  ';
  * editing are native. Both layers must share the `.code-line` metrics; the
  * textarea scrolls and the highlighted layer follows.
  *
- * A null `onChange` (prose files) drops the textarea: an editable card would
- * promise that typing changes an answer.
+ * Prose files drop the textarea (`overlaid` false) and scroll the highlighted
+ * layer instead: an editable card would promise that typing changes an answer.
+ * A code file shown in part keeps the textarea, read-only, so its sideways
+ * scrollbar stays inside it — outside, its height is one the reserved space
+ * cannot predict, and the card would lose `content-visibility`.
  */
 function Overlay({
   path,
   content,
   onChange,
+  overlaid,
   gutters,
   children,
 }: {
   path: string;
   content: string;
   onChange: ((next: string) => void) | null;
+  overlaid: boolean;
   gutters: ReactNode;
   children: ReactNode;
 }) {
@@ -73,7 +78,7 @@ function Overlay({
     const next = `${value.slice(0, start)}${INDENT}${value.slice(end)}`;
 
     // Past the limit the indent would cut characters off the end, out of sight.
-    if (next.length > REVIEW_LIMITS.maxCharsPerFile) {
+    if (next.length > MAX_JUDGED_CHARS) {
       return;
     }
     onChange(next);
@@ -91,22 +96,23 @@ function Overlay({
       {gutters}
       <div className="relative min-w-0 flex-1">
         <pre
-          aria-hidden={onChange ? 'true' : undefined}
-          className={`code-line ${onChange ? 'overflow-hidden' : 'overflow-auto'}`}
+          aria-hidden={overlaid ? 'true' : undefined}
+          className={`code-line ${overlaid ? 'overflow-hidden' : 'overflow-auto'}`}
           ref={preRef}
-          // Read-only code scrolls itself, so it must be keyboard-focusable.
-          tabIndex={onChange ? undefined : 0}
+          // Prose scrolls itself, so it must be keyboard-focusable.
+          tabIndex={overlaid ? undefined : 0}
         >
           {children}
         </pre>
-        {onChange ? (
+        {overlaid ? (
           <textarea
-            aria-label={`Edit ${path}`}
+            aria-label={onChange ? `Edit ${path}` : path}
             className="code-line absolute inset-0 w-full resize-none overflow-auto border-0 bg-transparent px-3 py-2 text-transparent caret-ink outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
-            maxLength={REVIEW_LIMITS.maxCharsPerFile}
-            onChange={(e) => onChange(e.target.value)}
+            maxLength={MAX_JUDGED_CHARS}
+            onChange={onChange ? (e) => onChange(e.target.value) : undefined}
             onKeyDown={onKeyDown}
             onScroll={onScroll}
+            readOnly={onChange === null}
             spellCheck={false}
             value={content}
             wrap="off"
@@ -128,11 +134,14 @@ export function Editor({
   path,
   content,
   onChange,
+  overlaid,
   onScreen,
 }: {
   path: string;
   content: string;
   onChange: ((next: string) => void) | null;
+  /** False only for prose, which scrolls its own highlighted layer. */
+  overlaid: boolean;
   onScreen?: RefObject<boolean>;
 }) {
   const lines = useTokens(
@@ -148,6 +157,7 @@ export function Editor({
       content={content}
       gutters={<Gutter numbers={numbers} />}
       onChange={onChange}
+      overlaid={overlaid}
       path={path}
     >
       <CodeRows lines={lines} />
@@ -164,11 +174,14 @@ export function PatchEditor({
   path,
   content,
   onChange,
+  overlaid,
   onScreen,
 }: {
   path: string;
   content: string;
   onChange: ((next: string) => void) | null;
+  /** False only for prose, which scrolls its own highlighted layer. */
+  overlaid: boolean;
   onScreen?: RefObject<boolean>;
 }) {
   const lines = useMemo(() => parsePatch(content), [content]);
@@ -192,6 +205,7 @@ export function PatchEditor({
         </>
       }
       onChange={onChange}
+      overlaid={overlaid}
       path={path}
     >
       <DiffRows lines={lines} tokens={tokens} />

@@ -6,7 +6,12 @@ import {
   SESSIONS_PER_WINDOW,
 } from '@/agent/lib/infra/session-facts';
 import { QUESTION_COUNT } from '@/agent/lib/judging/questions';
-import { REVIEW_LIMITS } from '@/agent/lib/review/review';
+import {
+  MAX_JUDGE_CALLS_PER_FILE,
+  MAX_JUDGED_CHARS,
+  REVIEW_LIMITS,
+} from '@/agent/lib/review/review';
+import { FILE_EXCERPT_CHARS } from '@/agent/lib/review/reviewer';
 import { REVIEWER_MODEL } from '@/agent/lib/review/summary';
 import {
   dollars,
@@ -138,9 +143,15 @@ export default function PrivacyPage() {
             That is the whole path: the gateway and the two model providers
             behind it, and nothing else. One turn sends at most{' '}
             {REVIEW_LIMITS.maxFiles} code files, each cut to{' '}
-            {REVIEW_LIMITS.maxCharsPerFile.toLocaleString('en-US')} characters.
-            Up to {REVIEW_LIMITS.maxProseFiles} prose files are shown beside
-            them and never sent.
+            {MAX_JUDGED_CHARS.toLocaleString('en-US')} characters. Jev is given
+            a longer file in windows of{' '}
+            {REVIEW_LIMITS.maxCharsPerFile.toLocaleString('en-US')}, and each
+            window twice — once as written, once with its comments removed — so
+            one file is judged in up to {MAX_JUDGE_CALLS_PER_FILE} calls, and a
+            call that fails is retried once. Luna is given its first{' '}
+            {FILE_EXCERPT_CHARS.toLocaleString('en-US')} characters and Jev's
+            findings for the rest. Up to {REVIEW_LIMITS.maxProseFiles} prose
+            files are shown beside them and never sent.
           </p>
         </Section>
 
@@ -357,10 +368,13 @@ export default function PrivacyPage() {
             </table>
           </div>
           <p>
-            The element is a short selector of tag names, style class names and
-            at most one id, such as <code>main&gt;img</code> or{' '}
-            <code>#file-3&gt;div.flex</code>. No id or class here carries a file
-            name, a repository or words from a pull request: the file cards are
+            The element is a selector of tag names, style class names and at
+            most one id, such as <code>main&gt;img</code> or{' '}
+            <code>#file-3&gt;div.flex</code>. It is often longer than that: with
+            no id and no named ancestor to lean on, one element's whole class
+            list is the selector, which on this site runs into the hundreds of
+            characters of styling. No id or class here carries a file name, a
+            repository or words from a pull request: the file cards are
             numbered, and a pull request description's ids and code-language
             classes are renumbered or dropped.
           </p>
