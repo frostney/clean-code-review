@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { useState } from 'react';
 
 import { useReviewControls, useReviewView } from '@/src/review/ReviewProvider';
+import { handOn } from '@/src/ui/hand-on';
 import { Notice } from '@/src/ui/Notice';
 
 import { splitPullRequest } from './address';
@@ -113,18 +114,8 @@ function Refused({ message }: { message: string }) {
         // the document, so the focus that pressed it is handed on rather than
         // dropped on `<body>`.
         onClick={(event) => {
-          const pressed = document.activeElement === event.currentTarget;
-
+          handOn(event.currentTarget, '[data-pr-repo]');
           dismissPrError();
-          if (pressed) {
-            // A task, not a frame: a page the browser is not painting produces
-            // no frames, and the focus would be dropped on `<body>`.
-            setTimeout(() => {
-              document
-                .querySelector<HTMLInputElement>('[data-pr-repo]')
-                ?.focus();
-            }, 0);
-          }
         }}
         type="button"
       >

@@ -10,6 +10,7 @@ import { LANDING_HEADER } from '@/src/ui/view-transition-names';
 import { HomeDuck, LandingDuck } from './Duck';
 import { PasteButton } from './PasteButton';
 import { PresetChip } from './PresetChip';
+import { RecentPullRequests } from './RecentPullRequests';
 import {
   TutorialBubble,
   TutorialDuck,
@@ -89,6 +90,21 @@ export function Hero() {
               <PasteButton />
             </div>
           </TutorialSpotlight>
+
+          {/* The room, held before the list exists: the list is fetched by the
+              browser and lands after first paint, so without this the arrival
+              would move everything below it. A chip is 36px, 26.5px from `lg`,
+              and its focus ring reaches 4px past that on each side; the extra
+              few pixels are slack, because the chip's type is set in px and a
+              reader's minimum font size can grow it while this box cannot.
+              With no list, this is blank space above the footer. */}
+          <div className="mt-1.5 h-12 lg:h-10">
+            <RecentPullRequests>
+              <span className="shrink-0 whitespace-nowrap text-xs text-muted">
+                Recently merged:
+              </span>
+            </RecentPullRequests>
+          </div>
         </div>
       </TutorialProvider>
 

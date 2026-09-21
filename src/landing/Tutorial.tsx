@@ -17,6 +17,7 @@ import {
 import { describePullRequestError } from '@/src/pull-request/errors';
 import { useReviewControls, useReviewView } from '@/src/review/ReviewProvider';
 import { SITE } from '@/src/site/site';
+import { handOn } from '@/src/ui/hand-on';
 
 // `block`, not `swap`: a swap redraws the sentence from a fallback, and the
 // bubble must not change shape under the reader. The file is tiny and preloaded.
@@ -332,24 +333,6 @@ const BUBBLE = 'bg-bubble text-bubble-ink';
 // and the padding.
 const ERROR_BUBBLE_ROOM = 'max-lg:min-h-[103px]';
 
-/**
- * A press that removes the button it came from leaves the focus on `<body>`
- * unless it is handed somewhere. `selector` is where the page carries on.
- *
- * A task, not a frame: React has committed the press's DOM by the next one,
- * and a page the browser is not painting — a hidden tab, a background window —
- * produces no frames at all, so `requestAnimationFrame` may never run and the
- * focus would be dropped exactly where nobody is watching to notice.
- */
-function handOn(control: HTMLElement, selector: string): void {
-  if (document.activeElement !== control) {
-    return;
-  }
-  setTimeout(() => {
-    document.querySelector<HTMLElement>(selector)?.focus();
-  }, 0);
-}
-
 const PIXEL_BUTTON = `${pixel.className} inline-flex min-h-6 min-w-6 cursor-pointer items-center justify-end rounded-sm px-1 text-[8px]! text-bubble-ink [font-variant-ligatures:none]! underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-bubble-ink focus-visible:outline-offset-2 aria-disabled:cursor-default aria-disabled:no-underline`;
 
 /**
@@ -507,8 +490,8 @@ function keepFocus(
   step: number,
   target: RefObject<HTMLElement | null>,
 ): void {
-  if (step !== LAST - 1 || document.activeElement !== control) {
+  if (step !== LAST - 1) {
     return;
   }
-  requestAnimationFrame(() => target.current?.focus());
+  handOn(control, target);
 }
