@@ -103,7 +103,7 @@ function Row({
 export default function PrivacyPage() {
   return (
     <div className="mx-auto max-w-[1280px] px-4 py-5">
-      <main className="max-w-[72ch]">
+      <main className="mx-auto max-w-[72ch]">
         <PageHeader title="Privacy">
           <p>
             Nothing here identifies you. There is no account, no database and no
