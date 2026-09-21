@@ -38,10 +38,11 @@
   "scripts": {
     "build": "next build",
     "build:eve": "eve build",
-    "check": "bun run --parallel check:biome check:typescript check:knip",
+    "check": "bun run --parallel check:biome check:typescript check:knip check:style",
     "check:biome": "biome check",
     "check:fix": "biome check --write",
     "check:knip": "knip",
+    "check:style": "bun scripts/check-style.ts --all",
     "check:typescript": "tsc --noEmit -p tsconfig.json",
     "deploy": "eve deploy",
     "dev": "next dev",

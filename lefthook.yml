@@ -4,3 +4,9 @@ pre-commit:
       glob: "*.{js,ts,cjs,mjs,d.cts,d.mts,jsx,tsx,json,jsonc}"
       run: bun run check:fix -- --no-errors-on-unmatched --files-ignore-unknown=true --colors=off {staged_files}
       stage_fixed: true
+    # Reports rather than rewrites: `check:fix` only reformats, while inserting
+    # blank lines changes how the code reads, and a hook should not enlarge a
+    # staged hunk behind the author's back. Run `bun run check:style --fix`.
+    style:
+      glob: "*.{ts,tsx,css,json}"
+      run: bun scripts/check-style.ts {staged_files}

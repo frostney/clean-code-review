@@ -329,6 +329,44 @@
       }
     },
     {
+      // eve's agent runs without the app, so the dependency only ever points the
+      // other way: `src/` and `examples/` may read `agent/`, never the reverse.
+      "includes": ["agent/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "patterns": [
+                  {
+                    "group": [
+                      "@/src/**",
+                      "@/examples/**",
+                      "**/src/**",
+                      "**/examples/**"
+                    ],
+                    "message": "agent/ never imports src/ or examples/ (docs/code-style.md, Layout)."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      // False positives: the selector and the manifest keys the checker looks for.
+      "includes": ["scripts/check-style.ts"],
+      "linter": {
+        "rules": {
+          "security": {
+            "noSecrets": "off"
+          }
+        }
+      }
+    },
+    {
       // False positive: the reviewer's system prompt is one long prose string.
       "includes": ["agent/lib/review/reviewer-prompt.ts"],
       "linter": {
