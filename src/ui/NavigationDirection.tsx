@@ -37,7 +37,7 @@ function opensHere(event: MouseEvent): boolean {
 
 /**
  * Names the direction of travel on `<html>`, which is how the view transition
- * in `app/globals.css` knows which way to slide the page. Renders nothing.
+ * in `src/app/globals.css` knows which way to slide the page. Renders nothing.
  *
  * What reads it is the review opening and closing, the one transition the
  * page starts itself. A route change animates only its named parts, because

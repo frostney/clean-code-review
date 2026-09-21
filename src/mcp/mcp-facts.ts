@@ -1,6 +1,6 @@
 /**
  * The MCP endpoint's public facts, quoted by llms.txt, the Markdown twins and
- * /privacy. Kept apart from the server so `proxy.ts` does not pull in the review
+ * /privacy. Kept apart from the server so `src/proxy.ts` does not pull in the review
  * pipeline; the model budget lives in `agent/lib/spend/budgets.ts`.
  */
 

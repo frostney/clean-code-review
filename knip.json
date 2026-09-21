@@ -1,8 +1,8 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
-    "app/**/*.{ts,tsx}",
-    "app/globals.css",
+    "src/app/**/*.{ts,tsx}",
+    "src/app/globals.css",
     "agent/agent.ts",
     "agent/instructions.ts",
     "agent/channels/*.ts",

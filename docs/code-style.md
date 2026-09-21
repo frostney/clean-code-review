@@ -5,14 +5,16 @@ Naming, layout, design and dependency rules for this repository. Biome
 
 ## Layout
 
-- `app/` holds routes only: pages, layouts, route handlers and metadata files.
-  A route imports its UI and logic from `src/`.
+- `src/app/` holds routes only: pages, layouts, route handlers and metadata
+  files. A route imports its UI and logic from its domain folder. `src/proxy.ts`
+  sits beside it, where Next looks for it when the routes are under `src/`.
 - `src/<domain>/` holds app-side code: `landing`, `mcp`, `pull-request`,
   `review`, `site`, `theme`, `ui`. A component's hooks and helpers sit beside
   it in the same domain folder, and tests sit beside the module they test
   (`language.test.ts`).
-- `agent/` is eve's authored agent. Shared code lives in `agent/lib/<domain>/`
-  (`github`, `infra`, `judging`, `review`, `spend`).
+- `agent/` is eve's authored agent, at the root because eve resolves it by that
+  name. Shared code lives in `agent/lib/<domain>/` (`github`, `infra`,
+  `judging`, `review`, `spend`).
 - `examples/` holds the preset example code shown on the page. The agent never
   imports it.
 - `scripts/` holds one-off tools run with `bun run judge|review|jev`.
@@ -30,7 +32,7 @@ Naming, layout, design and dependency rules for this repository. Biome
   component or the family it holds (`PullRequestField.tsx`, `Tutorial.tsx`). A hook file is named after the hook
   (`useCardWindow.ts`). Every other module is kebab-case, `.tsx` included when
   it renders but exports no component of that name (`pull-request.tsx`).
-- `app/` files follow Next's names (`page.tsx`, `route.ts`,
+- `src/app/` files follow Next's names (`page.tsx`, `route.ts`,
   `opengraph-image.tsx`).
 - No two files in one folder may differ only by case. macOS checkouts are
   case-insensitive, so `errors.ts` and `Errors.tsx` would collide there.
@@ -62,7 +64,7 @@ export function readChoice(): ThemeChoice {
 
 ## Design
 
-- Colour tokens live only in `app/globals.css`, in both themes: the light set
+- Colour tokens live only in `src/app/globals.css`, in both themes: the light set
   on `:root`, the dark set under `--dark-*` names, switched on by both
   `:root[data-theme="dark"]` and
   `@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) }`.

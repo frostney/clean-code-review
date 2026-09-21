@@ -24,7 +24,7 @@ const SCALE_COUNT = QUESTION_COUNT - SMELL_IDS.length;
 
 /**
  * The single source for `/faq`, its `FAQPage` JSON-LD and the agent Markdown.
- * React-free because `proxy.ts` bundles it. Every number is imported.
+ * React-free because `src/proxy.ts` bundles it. Every number is imported.
  */
 export const FAQ: readonly { q: string; a: string }[] = [
   {

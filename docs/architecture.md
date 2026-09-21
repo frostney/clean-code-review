@@ -49,8 +49,8 @@ directions.
 | Diff parsing | [`agent/lib/judging/patch.ts`](../agent/lib/judging/patch.ts) |
 | Skip rules and file selection | [`agent/lib/review/review.ts`](../agent/lib/review/review.ts), [`agent/lib/judging/select.ts`](../agent/lib/judging/select.ts) |
 | Luna calls, batching, streaming order | [`agent/lib/review/reviewer.ts`](../agent/lib/review/reviewer.ts), [`agent/lib/review/reviewer-prompt.ts`](../agent/lib/review/reviewer-prompt.ts) |
-| GitHub fetcher | [`agent/lib/github/github.ts`](../agent/lib/github/github.ts), [`src/pull-request/pull-request.tsx`](../src/pull-request/pull-request.tsx) (page), [`app/api/github-pr/route.ts`](../app/api/github-pr/route.ts) (scripts) |
-| MCP server and its one-request review | [`app/api/mcp/route.ts`](../app/api/mcp/route.ts), [`src/mcp/mcp-server.ts`](../src/mcp/mcp-server.ts), [`src/mcp/mcp-review.ts`](../src/mcp/mcp-review.ts) |
+| GitHub fetcher | [`agent/lib/github/github.ts`](../agent/lib/github/github.ts), [`src/pull-request/pull-request.tsx`](../src/pull-request/pull-request.tsx) (page), [`src/app/api/github-pr/route.ts`](../src/app/api/github-pr/route.ts) (scripts) |
+| MCP server and its one-request review | [`src/app/api/mcp/route.ts`](../src/app/api/mcp/route.ts), [`src/mcp/mcp-server.ts`](../src/mcp/mcp-server.ts), [`src/mcp/mcp-review.ts`](../src/mcp/mcp-review.ts) |
 | Page state and the two turns | [`src/review/useReview.ts`](../src/review/useReview.ts) |
 
 [`questions.ts`](../agent/lib/judging/questions.ts) is the single source of
@@ -66,7 +66,7 @@ paths, the Boy Scout row only on diffs.
 - [`mcp-review.ts`](../src/mcp/mcp-review.ts) avoids `next/headers`, React
   `cache` and `server-only`, because the scripts import it too.
 - [`mcp-facts.ts`](../src/mcp/mcp-facts.ts) is kept apart from the server so
-  `proxy.ts` does not pull the review pipeline into the proxy bundle, and
+  `src/proxy.ts` does not pull the review pipeline into the proxy bundle, and
   [`agent-markdown.ts`](../src/site/agent-markdown.ts) is React-free for the
   same reason.
 - Every public figure — file caps, windows, budgets — is exported from the
@@ -87,7 +87,7 @@ lists no tools: a client asks the server. The server is deliberately not listed
 in the MCP Registry.
 
 JSON-RPC batches are refused with HTTP 400 in
-[`route.ts`](../app/api/mcp/route.ts) before the handler runs. Each `tools/call`
+[`route.ts`](../src/app/api/mcp/route.ts) before the handler runs. Each `tools/call`
 in a batch would start a review behind a single Firewall-counted request. MCP
 dropped batches in 2025-06-18, but the SDK's stateless path still accepts them.
 

@@ -8,7 +8,7 @@ const LINK_CLASS =
 
 /**
  * Each question needs a view-transition name of its own to arrive on its own
- * beat; the step class carries the delay, which `app/globals.css` holds. The
+ * beat; the step class carries the delay, which `src/app/globals.css` holds. The
  * steps stop at the fourth, so the tail of a longer list lands with it rather
  * than trailing off; today's sixth question already shares the fourth step.
  */

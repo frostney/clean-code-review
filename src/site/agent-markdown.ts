@@ -1,6 +1,6 @@
 /**
  * Markdown twins of every page, for `Accept: text/markdown` (acceptmarkdown.com).
- * A pure pathname-to-string lookup, so `proxy.ts` can answer before the router
+ * A pure pathname-to-string lookup, so `src/proxy.ts` can answer before the router
  * and a permalink costs no GitHub rate limit. Every figure is imported from the
  * module that enforces it.
  */
@@ -133,7 +133,7 @@ ${LIMITS}
 ${INDEXES}
 `;
 
-// The twin of `app/privacy/page.tsx`: the same facts in the same order, with
+// The twin of `src/app/privacy/page.tsx`: the same facts in the same order, with
 // the Vercel measurement details in the same table.
 const PRIVACY = `# Privacy
 
@@ -311,7 +311,7 @@ function normalize(pathname: string): string {
 
 /**
  * Null means 404, so it must err towards answering. A page added under `app/`
- * must be added to `PAGES` too, alongside `app/sitemap.ts`.
+ * must be added to `PAGES` too, alongside `src/app/sitemap.ts`.
  */
 export function markdownFor(pathname: string): string | null {
   const path = normalize(pathname);
