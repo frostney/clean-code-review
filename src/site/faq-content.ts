@@ -32,7 +32,7 @@ export const FAQ: readonly { q: string; a: string }[] = [
     q: 'What does it judge?',
   },
   {
-    a: `Two. Jev, TypeSafe's evaluation model, answers the whole question set for one file in a single call, through the Vercel AI Gateway. It returns probabilities and scores, no prose. Luna (${REVIEWER_MODEL}) writes the words. Each file's section comes from Jev's findings and that file's code, and the decision at the top from every file's findings and the pull request's title and description.`,
+    a: `Two. Jev, TypeSafe's evaluation model, answers the whole question set for one window of one file in a single call, through the Vercel AI Gateway; a file longer than one window takes one call per window, and another of each with the comments removed. It returns probabilities and scores, no prose. Luna (${REVIEWER_MODEL}) writes the words. Each file's section comes from Jev's findings and that file's code, and the decision at the top from every file's findings and the pull request's title and description.`,
     q: 'Which models do the work?',
   },
   {

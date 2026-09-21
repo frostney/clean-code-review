@@ -98,7 +98,11 @@ function Toast({ item }: { item: ToastItem }) {
 
 export function ToastRegion({ toasts }: { toasts: readonly ToastItem[] }) {
   // Escape dismisses all, except while a dialog is open: there it is the
-  // dialog's. Read through a ref so the listener is not re-added every render.
+  // dialog's. Dismissing is the toast's own action and may call work off — the
+  // pull request toast drops the fetch it is reporting on — so Escape means
+  // what the cross means rather than "hide this": an answer arriving for a
+  // reader who has cleared the notice would swap the review under them.
+  // Read through a ref so the listener is not re-added every render.
   const current = useRef(toasts);
 
   current.current = toasts;

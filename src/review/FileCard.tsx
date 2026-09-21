@@ -3,6 +3,7 @@
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import {
   type CSSProperties,
+  type RefObject,
   useEffect,
   useMemo,
   useRef,
@@ -18,6 +19,7 @@ import type { Answers } from '@/agent/lib/judging/schema';
 import {
   type FileJudgment,
   isProsePath,
+  MAX_JUDGED_CHARS,
   REVIEW_LIMITS,
   type ReviewFile,
 } from '@/agent/lib/review/review';
@@ -50,6 +52,11 @@ import { type Changes, useChanges } from './useChanges';
  */
 export function cardId(index: number): string {
   return `file-${index}`;
+}
+
+/** The code of that card, for the control that swaps how much of it is drawn. */
+function codeId(index: number): string {
+  return `file-${index}-code`;
 }
 
 /**
@@ -150,6 +157,7 @@ function CardHeader({
 }: {
   answers: Answers | undefined;
   collapsed: boolean;
+  /** The lines the card draws, which is fewer than the file has when windowed. */
   lineCount: number;
   onToggle: () => void;
   path: string;
@@ -196,8 +204,7 @@ function CardHeader({
       </span>
       {truncated ? (
         <span className="shrink-0 text-xs text-warn">
-          Truncated to {REVIEW_LIMITS.maxCharsPerFile.toLocaleString()}{' '}
-          characters
+          Cut at {MAX_JUDGED_CHARS.toLocaleString()} characters
         </span>
       ) : null}
       <span className="ml-auto flex shrink-0 items-center gap-2">
@@ -223,6 +230,11 @@ function CardHeader({
   );
 }
 
+/**
+ * A disclosure, not a heading: the rows are folded away by default, so the
+ * button carries the state and `aria-expanded` names it. The rows follow the
+ * button in the document, which is what a screen reader reads next.
+ */
 function Judgment({
   answers,
   changes,
@@ -257,7 +269,7 @@ function Judgment({
         </div>
         <button
           aria-expanded={findingsOpen}
-          className="mb-0.5 ml-1.5 flex min-h-10 cursor-pointer items-center gap-1 rounded pr-2 text-xs font-semibold tracking-wider text-muted uppercase hover:text-ink lg:mb-1.5 lg:min-h-0 lg:pr-0"
+          className="mb-0.5 ml-1.5 flex min-h-10 cursor-pointer items-center gap-1 rounded pr-2 text-xs font-semibold text-muted hover:text-ink lg:mb-1.5 lg:min-h-0 lg:pr-0"
           data-toggle="findings"
           onClick={onToggleFindings}
           type="button"
@@ -267,7 +279,7 @@ function Judgment({
           ) : (
             <ChevronRight aria-hidden="true" size={12} />
           )}
-          Findings
+          {findingsOpen ? 'Hide full summary' : 'Show full summary'}
         </button>
         {findingsOpen ? (
           <div className="grid grid-cols-1 items-start gap-x-5 @[800px]/card:grid-cols-2">
@@ -329,6 +341,66 @@ function FindingGroup({
   );
 }
 
+/**
+ * What a card draws of a long file before the reader asks for the rest. A
+ * judging window, near enough: a diff's real window is a couple of hundred
+ * characters shorter, because the hunk header is restored into it. The point
+ * of the figure is that the card starts at a screenful rather than the whole
+ * file, not that its edge falls where a window's does.
+ */
+const CARD_WINDOW_CHARS = REVIEW_LIMITS.maxCharsPerFile;
+
+/**
+ * Says which part of the file the card draws, in both states, and swaps them.
+ * Not a disclosure: the code it names is above the button and is always drawn,
+ * so there is nothing for `aria-expanded` to be true of. `aria-controls` names
+ * it instead, and the label says what the press will do.
+ *
+ * `chars` is what the page holds, which is the file unless the header's chip
+ * says where it was cut; a cut diff holds a little less than the cut, because
+ * its `diff --git` lines are lifted off afterwards and put back when it is
+ * sent. Either way it is all that is sent to be judged, so the sentence says
+ * sent rather than judged — a file can be refused an answer.
+ */
+function CodeWindow({
+  chars,
+  cut,
+  index,
+  onToggle,
+  whole,
+}: {
+  chars: number;
+  /** The file was longer than a judgement reads, and `chars` is what is left. */
+  cut: boolean;
+  index: number;
+  onToggle: () => void;
+  whole: boolean;
+}) {
+  const all = `${chars.toLocaleString()} characters${cut ? ' kept' : ''}`;
+
+  return (
+    <div
+      className="flex flex-wrap items-center gap-x-2 border-t border-line px-3 py-1 text-xs text-muted"
+      data-window={whole ? 'whole' : 'part'}
+    >
+      <span>
+        {whole
+          ? `This card draws all ${all}.`
+          : `This card draws the first ${CARD_WINDOW_CHARS.toLocaleString()} of ${all}. All of them are sent to be judged; editing needs the whole file.`}
+      </span>
+      <button
+        aria-controls={codeId(index)}
+        className="inline-flex min-h-10 cursor-pointer items-center rounded text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent lg:min-h-0"
+        data-toggle="window"
+        onClick={onToggle}
+        type="button"
+      >
+        {whole ? 'Show less' : 'Show the whole file'}
+      </button>
+    </div>
+  );
+}
+
 /** Must match `.code-line` and the `py-2` around a file's rows. */
 const CODE_ROW_PX = 20;
 const CODE_PAD_PX = 16;
@@ -338,17 +410,17 @@ const CODE_PAD_PX = 16;
  * pull request was most of the first frame. The reserved height is exact
  * because every row is one line of fixed height, so nothing moves.
  *
- * Editable files only: their horizontal scrollbar is inside the textarea over
- * the rows. A prose file scrolls itself, and a long line adds a scrollbar
- * height the rows cannot predict.
+ * Overlaid files only, editable or not: their sideways scrollbar is inside the
+ * textarea over the rows. A prose file scrolls the rows themselves, and a long
+ * line then adds a scrollbar height they cannot predict.
  *
  * The text stays in the document for find-in-page and screen readers.
  */
 function codeSpace(
   lines: number,
-  editable: boolean,
+  overlaid: boolean,
 ): CSSProperties | undefined {
-  if (!editable) {
+  if (!overlaid) {
     return;
   }
 
@@ -359,34 +431,90 @@ function codeSpace(
 }
 
 /**
- * The code's height is exact; the review and meters are estimated in
- * `globals.css`, next to the layout they depend on.
+ * One judging window of the file, or all of it once the reader asks. A window
+ * is read-only: an edit would keep what is on screen and silently drop the
+ * rest of the file.
+ */
+function CardCode({
+  cut,
+  file,
+  index,
+  onChange,
+  onScreen,
+  onToggleWhole,
+  prose,
+  whole,
+}: {
+  cut: boolean;
+  file: ReviewFile;
+  index: number;
+  onChange: (next: string) => void;
+  onScreen: RefObject<boolean>;
+  onToggleWhole: () => void;
+  prose: boolean;
+  whole: boolean;
+}) {
+  const long = file.content.length > CARD_WINDOW_CHARS;
+  const windowed = long && !whole;
+  const shown = windowed
+    ? file.content.slice(0, CARD_WINDOW_CHARS)
+    : file.content;
+  const lines = useMemo(() => shown.split('\n').length, [shown]);
+  const editable = !(prose || windowed);
+  const Rows = file.patch ? PatchEditor : Editor;
+
+  return (
+    <>
+      <div
+        className="min-w-0"
+        id={codeId(index)}
+        style={codeSpace(lines, !prose)}
+      >
+        <Rows
+          content={shown}
+          onChange={editable ? onChange : null}
+          onScreen={onScreen}
+          overlaid={!prose}
+          path={file.path}
+        />
+      </div>
+      {long ? (
+        <CodeWindow
+          chars={file.content.length}
+          cut={cut}
+          index={index}
+          onToggle={onToggleWhole}
+          whole={whole}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * The code's height is exact; the review is estimated in `globals.css`, next to
+ * the layout it depends on. The rows are not in the estimate because they are
+ * folded away until the reader asks for them.
  */
 function BodySpace({
-  groups,
   judged,
   lines,
-  rows,
+  windowed,
 }: {
-  groups: number;
   judged: boolean;
   lines: number;
-  rows: number;
+  /** The card will carry the bar that says how much of the file it draws. */
+  windowed: boolean;
 }) {
   const style = {
-    '--space-groups': groups,
     '--space-judged': judged ? 1 : 0,
     '--space-lines': lines,
-    '--space-rows': rows,
+    '--space-window': windowed ? 1 : 0,
   } as CSSProperties;
 
   // Not a scroll anchor: it is about to be replaced.
   return (
-    <div
-      aria-hidden="true"
-      className="@container/space [overflow-anchor:none]"
-      data-space="1"
-    >
+    <div aria-hidden="true" className="[overflow-anchor:none]" data-space="1">
       <div className="card-space" style={style} />
     </div>
   );
@@ -457,11 +585,10 @@ export function FileCard({
     () => (file.patch ? diffStats(parsePatch(file.content)) : null),
     [file.patch, file.content],
   );
-  const lineCount = useMemo(
-    () => file.content.split('\n').length,
-    [file.content],
-  );
-  const [findingsOpen, setFindingsOpen] = useState(true);
+  const [findingsOpen, setFindingsOpen] = useState(false);
+  // Here, not in `CardCode`: a card folded and unfolded again would otherwise
+  // forget that the reader had asked for the whole file.
+  const [whole, setWhole] = useState(false);
   const articleRef = useRef<HTMLElement>(null);
   const onScreen = useOnScreen(articleRef);
 
@@ -471,9 +598,15 @@ export function FileCard({
     return deferred && article ? watch(article, file.path) : undefined;
   }, [deferred, watch, file.path]);
 
-  const groups = useMemo(
-    () => GROUPS.filter((g) => questions.some((q) => q.group === g.id)).length,
-    [questions],
+  const long = file.content.length > CARD_WINDOW_CHARS;
+  // What the card draws, which is what the placeholder has to stand in for.
+  const drawnLines = useMemo(
+    () =>
+      (long && !whole
+        ? file.content.slice(0, CARD_WINDOW_CHARS)
+        : file.content
+      ).split('\n').length,
+    [file.content, long, whole],
   );
 
   return (
@@ -489,7 +622,7 @@ export function FileCard({
         answers={answers}
         collapsed={collapsed}
         confidence={confidence}
-        lineCount={lineCount}
+        lineCount={drawnLines}
         onToggle={onToggle}
         path={file.path}
         smells={smells}
@@ -499,32 +632,20 @@ export function FileCard({
       />
 
       {!collapsed && deferred ? (
-        <BodySpace
-          groups={groups}
-          judged={!prose}
-          lines={lineCount}
-          rows={questions.length}
-        />
+        <BodySpace judged={!prose} lines={drawnLines} windowed={long} />
       ) : null}
       {!collapsed && !deferred && (
         <>
-          <div className="min-w-0" style={codeSpace(lineCount, !prose)}>
-            {file.patch ? (
-              <PatchEditor
-                content={file.content}
-                onChange={prose ? null : onChange}
-                onScreen={onScreen}
-                path={file.path}
-              />
-            ) : (
-              <Editor
-                content={file.content}
-                onChange={prose ? null : onChange}
-                onScreen={onScreen}
-                path={file.path}
-              />
-            )}
-          </div>
+          <CardCode
+            cut={truncated}
+            file={file}
+            index={index}
+            onChange={onChange}
+            onScreen={onScreen}
+            onToggleWhole={() => setWhole((shown) => !shown)}
+            prose={prose}
+            whole={whole}
+          />
 
           {prose ? null : (
             <Judgment

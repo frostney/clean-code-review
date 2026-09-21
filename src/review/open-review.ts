@@ -4,6 +4,7 @@ import { filesFromPatch } from '@/agent/lib/judging/patch';
 import { selectReviewFiles } from '@/agent/lib/judging/select';
 import {
   isProsePath,
+  MAX_JUDGED_CHARS,
   partitionJudgeable,
   REVIEW_LIMITS,
   type ReviewFile,
@@ -51,9 +52,10 @@ export interface OpenReview {
 
 /**
  * Paths are made unique because every key, edit and judgment is by path.
- * Content is truncated to what one judgment reads, so the code on screen is
- * the code Jev read. Patch headers are lifted into `headers` so they are not
- * edited, and go back on when the file is sent.
+ * Content is cut to what a judgement reads — four windows, not one — so the
+ * code held here is the code Jev is asked about; a card draws the first window
+ * of it and opens the rest on request. Patch headers are lifted into `headers`
+ * so they are not edited, and go back on when the file is sent.
  */
 function opened(
   files: readonly ReviewFile[],
@@ -65,11 +67,11 @@ function opened(
   const kept = withinCaps(unique).map((file) => {
     let shown = file;
 
-    if (shown.content.length > REVIEW_LIMITS.maxCharsPerFile) {
+    if (shown.content.length > MAX_JUDGED_CHARS) {
       truncated[shown.path] = true;
       shown = {
         ...shown,
-        content: shown.content.slice(0, REVIEW_LIMITS.maxCharsPerFile),
+        content: shown.content.slice(0, MAX_JUDGED_CHARS),
       };
     }
     if (!shown.patch) {

@@ -150,9 +150,13 @@ export function PullRequestField({ duck }: { duck?: ReactNode }) {
             value={number}
           />
         </div>
+        {/* `aria-disabled`, not `disabled`: a disabled button drops the focus
+            that pressed it, and the press that starts a fetch would otherwise
+            leave a keyboard reader on `<body>`. The submit handler above is
+            what refuses it. */}
         <button
-          className="min-h-11 w-full shrink-0 cursor-pointer rounded-md bg-ink px-3 text-base font-semibold whitespace-nowrap text-page disabled:cursor-default disabled:bg-surface disabled:text-muted disabled:ring-1 disabled:ring-line disabled:ring-inset min-[480px]:w-auto lg:min-h-0 lg:px-3.5 lg:py-2 lg:text-sm"
-          disabled={!ready || fetching}
+          aria-disabled={!ready || fetching}
+          className="min-h-11 w-full shrink-0 cursor-pointer rounded-md bg-ink px-3 text-base font-semibold whitespace-nowrap text-page aria-disabled:cursor-default aria-disabled:bg-surface aria-disabled:text-muted aria-disabled:ring-1 aria-disabled:ring-line aria-disabled:ring-inset min-[480px]:w-auto lg:min-h-0 lg:px-3.5 lg:py-2 lg:text-sm"
           type="submit"
         >
           {/* Both labels share one grid cell, so the button never resizes. */}

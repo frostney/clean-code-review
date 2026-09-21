@@ -24,9 +24,9 @@ export function LandingDuck({
   aside?: ReactNode;
   children: ReactNode;
 }) {
-  const { open } = useReviewView();
+  const { committed } = useReviewView();
 
-  if (open) {
+  if (committed) {
     return null;
   }
 
@@ -42,19 +42,21 @@ export function LandingDuck({
   );
 }
 
-// The page has no title, so the duck is the way back to the start.
+// The page has no title, so the duck is the way back to the start. It arrives
+// as soon as a review is asked for, which is what gives the page the review's
+// layout — every other part keys off `data-duck=home`.
 export function HomeDuck({ children }: { children: ReactNode }) {
-  const { open } = useReviewView();
+  const { committed, open } = useReviewView();
   const { goHome } = useReviewControls();
 
-  if (!open) {
+  if (!committed) {
     return null;
   }
 
   return (
     <DuckTransition>
       <button
-        aria-label="Close this review and start again"
+        aria-label={open ? 'Close this review and start again' : 'Start again'}
         className="inline-flex shrink-0 cursor-pointer items-center rounded-md"
         data-duck="home"
         onClick={goHome}

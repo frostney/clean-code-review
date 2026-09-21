@@ -60,6 +60,12 @@ function neutralise(
   if (Array.isArray(props.ariaDescribedBy)) {
     props.ariaDescribedBy = props.ariaDescribedBy.map(rename);
   }
+  // `aria-labelledby` names ids too. Nothing in this pipeline writes one today
+  // — the footnote label is reached by `aria-describedby` — and a reference
+  // left pointing at a renamed id would be silent, so it is renamed as well.
+  if (Array.isArray(props.ariaLabelledBy)) {
+    props.ariaLabelledBy = props.ariaLabelledBy.map(rename);
+  }
   if (Array.isArray(props.className)) {
     props.className = props.className.filter(
       (name) => !(typeof name === 'string' && name.startsWith('language-')),
