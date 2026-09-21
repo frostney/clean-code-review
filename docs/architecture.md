@@ -50,6 +50,7 @@ directions.
 | Skip rules and file selection | [`agent/lib/review/review.ts`](../agent/lib/review/review.ts), [`agent/lib/judging/select.ts`](../agent/lib/judging/select.ts) |
 | Luna calls, batching, streaming order | [`agent/lib/review/reviewer.ts`](../agent/lib/review/reviewer.ts), [`agent/lib/review/reviewer-prompt.ts`](../agent/lib/review/reviewer-prompt.ts) |
 | GitHub fetcher | [`agent/lib/github/github.ts`](../agent/lib/github/github.ts), [`src/pull-request/pull-request.tsx`](../src/pull-request/pull-request.tsx) (page), [`src/app/api/github-pr/route.ts`](../src/app/api/github-pr/route.ts) (scripts) |
+| Recent pull requests for the landing chips | [`agent/lib/github/recent.ts`](../agent/lib/github/recent.ts), [`src/app/api/recent-prs/route.ts`](../src/app/api/recent-prs/route.ts) |
 | MCP server and its one-request review | [`src/app/api/mcp/route.ts`](../src/app/api/mcp/route.ts), [`src/mcp/mcp-server.ts`](../src/mcp/mcp-server.ts), [`src/mcp/mcp-review.ts`](../src/mcp/mcp-review.ts) |
 | Page state and the two turns | [`src/review/useReview.ts`](../src/review/useReview.ts) |
 
@@ -102,7 +103,7 @@ app, the shared spend budgets, and the AI Gateway budget on the project.
 
 ### Vercel Firewall
 
-Six custom rules, all rate limits keyed by client IP over a fixed window. A rule
+Seven custom rules, all rate limits keyed by client IP over a fixed window. A rule
 that needs an exact path uses an anchored regex; a path-plus-method condition
 was tried and never matched.
 
@@ -114,6 +115,7 @@ was tried and never matched.
 | Rate limit pull request permalinks | 20 per 10 min | `^/[^/]+/[^/]+/pull/[0-9]+/?$` |
 | Rate limit server actions | 20 per 10 min | request carries a `next-action` header |
 | Rate limit the MCP endpoint | 10 per 10 min | `^/api/mcp/?$` |
+| Rate limit the recent pull request list | 60 per 10 min | `^/api/recent-prs/?$` |
 
 Of the managed rules, Bot Protection is off, AI Bots are allowed, and BotID is
 on basic. `bunx vercel firewall rules list` prints the live configuration.
@@ -128,6 +130,7 @@ instances do not share them.
 | New sessions per address | 30 per 10 min, [`agent/channels/eve.ts`](../agent/channels/eve.ts), from [`session-facts.ts`](../agent/lib/infra/session-facts.ts) |
 | GitHub fetches per address | 20 per 10 min, [`src/pull-request/throttle.ts`](../src/pull-request/throttle.ts), shared by the server action and `/api/github-pr` so both count one window |
 | MCP tool calls per address | 10 per 10 min, [`src/mcp/mcp-server.ts`](../src/mcp/mcp-server.ts) |
+| Recent pull request list per address | 60 per 10 min, [`src/landing/recent-throttle.ts`](../src/landing/recent-throttle.ts), counted apart from GitHub fetches so page loads cannot refuse a reader the pull request they pasted |
 | Per-session spend cap | `maxTokenCostUsdPerSession`, $0.50, [`agent/agent.ts`](../agent/agent.ts) |
 | Session lifetime | `sessionTimeoutMs`, one hour |
 
@@ -213,8 +216,13 @@ hash of their content; the pull request cache is keyed by a public URL.
 | Jev's answers for one file | 1 hour | the file's content, path, question ids and a question-set version | the answers only; the code is in the key and no further |
 | One Luna review part | 1 hour | the exact prompt, the model id and a review version | the written part |
 | A fetched pull request | 1 minute | its GitHub URL | the whole `PullRequestReview`: title, description, diff, avatar URL and changed-file count |
+| The recent pull request list | 30 minutes | one fixed key | up to five `{repo, number, title, url}`, or an empty list; claimed for 3 minutes before the refresh walks, so instances that miss together do not each spend GitHub's anonymous budget |
 
-The Vercel Runtime Cache backs all three on a deployment: per region, shared
+The Vercel Runtime Cache backs all four on a deployment: per region, shared
 across instances, and it survives deploys. Off Vercel, or when the Runtime Cache
-is not configured, it falls back to process memory. Values above 2,000,000 bytes
-are not stored, because an oversized `set` fails silently.
+is not configured, the first three fall back to process memory, because a cache
+miss there only repeats work. The recent pull request list does not: it is what
+keeps every instance from spending GitHub's one anonymous budget, so without a
+shared store it returns an empty list and calls nothing, the same fail-closed
+rule the spend counters follow. Values above 2,000,000 bytes are not stored,
+because an oversized `set` fails silently.

@@ -22,10 +22,12 @@ import { addressBucket } from './address';
  * Rate Limit IDs. Each needs a `@vercel/firewall` rule on the project's
  * Firewall carrying the same limit and window as the throttle beside it, or
  * the two bounds disagree: 20 per 10 minutes for GitHub fetches,
- * 30 per 10 minutes for session creation.
+ * 30 per 10 minutes for session creation, 60 per 10 minutes for the recent
+ * pull request list.
  */
 export const GITHUB_FETCH_RULE = 'github-fetch';
 export const SESSION_CREATE_RULE = 'session-create';
+export const RECENT_PRS_RULE = 'recent-prs';
 
 const RULES_DEPLOYED_TO = 'production';
 
