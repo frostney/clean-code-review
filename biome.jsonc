@@ -274,6 +274,7 @@
       "includes": [
         "src/app/**",
         "agent/**",
+        "packages/*/example/agent/**",
         "scripts/**",
         "next.config.ts",
         "*.config.*"

@@ -12,6 +12,7 @@
     "agent/**/*.test.ts",
     "src/**/*.test.ts"
   ],
+  "ignore": ["packages/**"],
   "ignoreDependencies": ["server-only", "vercel"],
   "project": ["**/*.{ts,tsx,mjs,css}"]
 }
