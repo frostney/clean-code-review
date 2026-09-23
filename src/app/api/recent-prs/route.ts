@@ -6,9 +6,6 @@ import { recentPullRequestsThrottled } from '@/src/landing/recent-throttle';
 
 export const dynamic = 'force-dynamic';
 
-/** A refresh is a walk of sequential GitHub calls; `recent.ts` bounds it well inside this. */
-export const maxDuration = 60;
-
 const HTTP_TOO_MANY = 429;
 
 /**

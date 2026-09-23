@@ -9,14 +9,20 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { cacheGetStrict, cacheSetStrict } from '../infra/cache';
 import {
   type Candidate,
   candidateOf,
   detailsFrom,
   type Fetched,
   type PullRequestDetails,
+  RECENT_REFRESH_SECONDS,
+  recentPullRequests,
+  refreshRecentPullRequests,
+  type StoredList,
   searchQuery,
   selectPullRequests,
+  storedFrom,
 } from './recent';
 
 /** GitHub rejects a search query longer than this. */
@@ -450,4 +456,206 @@ test('the call ceiling holds however long the candidate list is', async () => {
     [],
   );
   assert.equal(fetcher.calls.length, 15);
+});
+
+/* --- Through the real cache: what the schedule stores and a reader sees --- */
+
+const KEY = 'recent-pull-requests';
+const REPOS = ['vercel/next.js', 'nodejs/node', 'oven-sh/bun'];
+const HOUR = RECENT_REFRESH_SECONDS * 1_000;
+
+const ONE_ROW = [
+  { number: 1, repo: 'a/one', title: 'A change', url: 'https://x/1' },
+];
+
+/**
+ * GitHub, stubbed: a search answering three qualifying pull requests from
+ * three repositories, and a detail call that passes the size filter. Off
+ * Vercel the cache is this process's memory, which counts as shared, so the
+ * reads and writes below are the real ones.
+ */
+function stubGitHub(refuse = false) {
+  const calls = { detail: 0, search: 0 };
+  const recent = new Date().toISOString();
+  const pull = (repo: string, n: number) => ({
+    additions: 120,
+    author_association: 'MEMBER',
+    changed_files: 3,
+    draft: false,
+    html_url: `https://github.com/${repo}/pull/${n}`,
+    title: `Change ${n}`,
+    updated_at: recent,
+    user: { login: 'maintainer', type: 'User' },
+  });
+  const realFetch = globalThis.fetch;
+
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+
+    if (url.includes('/search/')) {
+      calls.search++;
+    } else {
+      calls.detail++;
+    }
+    if (refuse) {
+      return new Response('rate limited', { status: 403 });
+    }
+    if (url.includes('/search/')) {
+      return Response.json({ items: REPOS.map((r, i) => pull(r, i + 1)) });
+    }
+    const match = /repos\/([^/]+\/[^/]+)\/pulls\/(\d+)/.exec(url);
+
+    return Response.json(pull(match?.[1] ?? '', Number(match?.[2])));
+  }) as typeof fetch;
+
+  return {
+    calls,
+    restore: () => {
+      globalThis.fetch = realFetch;
+    },
+  };
+}
+
+async function holds(value: unknown) {
+  await cacheSetStrict(KEY, value, KEY, 60);
+}
+
+const stored = (entry: Partial<StoredList> = {}): StoredList => ({
+  at: Date.now() - 2 * HOUR,
+  list: ONE_ROW,
+  triedAt: Date.now() - 2 * HOUR,
+  ...entry,
+});
+
+test('a reader gets what the schedule stored', async () => {
+  await holds(stored());
+
+  assert.deepEqual(await recentPullRequests(), ONE_ROW);
+});
+
+test('a reader never walks GitHub, even with nothing stored', async () => {
+  // The walk belongs to the schedule. An empty cache is an empty row until
+  // the next run, never a reader waiting on GitHub.
+  for (const value of [null, ONE_ROW]) {
+    await holds(value);
+    const github = stubGitHub();
+
+    try {
+      assert.deepEqual(await recentPullRequests(), []);
+      assert.deepEqual(github.calls, { detail: 0, search: 0 });
+    } finally {
+      github.restore();
+    }
+  }
+});
+
+test('an empty cache is walked and filled', async () => {
+  await holds(null);
+  const github = stubGitHub();
+
+  try {
+    await refreshRecentPullRequests();
+    const after = storedFrom(await cacheGetStrict(KEY));
+
+    assert.equal(github.calls.search, 1);
+    assert.equal(after?.list.length, 3);
+    assert.equal(after?.at, after?.triedAt);
+  } finally {
+    github.restore();
+  }
+});
+
+test('the bare list an older deploy stored is replaced, not kept', async () => {
+  // What the cache holds the first time this shape is deployed.
+  await holds([{ number: 9, repo: 'a/one', title: 'Old', url: 'x' }]);
+  const github = stubGitHub();
+
+  try {
+    await refreshRecentPullRequests();
+
+    assert.equal(github.calls.search, 1);
+    assert.equal(storedFrom(await cacheGetStrict(KEY))?.list.length, 3);
+  } finally {
+    github.restore();
+  }
+});
+
+test('a second delivery of one cron run does not walk again', async () => {
+  await holds(stored({ triedAt: Date.now() - 60_000 }));
+  const github = stubGitHub();
+
+  try {
+    await refreshRecentPullRequests();
+
+    assert.deepEqual(github.calls, { detail: 0, search: 0 });
+  } finally {
+    github.restore();
+  }
+});
+
+test('a walk GitHub refuses keeps the row it had', async () => {
+  const kept = stored();
+
+  await holds(kept);
+  const github = stubGitHub(true);
+
+  try {
+    await refreshRecentPullRequests();
+    const after = storedFrom(await cacheGetStrict(KEY));
+
+    assert.equal(github.calls.search, 1);
+    assert.deepEqual(after?.list, ONE_ROW);
+    // Kept, but not given a fresh life: it still goes on its own clock.
+    assert.equal(after?.at, kept.at);
+    assert.ok((after?.triedAt ?? 0) > kept.triedAt);
+  } finally {
+    github.restore();
+  }
+});
+
+test('anything that is not an envelope reads as nothing stored', () => {
+  for (const value of [
+    ONE_ROW,
+    undefined,
+    null,
+    'a string',
+    {},
+    { at: 1, triedAt: 1 },
+    { at: 1, list: ONE_ROW },
+    { at: null, list: ONE_ROW, triedAt: 1 },
+    { at: 1, list: 'rows', triedAt: 1 },
+  ]) {
+    assert.equal(
+      storedFrom(value),
+      null,
+      `${JSON.stringify(value)} is not one`,
+    );
+  }
+  const envelope = stored();
+
+  assert.deepEqual(storedFrom(envelope), envelope);
+});
+
+test('no shared store means no GitHub call at all', async () => {
+  // Fail closed, as `../spend/spend.ts` does: per-instance memory would let
+  // every instance walk and hand its answer to no one, so nothing is spent.
+  const env = { ...process.env };
+  const realError = console.error;
+  const github = stubGitHub();
+
+  process.env.VERCEL = '1';
+  process.env.RUNTIME_CACHE_ENDPOINT = undefined;
+  process.env.RUNTIME_CACHE_HEADERS = undefined;
+  // It says so once per instance; the assertions below are what check it.
+  console.error = () => undefined;
+
+  try {
+    await refreshRecentPullRequests();
+    assert.deepEqual(await recentPullRequests(), []);
+    assert.deepEqual(github.calls, { detail: 0, search: 0 });
+  } finally {
+    github.restore();
+    console.error = realError;
+    process.env = env;
+  }
 });

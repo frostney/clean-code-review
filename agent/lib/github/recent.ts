@@ -8,13 +8,13 @@
  * refresh is therefore capped at one search call plus `MAX_DETAIL_CALLS`
  * pull-request calls, bounded by a deadline as well as a count.
  *
- * The answer is shared, not per visitor, but only as far as the store reaches:
- * the Vercel Runtime Cache is per region, so `RECENT_REFRESH_SECONDS` is one
- * refresh per region, not one worldwide, and a CDN entry in front of the route
- * is best effort on top of that. Without a shared store there is nothing to
- * stop every instance walking, so this module refuses to call GitHub at all
- * rather than degrade to per-instance memory — the same fail-closed rule
- * `../spend/spend.ts` applies to the spend counters.
+ * A reader never walks GitHub: `agent/schedules/recent-pull-requests.ts` does,
+ * once an hour, and readers only read what it stored. The store is the Vercel
+ * Runtime Cache, per region, which is one store while the functions run in one
+ * region. Without a shared store the walk could not hand its answer to
+ * anyone, so it refuses to call GitHub at all rather than degrade to
+ * per-instance memory — the same fail-closed rule `../spend/spend.ts` applies
+ * to the spend counters.
  *
  * Only from `REPOSITORIES`, and only from someone who has already had work
  * merged into the one they are writing to: the fixed list means the search can
@@ -59,6 +59,7 @@ const REPOSITORY_FILTER = REPOSITORIES.map((name) => `repo:${name}`).join(' ');
 
 const RECENT_DAYS = 14;
 const MS_PER_DAY = 86_400_000;
+const MS_PER_SECOND = 1_000;
 
 /** `2026-09-07`, the only date format the search accepts. */
 const DATE_CHARS = 10;
@@ -117,8 +118,9 @@ const MAX_CHANGED_FILES = 24;
 /**
  * An hour, because freshness buys the row nothing — a pull request opened
  * yesterday is as good an example as one opened since the last refresh — while
- * every refresh draws on the same 60 calls an hour that a reader's own pasted
- * pull request draws on. One walk an hour leaves that budget mostly for them.
+ * every walk draws on the anonymous GitHub budget a reader's own pasted pull
+ * request draws on. The schedule's cron says the same thing; this is what the
+ * route tells the CDN.
  */
 export const RECENT_REFRESH_SECONDS = 3_600;
 
@@ -130,17 +132,54 @@ export const RECENT_REFRESH_SECONDS = 3_600;
  */
 const WALK_DEADLINE_MS = 20_000;
 
-/** A stuck call would hold the whole sequential walk, and the route with it. */
+/** A stuck call would hold the whole sequential walk. */
 const REQUEST_TIMEOUT_MS = 8_000;
-
-/**
- * How long a claimed window keeps other instances out. Longer than a walk can
- * run, short enough that an invocation killed mid-walk is retried soon.
- */
-const CLAIM_SECONDS = 180;
 
 const CACHE_NAME = 'recent-pull-requests';
 const CACHE_KEY = CACHE_NAME;
+
+/**
+ * Vercel runs a cron job on a best-effort basis, so a list outlives the runs
+ * after it: a missed run should cost nothing a reader can see. Past that the
+ * list is gone and the row is empty — a stale example is better than none,
+ * but not indefinitely, or it would outlive the pull request it points at.
+ */
+const REFRESHES_KEPT = 3;
+
+const STORE_SECONDS = RECENT_REFRESH_SECONDS * REFRESHES_KEPT;
+
+/**
+ * Vercel can deliver one cron run more than once. A walk this soon after the
+ * last one is that duplicate, not the next hour's run.
+ */
+const DUPLICATE_WITHIN_SECONDS = RECENT_REFRESH_SECONDS / 2;
+
+/**
+ * What the cache holds. An envelope rather than the bare list, because keeping
+ * a list through a walk that found nothing means knowing how old it is.
+ */
+export interface StoredList {
+  /**
+   * When `list` was fetched. Never moved while the list is kept, so however
+   * many walks a list outlives, it still goes at `STORE_SECONDS` after the walk
+   * that found it.
+   */
+  at: number;
+  /** When a walk last finished, whatever it found. */
+  triedAt: number;
+  list: RecentPullRequest[];
+}
+
+/** Null for anything that is not an envelope, including the bare list this used to store. */
+export function storedFrom(value: unknown): StoredList | null {
+  const { at, list, triedAt } = (value ?? {}) as Partial<StoredList>;
+
+  return typeof at === 'number' &&
+    typeof triedAt === 'number' &&
+    Array.isArray(list)
+    ? { at, list, triedAt }
+    : null;
+}
 
 const USER_AGENT = 'clean-code-judge';
 const API_VERSION = '2022-11-28';
@@ -488,15 +527,13 @@ async function fetchDetails(candidate: Candidate): Promise<Fetched> {
   }
 }
 
-type Trouble = 'read' | 'claim' | 'store';
+type Trouble = 'read' | 'store';
 
 const logged = new Set<Trouble>();
 
 const TROUBLE: Record<Trouble, string> = {
-  claim:
-    'could not be claimed, so this refresh is skipped rather than let every instance walk at once',
-  read: 'could not be read, so the row stays empty rather than spend GitHub per instance',
-  store: 'could not be written, so the next reader walks again',
+  read: 'could not be read, so the row stays empty and nothing walks GitHub',
+  store: 'could not be written, so this walk is lost until the next one',
 };
 
 function logTrouble(kind: Trouble, err: unknown): void {
@@ -511,74 +548,87 @@ function logTrouble(kind: Trouble, err: unknown): void {
   );
 }
 
+/** The stored envelope, or null when there is none; throws when there is no shared store to ask. */
+async function readStored(): Promise<StoredList | null> {
+  return storedFrom(await cacheGetStrict(CACHE_KEY));
+}
+
 /**
- * Takes the window before the walk rather than after it, so instances and
- * regions that miss together do not each spend a budget. The Runtime Cache has
- * no atomic write, so two claims landing within one round trip both win; this
- * narrows the stampede to a round trip, not to zero. A write that fails
- * silently in that client also reads as a claim.
+ * The life left is counted from `at`, not from this write: a list kept
+ * through several fruitless walks must not have its expiry pushed out each
+ * time.
  */
-async function claimWindow(): Promise<boolean> {
+async function store(entry: StoredList): Promise<void> {
+  const spent = Math.floor((Date.now() - entry.at) / MS_PER_SECOND);
+  const ttl = STORE_SECONDS - Math.max(spent, 0);
+
+  if (ttl <= 0) {
+    return;
+  }
   try {
-    await cacheSetStrict(CACHE_KEY, [], CACHE_NAME, CLAIM_SECONDS);
-
-    return true;
+    await cacheSetStrict(CACHE_KEY, entry, CACHE_NAME, ttl);
   } catch (err) {
-    logTrouble('claim', err);
-
-    return false;
+    logTrouble('store', err);
   }
 }
 
-async function refresh(): Promise<RecentPullRequest[]> {
-  if (!(await claimWindow())) {
-    return [];
+/**
+ * The only thing that calls GitHub, run by the hourly schedule. Walks, then
+ * stores what it found.
+ *
+ * A walk that finds nothing keeps what it had rather than blanking the row:
+ * GitHub being out of budget says nothing about the examples already on
+ * screen. `at` stays put, so the kept list still expires on time.
+ *
+ * Nothing is spent when there is no shared store to put the answer in, or when
+ * this run is a second delivery of one that already walked. That second check
+ * reads before it writes, so two deliveries landing together can both walk:
+ * rare, and one extra walk at worst.
+ */
+export async function refreshRecentPullRequests(): Promise<void> {
+  let previous: StoredList | null;
+
+  try {
+    previous = await readStored();
+  } catch (err) {
+    logTrouble('read', err);
+
+    return;
   }
-  const now = new Date();
+  const started = Date.now();
+
+  if (
+    previous &&
+    started - previous.triedAt < DUPLICATE_WITHIN_SECONDS * MS_PER_SECOND
+  ) {
+    return;
+  }
+  const now = new Date(started);
   const found = await selectPullRequests(
     await searchCandidates(now),
     fetchDetails,
     now,
   );
+  const triedAt = Date.now();
 
-  try {
-    // An empty answer is stored too: a refused refresh backs off for the
-    // window instead of spending the budget again on the next reader.
-    await cacheSetStrict(CACHE_KEY, found, CACHE_NAME, RECENT_REFRESH_SECONDS);
-  } catch (err) {
-    logTrouble('store', err);
-  }
-
-  return found;
+  await store(
+    found.length === 0 && previous && previous.list.length > 0
+      ? { ...previous, triedAt }
+      : { at: triedAt, list: found, triedAt },
+  );
 }
 
-let refreshing: Promise<RecentPullRequest[]> | null = null;
-
 /**
- * Up to `MAX_CHIPS` pull requests, or none. Never throws: an empty row is the
- * answer for a failed, refused or unshared refresh as much as for a quiet
- * fortnight.
+ * Up to `MAX_CHIPS` pull requests, or none, from what the schedule stored.
+ * Never calls GitHub and never throws: an empty row is the answer for a
+ * missing, unreadable or unshared store as much as for a quiet fortnight.
  */
 export async function recentPullRequests(): Promise<RecentPullRequest[]> {
-  let stored: unknown;
-
   try {
-    stored = await cacheGetStrict(CACHE_KEY);
+    return (await readStored())?.list ?? [];
   } catch (err) {
     logTrouble('read', err);
 
     return [];
   }
-  if (Array.isArray(stored)) {
-    return stored as RecentPullRequest[];
-  }
-  // One refresh at a time within an instance; the claimed window is what holds
-  // the other instances off.
-  refreshing ??= refresh()
-    .catch((): RecentPullRequest[] => [])
-    .finally(() => {
-      refreshing = null;
-    });
-
-  return await refreshing;
 }

@@ -51,7 +51,7 @@ directions.
 | Skip rules and file selection | [`agent/lib/review/review.ts`](../agent/lib/review/review.ts), [`agent/lib/judging/select.ts`](../agent/lib/judging/select.ts) |
 | Luna calls, batching, streaming order | [`agent/lib/review/reviewer.ts`](../agent/lib/review/reviewer.ts), [`agent/lib/review/reviewer-prompt.ts`](../agent/lib/review/reviewer-prompt.ts) |
 | GitHub fetcher | [`agent/lib/github/github.ts`](../agent/lib/github/github.ts), [`src/pull-request/pull-request.tsx`](../src/pull-request/pull-request.tsx) (page), [`src/app/api/github-pr/route.ts`](../src/app/api/github-pr/route.ts) (scripts) |
-| Recent pull requests for the landing chips | [`agent/lib/github/recent.ts`](../agent/lib/github/recent.ts), [`src/app/api/recent-prs/route.ts`](../src/app/api/recent-prs/route.ts) |
+| Recent pull requests for the landing chips | [`agent/lib/github/recent.ts`](../agent/lib/github/recent.ts), walked hourly by [`agent/schedules/recent-pull-requests.ts`](../agent/schedules/recent-pull-requests.ts) and read by [`src/app/api/recent-prs/route.ts`](../src/app/api/recent-prs/route.ts) |
 | MCP server and its one-request review | [`src/app/api/mcp/route.ts`](../src/app/api/mcp/route.ts), [`src/mcp/mcp-server.ts`](../src/mcp/mcp-server.ts), [`src/mcp/mcp-review.ts`](../src/mcp/mcp-review.ts) |
 | Page state and the two turns | [`src/review/useReview.ts`](../src/review/useReview.ts) |
 
@@ -217,13 +217,13 @@ hash of their content; the pull request cache is keyed by a public URL.
 | Jev's answers for one file | 1 hour | the file's content, path, question ids and a question-set version | the answers only; the code is in the key and no further |
 | One Luna review part | 1 hour | the exact prompt, the model id and a review version | the written part |
 | A fetched pull request | 1 minute | its GitHub URL | the whole `PullRequestReview`: title, description, diff, avatar URL and changed-file count |
-| The recent pull request list | 1 hour | one fixed key | up to five `{repo, number, title, url}`, or an empty list; claimed for 3 minutes before the refresh walks, so instances that miss together do not each spend GitHub's anonymous budget |
+| The recent pull request list | 3 hours | one fixed key | up to five `{repo, number, title, url}`, or an empty list, with when the list was fetched and when a walk last finished. Written only by the hourly schedule, read by every visitor, so no reader ever calls GitHub. A walk that finds nothing keeps the list it had, and a list goes three hours after the walk that found it, so one missed cron run costs nothing visible |
 
 The Vercel Runtime Cache backs all four on a deployment: per region, shared
 across instances, and it survives deploys. Off Vercel, or when the Runtime Cache
 is not configured, the first three fall back to process memory, because a cache
-miss there only repeats work. The recent pull request list does not: it is what
-keeps every instance from spending GitHub's one anonymous budget, so without a
-shared store it returns an empty list and calls nothing, the same fail-closed
+miss there only repeats work. The recent pull request list does not: a walk
+stored in one instance's memory reaches no reader, so without a shared store
+the schedule calls nothing and readers get an empty list, the same fail-closed
 rule the spend counters follow. Values above 2,000,000 bytes are not stored,
 because an oversized `set` fails silently.
