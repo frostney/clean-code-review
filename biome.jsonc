@@ -270,10 +270,22 @@
   },
   "overrides": [
     {
+      // Export conditions are ordered: `types` must come before `default`.
+      "assist": {
+        "actions": {
+          "source": {
+            "useSortedKeys": "off"
+          }
+        }
+      },
+      "includes": ["packages/*/package.json"]
+    },
+    {
       // Next and eve both discover modules by their default export.
       "includes": [
         "src/app/**",
         "agent/**",
+        "packages/*/example/agent/**",
         "scripts/**",
         "next.config.ts",
         "*.config.*"

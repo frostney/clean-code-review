@@ -1,0 +1,54 @@
+{
+  "author": "Johannes Stein",
+  "description": "An eve channel that publishes an eve app's own typed tools as an MCP server, for 2026-07-28 and 2025-era clients.",
+  "devDependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "@types/node": "24.13.6",
+    "eve": "0.64.1",
+    "typescript": "6.0.3",
+    "zod": "4.6.5"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "eve",
+    "eve-channel",
+    "mcp",
+    "model-context-protocol"
+  ],
+  "license": "MIT",
+  "name": "eve-channel-mcp",
+  "peerDependencies": {
+    "@modelcontextprotocol/server": "^2.0.0",
+    "eve": ">=0.64.1 <0.65.0"
+  },
+  "repository": {
+    "directory": "packages/eve-channel-mcp",
+    "type": "git",
+    "url": "git+https://github.com/frostney/clean-code-review.git"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "example": "cd example && eve dev --no-ui --port 3104",
+    "prepublishOnly": "bun run typecheck && bun test && bun run build",
+    "test": "bun test src",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "sideEffects": false,
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "version": "0.1.0"
+}

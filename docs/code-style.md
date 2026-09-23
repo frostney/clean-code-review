@@ -89,6 +89,10 @@ export function readChoice(): ThemeChoice {
 - Add with an exact version: `bun add --exact <pkg>` (`-d` for dev tooling).
   Some of `package.json` is still on `^` ranges (`shiki`, `lucide-react`,
   `lefthook` and others); they predate this rule and are not a pattern to copy.
+- A library under `packages/` names its `peerDependencies` with ranges
+  (`^2.0.0`), because it has to accept the versions its host already
+  installed. Everything else in its manifest stays exact, and it keeps its own
+  `bun.lock`; the root is not a workspace, so the app's install is unchanged.
 - Bun 1.4 (`packageManager: bun@1.4.0`) writes the text `bun.lock`. Commit it
   with the `package.json` change; Vercel and CI install with
   `bun install --frozen-lockfile`.
