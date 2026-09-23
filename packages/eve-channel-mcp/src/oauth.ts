@@ -41,7 +41,8 @@ function isLoopbackHostname(hostname: string): boolean {
 /**
  * The rules eve's `oauthResource()` applies: HTTPS, or HTTP on loopback
  * only, and no credentials, query or fragment, since these URLs are
- * published to anyone who asks.
+ * published to anyone who asks. A bare `?` or `#` leaves `search` and
+ * `hash` empty but stays in `href`, so the raw text is checked too.
  */
 function identifierUrl(label: string, value: string): URL {
   let url: URL;
@@ -61,7 +62,8 @@ function identifierUrl(label: string, value: string): URL {
       url.username === '' &&
       url.password === '' &&
       url.search === '' &&
-      url.hash === ''
+      url.hash === '' &&
+      !/[?#]/.test(value)
     )
   ) {
     throw new Error(
@@ -72,7 +74,12 @@ function identifierUrl(label: string, value: string): URL {
   return url;
 }
 
-/** An absolute path on the resource's own origin, with no query or fragment. */
+/**
+ * An absolute path on the resource's own origin, with no query or fragment,
+ * already in the form URL parsing gives it: the route is registered at the
+ * given text and the metadata URL advertises the parsed one, so the two must
+ * be the same.
+ */
 function checkedMetadataPath(path: string): string {
   const probe = 'https://resource.invalid';
   let resolved: URL | null = null;
@@ -85,12 +92,12 @@ function checkedMetadataPath(path: string): string {
   if (
     !path.startsWith('/') ||
     path.startsWith('//') ||
+    /[?#]/.test(path) ||
     resolved?.origin !== probe ||
-    resolved.search !== '' ||
-    resolved.hash !== ''
+    resolved.pathname !== path
   ) {
     throw new Error(
-      'oauth.metadataPath must be an absolute path without a host, query or fragment.',
+      'oauth.metadataPath must be an absolute path without a host, query, fragment or dot segments, in the form URL parsing gives it.',
     );
   }
 

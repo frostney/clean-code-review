@@ -149,6 +149,7 @@ async function send(
     headers?: Record<string, string>;
     method?: string;
     path?: string;
+    requestIp?: string;
     url?: string;
   },
 ): Promise<{ status: number; body: unknown; headers: Headers }> {
@@ -170,7 +171,9 @@ async function send(
       },
       method,
     }),
-    CHANNEL,
+    init.requestIp === undefined
+      ? CHANNEL
+      : ({ ...CHANNEL, requestIp: init.requestIp } as RouteHandlerArgs),
   );
   const text = await response.text();
   const events = text
@@ -249,6 +252,41 @@ describe('options', () => {
       );
     }
     assert.ok(channel({ allowBatches: { maxMessages: 2 } }));
+  });
+
+  // C6: a misspelt bound was ignored, leaving the default in force.
+  test('refuses keys allowBatches does not know', () => {
+    assert.throws(
+      () => channel({ allowBatches: { maxMesages: 2 } as never }),
+      /maxMesages/,
+    );
+  });
+
+  // R4.
+  test('takes allowedOrigins only as origins a browser would send', () => {
+    for (const bad of [
+      'https://app.example/',
+      'https://app.example/path',
+      'https://app.example?x=1',
+      'https://app.example#f',
+      'https://App.example',
+      'https://app.example:443',
+      'app.example',
+      'ftp://app.example',
+      'null',
+    ]) {
+      assert.throws(
+        () => channel({ allowedOrigins: [bad] }),
+        /allowedOrigins/,
+        bad,
+      );
+    }
+    assert.throws(() => channel({ allowedOrigins: [] }), /allowedOrigins/);
+    assert.ok(
+      channel({
+        allowedOrigins: ['http://localhost:3000', 'https://app.example:8443'],
+      }),
+    );
   });
 
   test('refuses settings it does not know', () => {
@@ -420,9 +458,10 @@ describe('admission', () => {
     assert.equal(calls, before);
   });
 
-  // L5 and C2: every refused request is reported, and a reporter that throws
-  // or rejects neither reaches the client nor becomes an unhandled rejection.
-  test('reports each request a misconfigured deployment refuses, safely', async () => {
+  // N6, L5 and C2: a misconfigured deployment is reported at most once a
+  // minute, and a reporter that throws or rejects neither reaches the client
+  // nor becomes an unhandled rejection.
+  test('reports a misconfigured deployment once a minute, safely', async () => {
     const unhandled: unknown[] = [];
     const onUnhandled = (reason: unknown) => unhandled.push(reason);
     const reported: string[] = [];
@@ -441,7 +480,7 @@ describe('admission', () => {
       ]) {
         const target = channel({ https: 'auto', onError });
 
-        for (const _ of [1, 2]) {
+        for (const _ of [1, 2, 3]) {
           const { body, status } = await send(target, toolCall('whoami'));
 
           assert.equal(status, 500);
@@ -453,8 +492,73 @@ describe('admission', () => {
     } finally {
       process.off('unhandledRejection', onUnhandled);
     }
-    assert.equal(reported.length, 4);
+    assert.equal(reported.length, 2);
     assert.deepEqual(unhandled, []);
+  });
+
+  test('reports a misconfigured deployment again after a minute', async () => {
+    const reported: string[] = [];
+    const target = channel({
+      https: 'auto',
+      onError: (error) => {
+        reported.push(error.message);
+      },
+    });
+    const realNow = Date.now;
+
+    await send(target, toolCall('whoami'));
+    await send(target, toolCall('whoami'));
+    try {
+      Date.now = () => realNow() + 60_000;
+      await send(target, toolCall('whoami'));
+    } finally {
+      Date.now = realNow;
+    }
+    assert.equal(reported.length, 2);
+  });
+
+  // R5a: the waiver reads the address eve reports, not the Host header.
+  test('under eve dev takes plain HTTP from a loopback peer only', async () => {
+    process.env.EVE_DEV = '1';
+    // No allowedHosts or https: the eve dev defaults are what is under test.
+    const target = mcpServerChannel({
+      auth: none(),
+      name: 'test',
+      route: '/mcp',
+      tools: [whoami],
+      version: '0.0.0',
+    });
+
+    for (const [requestIp, status] of [
+      ['127.0.0.1', 200],
+      ['192.168.1.218', 403],
+    ] as const) {
+      const response = await send(target, { ...toolCall('whoami'), requestIp });
+
+      assert.equal(response.status, status, requestIp);
+    }
+  });
+
+  // R4: withEve's dev rewrite hands eve 127.0.0.1 while the page is on localhost:3000.
+  test('admits a page on an origin listed in allowedOrigins', async () => {
+    const fromPage = {
+      ...toolCall('whoami'),
+      headers: {
+        ...toolCall('whoami').headers,
+        origin: 'http://localhost:3000',
+      },
+    };
+
+    assert.equal((await send(channel(), fromPage)).status, 403);
+    assert.equal(
+      (
+        await send(
+          channel({ allowedOrigins: ['http://localhost:3000'] }),
+          fromPage,
+        )
+      ).status,
+      200,
+    );
   });
 
   test('runs auth before reading the body', async () => {
@@ -578,6 +682,52 @@ describe('schemas', () => {
       const { body } = await send(channel({ tools: [undescribable] }), era);
 
       assert.equal(JSON.stringify(body).includes(SECRET), false);
+    }
+  });
+
+  // N7: a server is built per request, so the same failure was reported on every tools/list.
+  test('reports a schema that cannot be converted once, under one error id', async () => {
+    const base = z.object({});
+    const errorIds: string[] = [];
+    const undescribable = defineMcpTool({
+      async call() {
+        return { content: [] };
+      },
+      definition: {
+        inputSchema: {
+          '~standard': {
+            ...base['~standard'],
+            jsonSchema: {
+              input: () => {
+                throw new Error(SECRET);
+              },
+              output: () => {
+                throw new Error(SECRET);
+              },
+            },
+          },
+        },
+        name: 'undescribable',
+      },
+    });
+    const target = channel({
+      onToolError: (_error, errorId) => {
+        errorIds.push(errorId);
+      },
+      tools: [undescribable],
+    });
+    const answers: string[] = [];
+
+    for (const era of [
+      modern('tools/list'),
+      legacy('tools/list'),
+      modern('tools/list'),
+    ]) {
+      answers.push(JSON.stringify((await send(target, era)).body));
+    }
+    assert.equal(errorIds.length, 1);
+    for (const answer of answers) {
+      assert.ok(answer.includes(errorIds[0] ?? 'none'), answer);
     }
   });
 

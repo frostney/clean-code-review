@@ -36,7 +36,7 @@ describe('isolatePrincipal', () => {
     const copy = isolatePrincipal(shared);
 
     assert.ok(copy);
-    assert.deepEqual(copy, shared);
+    assert.deepEqual({ ...copy, attributes: { ...copy.attributes } }, shared);
     assert.notEqual(copy, shared);
     assert.notEqual(copy.attributes, shared.attributes);
     assert.throws(() => {
@@ -56,8 +56,24 @@ describe('isolatePrincipal', () => {
     });
 
     assert.ok(copy);
-    assert.equal(Object.getPrototypeOf(copy.attributes), Object.prototype);
     assert.deepEqual(Object.keys(copy.attributes), ['__proto__', 'team']);
+    assert.deepEqual(
+      Object.getOwnPropertyDescriptor(copy.attributes, '__proto__')?.value,
+      ['admin'],
+    );
     assert.equal((copy.attributes as Record<string, unknown>)[0], undefined);
+  });
+
+  // C12 residual: inherited names such as `constructor` read as attributes.
+  test('gives attributes no inherited names', () => {
+    const copy = isolatePrincipal(PRINCIPAL);
+
+    assert.ok(copy);
+    assert.equal(Object.getPrototypeOf(copy.attributes), null);
+    for (const name of ['constructor', 'toString', 'hasOwnProperty']) {
+      assert.equal(copy.attributes[name], undefined, name);
+      assert.equal(name in copy.attributes, false, name);
+    }
+    assert.ok(Object.isFrozen(copy.attributes));
   });
 });

@@ -30,8 +30,11 @@ function copyAttributes(value: unknown): Attributes | null {
   }
 
   // `fromEntries` defines own properties, so a `__proto__` key stays a key;
-  // assigning it would set the copy's prototype instead.
-  return Object.freeze(Object.fromEntries(entries));
+  // assigning it would set the copy's prototype instead. With no prototype,
+  // `attributes.constructor` is undefined unless the strategy set it.
+  return Object.freeze(
+    Object.setPrototypeOf(Object.fromEntries(entries), null) as Attributes,
+  );
 }
 
 /**
