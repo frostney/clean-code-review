@@ -1,4 +1,4 @@
-import { httpBasic } from 'eve/channels/auth';
+import { ForbiddenError, httpBasic } from 'eve/channels/auth';
 import { z } from 'zod';
 
 // A published app imports these from 'eve-channel-mcp'.
@@ -13,7 +13,7 @@ const FAHRENHEIT_PER_CELSIUS = 1.8;
 const FAHRENHEIT_AT_ZERO_C = 32;
 
 const convertTemperature = defineMcpTool({
-  call({ celsius }) {
+  async call({ celsius }) {
     const result = {
       fahrenheit: celsius * FAHRENHEIT_PER_CELSIUS + FAHRENHEIT_AT_ZERO_C,
       kelvin: celsius - ABSOLUTE_ZERO_C,
@@ -36,7 +36,7 @@ const convertTemperature = defineMcpTool({
 });
 
 const divide = defineMcpTool({
-  call({ dividend, divisor }) {
+  async call({ dividend, divisor }) {
     if (divisor === 0) {
       throw new McpToolOperationError(
         'invalid_input',
@@ -54,7 +54,7 @@ const divide = defineMcpTool({
 });
 
 const whoami = defineMcpTool({
-  call(_input, { auth, requestIp }) {
+  async call(_input, { auth }, { requestIp }) {
     const principal = {
       authenticator: auth.authenticator,
       principalId: auth.principalId,
@@ -81,11 +81,18 @@ const whoami = defineMcpTool({
   },
 });
 
+// A known password is acceptable only under `eve dev`, on loopback.
+const password =
+  process.env.EXAMPLE_MCP_PASSWORD ??
+  (process.env.EVE_DEV === '1' ? 'example-only' : undefined);
+
 export default mcpServerChannel({
-  auth: httpBasic({
-    password: process.env.EXAMPLE_MCP_PASSWORD ?? 'example-only',
-    username: 'example',
-  }),
+  auth:
+    password === undefined
+      ? () => {
+          throw new ForbiddenError({ message: 'Set EXAMPLE_MCP_PASSWORD.' });
+        }
+      : httpBasic({ password, username: 'example' }),
   instructions: 'Example tools: convert a temperature, divide, and whoami.',
   name: 'eve-channel-mcp-example',
   route: '/mcp',

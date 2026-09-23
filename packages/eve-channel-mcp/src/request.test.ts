@@ -1,88 +1,107 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { crossOriginRefusal, readJsonRpcBody } from './request.js';
+import { readJsonRpcBody } from './request.js';
 
 const ENDPOINT = 'https://agent.example/mcp';
+const HUNG_MS = 2000;
 
-function post(body: string, headers: Record<string, string> = {}): Request {
-  return new Request(ENDPOINT, { body, headers, method: 'POST' });
+function post(body: BodyInit, headers: Record<string, string> = {}): Request {
+  // `duplex` is required for a stream body and missing from the DOM typings.
+  return new Request(ENDPOINT, {
+    body,
+    duplex: 'half',
+    headers,
+    method: 'POST',
+  } as RequestInit);
 }
 
-describe('crossOriginRefusal', () => {
-  test('lets a request without Origin through, as non-browser clients send', () => {
-    assert.equal(crossOriginRefusal(post('{}')), null);
+/** A body that sends `bytes`, then stays open, as a slow or hostile uploader would. */
+function openStream(bytes: number): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('x'.repeat(bytes)));
+    },
   });
+}
 
-  test('lets a same-origin browser request through', () => {
-    assert.equal(
-      crossOriginRefusal(post('{}', { origin: 'https://agent.example' })),
-      null,
-    );
-  });
+function withinTime<T>(work: Promise<T>): Promise<T> {
+  return Promise.race([
+    work,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('the body read hung')), HUNG_MS),
+    ),
+  ]);
+}
 
-  test('refuses another origin and a malformed one with 403', async () => {
-    for (const origin of ['https://evil.example', 'not a url']) {
-      const refused = crossOriginRefusal(post('{}', { origin }));
+async function status(body: Awaited<ReturnType<typeof readJsonRpcBody>>) {
+  return body.ok
+    ? { status: 200 }
+    : {
+        code: (await body.response.json()).error.code,
+        status: body.response.status,
+      };
+}
 
-      assert.ok(refused);
-      assert.equal(refused.status, 403);
-      assert.equal((await refused.json()).error.code, -32_000);
-    }
-  });
-});
+const limits = { maxBodyBytes: 64, timeoutMs: 5000 };
 
 describe('readJsonRpcBody', () => {
-  const limits = { allowBatches: false, maxBodyBytes: 64 };
-
-  test('returns the parsed message and leaves the request readable', async () => {
-    const request = post('{"jsonrpc":"2.0","id":1,"method":"tools/list"}');
-    const body = await readJsonRpcBody(request, limits);
-
-    assert.deepEqual(body, {
-      ok: true,
-      value: { id: 1, jsonrpc: '2.0', method: 'tools/list' },
-    });
-    assert.equal(request.bodyUsed, false);
-  });
-
-  test('refuses a body past the limit, declared or streamed', async () => {
-    const declared = await readJsonRpcBody(
-      post('{}', { 'content-length': '65' }),
+  test('returns the parsed message', async () => {
+    const body = await readJsonRpcBody(
+      post('{"jsonrpc":"2.0","id":1}'),
       limits,
     );
-    const streamed = await readJsonRpcBody(post(`"${'x'.repeat(80)}"`), limits);
 
-    for (const body of [declared, streamed]) {
-      assert.equal(body.ok, false);
-      assert.equal(body.ok ? 0 : body.response.status, 413);
-    }
+    assert.deepEqual(body, { ok: true, value: { id: 1, jsonrpc: '2.0' } });
+  });
+
+  // Blocker 1: a clone read past the limit awaited a cancel that waits on
+  // the unread branch, so this never answered.
+  test('answers 413 at once when an open upload passes the limit', async () => {
+    const body = await withinTime(
+      readJsonRpcBody(post(openStream(65)), limits),
+    );
+
+    assert.deepEqual(await status(body), { code: -32_000, status: 413 });
+  });
+
+  test('answers 413 for a declared length past the limit without reading', async () => {
+    const body = await withinTime(
+      readJsonRpcBody(post(openStream(1), { 'content-length': '65' }), limits),
+    );
+
+    assert.equal((await status(body)).status, 413);
+  });
+
+  // Blocker 1: a caller under the limit could hold the read open for ever.
+  test('answers 408 when an upload under the limit stalls', async () => {
+    const body = await withinTime(
+      readJsonRpcBody(post(openStream(10)), { ...limits, timeoutMs: 50 }),
+    );
+
+    assert.deepEqual(await status(body), { code: -32_000, status: 408 });
+  });
+
+  test('turns a failing upload into a parse error, not a thrown one', async () => {
+    const failing = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.error(new Error('connection reset'));
+      },
+    });
+    const body = await withinTime(readJsonRpcBody(post(failing), limits));
+
+    assert.deepEqual(await status(body), { code: -32_700, status: 400 });
   });
 
   test('answers a body that is not JSON with a parse error', async () => {
     for (const text of ['{', '']) {
-      const body = await readJsonRpcBody(post(text), limits);
-
-      assert.equal(body.ok ? 0 : body.response.status, 400);
-      assert.equal(
-        body.ok ? 0 : (await body.response.json()).error.code,
-        -32_700,
+      assert.deepEqual(
+        await status(await readJsonRpcBody(post(text), limits)),
+        {
+          code: -32_700,
+          status: 400,
+        },
       );
     }
-  });
-
-  test('refuses a batch unless batches are allowed', async () => {
-    const batch = '[{"jsonrpc":"2.0","id":1,"method":"ping"}]';
-    const refused = await readJsonRpcBody(post(batch), limits);
-    const allowed = await readJsonRpcBody(post(batch), {
-      ...limits,
-      allowBatches: true,
-    });
-
-    assert.equal(
-      refused.ok ? 0 : (await refused.response.json()).error.code,
-      -32_600,
-    );
-    assert.equal(allowed.ok, true);
   });
 });

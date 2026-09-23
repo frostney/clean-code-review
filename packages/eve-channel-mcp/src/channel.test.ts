@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { afterEach, beforeEach, describe, test } from 'node:test';
 
 import type { RouteHandlerArgs } from 'eve/channels';
 import { type AuthFn, none, oauthResource } from 'eve/channels/auth';
@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { type McpServerChannelOptions, mcpServerChannel } from './channel.js';
 import { defineMcpTool } from './tool.js';
 
-const ENDPOINT = 'http://127.0.0.1/mcp';
+const SECRET = 'PRIVATE_DETAIL';
 const META = {
   'io.modelcontextprotocol/clientCapabilities': {},
   'io.modelcontextprotocol/clientInfo': { name: 'test', version: '0' },
@@ -20,9 +20,38 @@ const CHANNEL = {
   requestIp: '203.0.113.9',
 } as unknown as RouteHandlerArgs;
 
+const DEPLOYMENT_KEYS = ['EVE_DEV', 'VERCEL', 'VERCEL_ENV'] as const;
+const savedEnv = new Map<string, string | undefined>();
+
+beforeEach(() => {
+  for (const key of DEPLOYMENT_KEYS) {
+    savedEnv.set(key, process.env[key]);
+    delete process.env[key];
+  }
+});
+
+afterEach(() => {
+  for (const key of DEPLOYMENT_KEYS) {
+    const value = savedEnv.get(key);
+
+    if (value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+});
+
+let calls = 0;
+
 const whoami = defineMcpTool({
-  call(_input, { auth, requestIp }) {
-    const principal = { principalId: auth.principalId, requestIp };
+  async call(_input, { auth }, { requestIp }) {
+    calls++;
+    const principal = {
+      principalId: auth.principalId,
+      requestIp,
+      team: auth.attributes.team ?? null,
+    };
 
     return {
       content: [{ text: JSON.stringify(principal), type: 'text' }],
@@ -35,40 +64,100 @@ const whoami = defineMcpTool({
     outputSchema: z.object({
       principalId: z.string(),
       requestIp: z.string().nullable(),
+      team: z.unknown(),
     }),
   },
 });
 
+const vandal = defineMcpTool({
+  async call(_input, { auth }) {
+    try {
+      (auth.attributes as Record<string, unknown>).team =
+        'written by another caller';
+    } catch {
+      // A frozen principal refuses the write; the test checks the next caller.
+    }
+
+    return { content: [] };
+  },
+  definition: { inputSchema: z.object({}), name: 'vandal' },
+});
+
 const failing = defineMcpTool({
-  call() {
-    throw new Error('database password in this message');
+  async call() {
+    throw new Error(SECRET);
   },
   definition: { inputSchema: z.object({}), name: 'failing' },
 });
 
+const refining = defineMcpTool({
+  async call() {
+    return { content: [], structuredContent: { ok: true } };
+  },
+  definition: {
+    inputSchema: z.object({
+      value: z.string().refine(() => {
+        throw new Error(SECRET);
+      }),
+    }),
+    name: 'refining',
+    outputSchema: z.object({
+      ok: z.boolean().refine(() => {
+        throw new Error(SECRET);
+      }),
+    }),
+  },
+});
+
+let running = 0;
+let peak = 0;
+
+const slow = defineMcpTool({
+  async call() {
+    running++;
+    peak = Math.max(peak, running);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    running--;
+
+    return { content: [] };
+  },
+  definition: { inputSchema: z.object({}), name: 'slow' },
+});
+
 function channel(overrides: Partial<McpServerChannelOptions> = {}) {
   return mcpServerChannel({
+    allowedHosts: ['127.0.0.1'],
     auth: none(),
     name: 'test',
+    onToolError: () => undefined,
     route: '/mcp',
-    tools: [whoami, failing],
+    tools: [whoami, vandal, failing, refining, slow],
     version: '0.0.0',
     ...overrides,
   });
 }
 
-async function call(
-  target: ReturnType<typeof channel>,
-  init: { body?: unknown; headers?: Record<string, string>; method?: string },
-): Promise<{ status: number; body: unknown }> {
+type Target = ReturnType<typeof channel>;
+
+async function send(
+  target: Target,
+  init: {
+    body?: unknown;
+    headers?: Record<string, string>;
+    method?: string;
+    path?: string;
+    url?: string;
+  },
+): Promise<{ status: number; body: unknown; headers: Headers }> {
   const method = init.method ?? 'POST';
+  const path = init.path ?? '/mcp';
   const route = target.routes.find(
-    (r) => r.method === method && r.path === '/mcp',
+    (r) => r.method === method && r.path === path,
   );
 
-  assert.ok(route && route.transport !== 'websocket');
+  assert.ok(route && route.transport !== 'websocket', `${method} ${path}`);
   const response = await route.handler(
-    new Request(ENDPOINT, {
+    new Request(init.url ?? `http://127.0.0.1${path}`, {
       ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
       headers: {
         accept: 'application/json, text/event-stream',
@@ -84,9 +173,12 @@ async function call(
     .split('\n')
     .filter((line) => line.startsWith('data: '))
     .map((line) => JSON.parse(line.slice('data: '.length)));
-  const body = events.length > 1 ? events : (events[0] ?? JSON.parse(text));
+  const body =
+    events.length > 1
+      ? events
+      : (events[0] ?? (text ? JSON.parse(text) : null));
 
-  return { body, status: response.status };
+  return { body, headers: response.headers, status: response.status };
 }
 
 function modern(method: string, params: Record<string, unknown> = {}) {
@@ -106,7 +198,15 @@ function legacy(method: string, params: Record<string, unknown> = {}) {
   };
 }
 
-describe('mcpServerChannel options', () => {
+function toolCall(name: string, args: Record<string, unknown> = {}) {
+  return modern('tools/call', { arguments: args, name });
+}
+
+interface Result {
+  result: { structuredContent: Record<string, unknown>; isError?: boolean };
+}
+
+describe('options', () => {
   test('requires auth, a route and something to serve', () => {
     assert.throws(
       () => channel({ auth: undefined as unknown as AuthFn<Request> }),
@@ -117,115 +217,341 @@ describe('mcpServerChannel options', () => {
     assert.throws(() => channel({ tools: [whoami, whoami] }), /unique/);
   });
 
-  test('answers POST, GET and DELETE at the route', () => {
-    assert.deepEqual(
-      channel().routes.map((r) => `${r.method} ${r.path}`),
-      ['POST /mcp', 'GET /mcp', 'DELETE /mcp'],
-    );
+  // Blocker 8: NaN and Infinity turned the limit off.
+  test('refuses limits that would switch a bound off', () => {
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY, 0, -1, 1.5]) {
+      assert.throws(() => channel({ maxBodyBytes: bad }), /maxBodyBytes/);
+      assert.throws(() => channel({ bodyTimeoutMs: bad }), /bodyTimeoutMs/);
+      assert.throws(
+        () => channel({ allowBatches: { maxMessages: bad } }),
+        /maxMessages/,
+      );
+      assert.throws(
+        () => channel({ allowBatches: { concurrency: bad } }),
+        /concurrency/,
+      );
+    }
   });
 
-  test('publishes protected-resource metadata for an oauthResource() policy', () => {
+  test('refuses settings it does not know', () => {
+    const loose = (value: unknown) => value as never;
+
+    assert.throws(() => channel({ legacy: loose('lenient') }), /legacy/);
+    assert.throws(
+      () => channel({ responseMode: loose('stream') }),
+      /responseMode/,
+    );
+    assert.throws(() => channel({ https: loose('yes') }), /https/);
+    assert.throws(
+      () => channel({ allowedHosts: ['https://app.example'] }),
+      /bare hostname/,
+    );
+    assert.throws(() => channel({ allowedHosts: [] }), /allowedHosts/);
+    assert.throws(() => channel({ onToolError: loose('log') }), /onToolError/);
+  });
+
+  // Item 12: an oauthResource() policy used to publish discovery through an internal reader.
+  test('asks for the oauth option when auth is wrapped in oauthResource()', () => {
+    const wrapped = oauthResource(none(), { issuer: 'https://auth.example' });
+
+    assert.throws(() => channel({ auth: wrapped }), /oauth option/);
+    assert.throws(() => channel({ auth: [wrapped] }), /oauth option/);
+  });
+
+  test('answers POST, GET and DELETE at the route, and the metadata where told', () => {
     const paths = channel({
-      auth: oauthResource(none(), { issuer: 'https://auth.example' }),
+      oauth: {
+        issuer: 'https://auth.example',
+        metadataPath: '/eve/v1/oauth-protected-resource/mcp',
+        resource: 'https://app.example/eve/v1/mcp',
+      },
     }).routes.map((r) => `${r.method} ${r.path}`);
 
-    assert.ok(paths.includes('GET /.well-known/oauth-protected-resource/mcp'));
+    assert.deepEqual(paths, [
+      'GET /eve/v1/oauth-protected-resource/mcp',
+      'HEAD /eve/v1/oauth-protected-resource/mcp',
+      'OPTIONS /eve/v1/oauth-protected-resource/mcp',
+      'POST /mcp',
+      'GET /mcp',
+      'DELETE /mcp',
+    ]);
   });
 });
 
 describe('serving', () => {
-  test('hands a tool its principal and address in the modern era', async () => {
-    const { body, status } = await call(
-      channel(),
-      modern('tools/call', { arguments: {}, name: 'whoami' }),
-    );
+  test('hands a tool its principal and address in the 2026 era', async () => {
+    const { body, status } = await send(channel(), toolCall('whoami'));
 
     assert.equal(status, 200);
-    assert.deepEqual(
-      (body as { result: { structuredContent: unknown } }).result
-        .structuredContent,
-      {
-        principalId: 'anonymous',
-        requestIp: '203.0.113.9',
-      },
-    );
+    assert.deepEqual((body as Result).result.structuredContent, {
+      principalId: 'anonymous',
+      requestIp: '203.0.113.9',
+      team: null,
+    });
   });
 
   test('hands a tool its principal in the 2025 era', async () => {
-    const { body } = await call(
+    const { body } = await send(
       channel(),
       legacy('tools/call', { arguments: {}, name: 'whoami' }),
     );
 
     assert.equal(
-      (body as { result: { structuredContent: { principalId: string } } })
-        .result.structuredContent.principalId,
+      (body as Result).result.structuredContent.principalId,
       'anonymous',
     );
   });
 
-  test('passes the SDK server to register, with the era', async () => {
+  test('does not advertise tool-list changes it could never send', async () => {
+    const { body } = await send(channel(), modern('server/discover'));
+
+    assert.deepEqual(
+      (body as { result: { capabilities: unknown } }).result.capabilities,
+      { tools: { listChanged: false } },
+    );
+  });
+
+  test('answers GET with 405, as a stateless server', async () => {
+    assert.equal((await send(channel(), { method: 'GET' })).status, 405);
+  });
+
+  test('gives register the SDK server, the era and addTool', async () => {
     const eras: string[] = [];
     const target = channel({
-      register(server, { era }) {
+      register(server, { addTool, era }) {
         eras.push(era);
         server.registerTool(
           'extra',
           { inputSchema: z.object({}) },
-          async () => ({ content: [{ text: era, type: 'text' }] }),
+          async () => ({
+            content: [{ text: era, type: 'text' }],
+          }),
+        );
+        addTool(
+          defineMcpTool({
+            async call() {
+              throw new Error(SECRET);
+            },
+            definition: { inputSchema: z.object({}), name: 'added' },
+          }),
         );
       },
     });
-    const { body } = await call(target, modern('tools/list'));
+    const listed = await send(target, modern('tools/list'));
     const names = (
-      body as { result: { tools: { name: string }[] } }
+      listed.body as { result: { tools: { name: string }[] } }
     ).result.tools.map((t) => t.name);
+    // Blocker 6c: a tool added in register gets the same error handling as `tools`.
+    const added = await send(target, toolCall('added'));
 
-    await call(target, legacy('tools/list'));
-    assert.deepEqual(names, ['whoami', 'failing', 'extra']);
-    assert.deepEqual(eras, ['modern', 'legacy']);
+    await send(target, legacy('tools/list'));
+    assert.deepEqual(names.slice(-2), ['extra', 'added']);
+    assert.deepEqual(eras, ['modern', 'modern', 'legacy']);
+    assert.equal(JSON.stringify(added.body).includes(SECRET), false);
+  });
+});
+
+describe('admission', () => {
+  // Blocker 2: under eve dev only loopback hosts get in, on every route.
+  test('refuses a rebinding request, on the endpoint and the metadata', async () => {
+    process.env.EVE_DEV = '1';
+    // No allowedHosts: the eve dev default is what is under test.
+    const target = mcpServerChannel({
+      auth: none(),
+      name: 'test',
+      oauth: {
+        issuer: 'https://auth.example',
+        resource: 'https://app.example/mcp',
+      },
+      route: '/mcp',
+      tools: [whoami],
+      version: '0.0.0',
+    });
+    const rebound = {
+      host: 'attacker.example:3104',
+      origin: 'http://attacker.example:3104',
+    };
+    const before = calls;
+
+    for (const path of ['/mcp', '/.well-known/oauth-protected-resource/mcp']) {
+      const { status } = await send(target, {
+        ...toolCall('whoami'),
+        headers: { ...toolCall('whoami').headers, ...rebound },
+        method: path === '/mcp' ? 'POST' : 'GET',
+        path,
+        url: `http://attacker.example:3104${path}`,
+      });
+
+      assert.equal(status, 403, path);
+    }
+    assert.equal(calls, before);
   });
 
-  test('reports an unexpected tool failure and keeps it from the client', async () => {
-    const reported: unknown[] = [];
-    const { body } = await call(
-      channel({ onToolError: (error) => reported.push(error) }),
-      modern('tools/call', { arguments: {}, name: 'failing' }),
+  // Blocker 3.
+  test('refuses plain HTTP off loopback, whatever X-Forwarded-Proto says', async () => {
+    const target = channel({ allowedHosts: ['mcp.example'] });
+    const { status } = await send(target, {
+      ...toolCall('whoami'),
+      headers: {
+        ...toolCall('whoami').headers,
+        host: 'mcp.example',
+        'x-forwarded-proto': 'https',
+      },
+      url: 'http://mcp.example/mcp',
+    });
+
+    assert.equal(status, 403);
+  });
+
+  test('runs auth before reading the body', async () => {
+    assert.equal(
+      (await send(channel({ auth: () => null }), modern('tools/list'))).status,
+      401,
+    );
+  });
+
+  // Blocker 4: `true`, `{}` and `{ ok: false }` each reached a tool.
+  test('fails closed when a strategy accepts without a principal', async () => {
+    const before = calls;
+
+    for (const accepted of [true, {}, { ok: false }]) {
+      const target = channel({
+        auth: (() => accepted) as unknown as AuthFn<Request>,
+        onError: () => undefined,
+      });
+
+      assert.equal((await send(target, toolCall('whoami'))).status, 500);
+    }
+    assert.equal(calls, before);
+  });
+
+  test('adds resource_metadata to a refused OAuth request', async () => {
+    const target = channel({
+      auth: () => null,
+      oauth: {
+        issuer: 'https://auth.example',
+        metadataPath: '/eve/v1/oauth-protected-resource/mcp',
+        resource: 'https://app.example/eve/v1/mcp',
+      },
+    });
+    const { headers } = await send(target, modern('tools/list'));
+
+    assert.match(
+      headers.get('www-authenticate') ?? '',
+      /resource_metadata="https:\/\/app\.example\/eve\/v1\/oauth-protected-resource\/mcp"/,
+    );
+  });
+});
+
+describe('isolation and errors', () => {
+  // Blocker 7: none() hands every caller the same object.
+  test("keeps one caller from writing into the next caller's principal", async () => {
+    const target = channel();
+
+    await send(target, toolCall('vandal'));
+    const { body } = await send(target, toolCall('whoami'));
+
+    assert.equal((body as Result).result.structuredContent.team, null);
+  });
+
+  // Blocker 6a.
+  test('keeps a throwing or rejecting reporter from reaching the client', async () => {
+    for (const onToolError of [
+      () => {
+        throw new Error(SECRET);
+      },
+      async () => {
+        throw new Error(SECRET);
+      },
+    ]) {
+      const { body } = await send(
+        channel({ onToolError }),
+        toolCall('failing'),
+      );
+
+      assert.equal((body as Result).result.isError, true);
+      assert.equal(JSON.stringify(body).includes(SECRET), false);
+    }
+  });
+
+  // Blocker 6b.
+  test('keeps a throwing input or output refinement from reaching the client', async () => {
+    for (const era of [
+      toolCall('refining', { value: 'x' }),
+      legacy('tools/call', { arguments: { value: 'x' }, name: 'refining' }),
+    ]) {
+      const { body } = await send(channel(), era);
+
+      assert.equal((body as Result).result.isError, true);
+      assert.equal(JSON.stringify(body).includes(SECRET), false);
+    }
+  });
+
+  test('still names the field a caller got wrong', async () => {
+    const { body } = await send(channel(), toolCall('refining', { value: 3 }));
+
+    assert.match(JSON.stringify(body), /value/);
+  });
+});
+
+describe('messages', () => {
+  // Blocker 5.
+  test('refuses subscriptions/listen before the SDK', async () => {
+    const { body } = await send(
+      channel(),
+      modern('subscriptions/listen', { notifications: {} }),
     );
 
-    assert.equal(reported.length, 1);
-    assert.equal(JSON.stringify(body).includes('password'), false);
+    assert.equal((body as { error: { code: number } }).error.code, -32_601);
   });
 
-  test('refuses a batch unless allowed', async () => {
-    const batch = [
-      { id: 1, jsonrpc: '2.0', method: 'tools/list', params: {} },
-      { id: 2, jsonrpc: '2.0', method: 'tools/list', params: {} },
-    ];
+  // Blocker 9.
+  test('refuses a 2025-era tools/call sent under Mcp-Method: tools/list', async () => {
+    const before = calls;
+    const { status } = await send(channel(), {
+      ...legacy('tools/call', { arguments: {}, name: 'whoami' }),
+      headers: {
+        'mcp-method': 'tools/list',
+        'mcp-protocol-version': '2025-11-25',
+      },
+    });
+
+    assert.equal(status, 400);
+    assert.equal(calls, before);
+  });
+
+  // Blocker 10.
+  test('refuses batches by default, and caps and serialises allowed ones', async () => {
+    const batch = (size: number) =>
+      Array.from({ length: size }, (_, i) => ({
+        id: i + 1,
+        jsonrpc: '2.0',
+        method: 'tools/call',
+        params: { arguments: {}, name: 'slow' },
+      }));
     const headers = { 'mcp-protocol-version': '2025-11-25' };
-    const refused = await call(channel(), { body: batch, headers });
-    const allowed = await call(channel({ allowBatches: true }), {
-      body: batch,
+
+    assert.equal(
+      (await send(channel(), { body: batch(2), headers })).status,
+      400,
+    );
+    assert.equal(
+      (
+        await send(channel({ allowBatches: true }), {
+          body: batch(11),
+          headers,
+        })
+      ).status,
+      400,
+    );
+    peak = 0;
+    const allowed = await send(channel({ allowBatches: true }), {
+      body: batch(3),
       headers,
     });
 
-    assert.equal(refused.status, 400);
     assert.equal(allowed.status, 200);
-    assert.equal((allowed.body as unknown[]).length, 2);
-  });
-
-  test('runs auth before anything else', async () => {
-    const { status } = await call(
-      channel({ auth: () => null }),
-      modern('tools/list'),
-    );
-
-    assert.equal(status, 401);
-  });
-
-  test('answers GET with 405, as a stateless server', async () => {
-    const { status } = await call(channel(), { method: 'GET' });
-
-    assert.equal(status, 405);
+    assert.equal((allowed.body as unknown[]).length, 3);
+    assert.equal(peak, 1);
   });
 });

@@ -1,114 +1,142 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import type { OAuthResourceOptions } from 'eve/channels/auth';
-
 import {
-  metadataPath,
-  metadataRoutes,
-  splitChallenges,
+  metadataResponse,
+  parseChallenges,
+  quoteParameter,
+  resolveOAuth,
   withResourceChallenge,
 } from './oauth.js';
 
-const OPTIONS: OAuthResourceOptions = {
+// Behind `withEve`, only /eve/v1/* reaches eve, so the metadata lives there too.
+const OAUTH = resolveOAuth({
   issuer: 'https://auth.example',
+  metadataPath: '/eve/v1/oauth-protected-resource/tools',
+  resource: 'https://app.example/eve/v1/tools',
   scopes: ['tools:call'],
-};
-const REQUEST = new Request('https://agent.example/mcp', { method: 'POST' });
+});
+const METADATA =
+  'resource_metadata="https://app.example/eve/v1/oauth-protected-resource/tools"';
 
-function refused(status: number, challenge?: string): Response {
+function refused(status: number, challenge: string): Response {
   return new Response('{}', {
-    headers: challenge ? { 'www-authenticate': challenge } : {},
+    headers: { 'www-authenticate': challenge },
     status,
   });
 }
 
-describe('metadataPath', () => {
-  test('derives the RFC 9728 path from the route or the resource', () => {
+function challengeOf(response: Response): string | null {
+  return withResourceChallenge(response, OAUTH).headers.get('www-authenticate');
+}
+
+describe('resolveOAuth', () => {
+  test('derives the RFC 9728 path when none is given', () => {
+    const derived = resolveOAuth({
+      issuer: 'https://auth.example',
+      resource: 'https://app.example/mcp',
+    });
+
     assert.equal(
-      metadataPath(OPTIONS, '/mcp'),
+      derived.metadataPath,
       '/.well-known/oauth-protected-resource/mcp',
     );
     assert.equal(
-      metadataPath({ ...OPTIONS, resource: 'https://agent.example/' }, '/mcp'),
-      '/.well-known/oauth-protected-resource',
+      derived.metadataUrl,
+      'https://app.example/.well-known/oauth-protected-resource/mcp',
     );
-    assert.equal(
-      metadataPath({ ...OPTIONS, metadataPath: '/custom' }, '/mcp'),
-      '/custom',
+  });
+
+  test('refuses settings it cannot publish', () => {
+    assert.throws(
+      () => resolveOAuth({ issuer: 'https://a.example', resource: '/mcp' }),
+      /absolute/,
+    );
+    assert.throws(
+      () => resolveOAuth({ resource: 'https://app.example/mcp' }),
+      /exactly one of issuer/,
+    );
+    assert.throws(
+      () =>
+        resolveOAuth({
+          authorizationServers: ['https://a.example'],
+          issuer: 'https://a.example',
+          resource: 'https://app.example/mcp',
+        }),
+      /exactly one of issuer/,
     );
   });
 });
 
-describe('splitChallenges', () => {
+describe('parseChallenges', () => {
   test('keeps parameters with their scheme and commas inside quotes', () => {
-    assert.deepEqual(
-      splitChallenges(
-        'Basic realm="a, b", charset="UTF-8", Bearer error="invalid_token"',
-      ),
-      ['Basic realm="a, b", charset="UTF-8"', 'Bearer error="invalid_token"'],
+    const [basic, bearer] = parseChallenges(
+      'Basic realm="a, b", charset="UTF-8", Bearer error="invalid_token"',
     );
+
+    assert.equal(basic?.raw, 'Basic realm="a, b", charset="UTF-8"');
+    assert.equal(basic?.params.get('realm'), 'a, b');
+    assert.equal(bearer?.params.get('error'), 'invalid_token');
   });
 });
 
 describe('withResourceChallenge', () => {
-  const metadata =
-    'resource_metadata="https://agent.example/.well-known/oauth-protected-resource/mcp"';
-
-  test('extends an existing Bearer challenge on a 401', () => {
-    const response = withResourceChallenge(
-      refused(401, 'Bearer error="invalid_token"'),
-      OPTIONS,
-      '/mcp',
-      REQUEST,
-    );
-
+  test('extends a 401 Bearer challenge', () => {
     assert.equal(
-      response.headers.get('www-authenticate'),
-      `Bearer error="invalid_token", ${metadata}, scope="tools:call"`,
+      challengeOf(refused(401, 'Bearer error="invalid_token"')),
+      `Bearer error="invalid_token", ${METADATA}, scope="tools:call"`,
     );
   });
 
   test('adds a Bearer challenge beside another scheme', () => {
-    const response = withResourceChallenge(
-      refused(401, 'Basic realm="eve"'),
-      OPTIONS,
-      '/mcp',
-      REQUEST,
-    );
-
     assert.equal(
-      response.headers.get('www-authenticate'),
-      `Basic realm="eve", Bearer ${metadata}, scope="tools:call"`,
+      challengeOf(refused(401, 'Basic realm="eve"')),
+      `Basic realm="eve", Bearer ${METADATA}, scope="tools:call"`,
     );
   });
 
-  test('leaves other refusals alone', () => {
-    const forbidden = refused(403, 'Bearer error="access_denied"');
-
+  // Item 12: a regex over the whole header found this name inside quoted text.
+  test('is not fooled by a parameter name inside a quoted value', () => {
     assert.equal(
-      withResourceChallenge(forbidden, OPTIONS, '/mcp', REQUEST),
-      forbidden,
+      challengeOf(
+        refused(401, 'Bearer realm="a resource_metadata=placeholder"'),
+      ),
+      `Bearer realm="a resource_metadata=placeholder", ${METADATA}, scope="tools:call"`,
+    );
+  });
+
+  test('extends the Bearer challenge that carries insufficient_scope, and only that', () => {
+    assert.equal(
+      challengeOf(
+        refused(403, 'Bearer realm="first", Bearer error="insufficient_scope"'),
+      ),
+      `Bearer realm="first", Bearer error="insufficient_scope", ${METADATA}`,
+    );
+    assert.equal(
+      challengeOf(refused(403, 'Basic realm="insufficient_scope"')),
+      'Basic realm="insufficient_scope"',
     );
   });
 });
 
-describe('metadataRoutes', () => {
+describe('quoteParameter', () => {
+  test('escapes quotes and backslashes and drops line breaks', () => {
+    assert.equal(quoteParameter('a"b\\c\r\nd'), '"a\\"b\\\\cd"');
+  });
+});
+
+describe('metadataResponse', () => {
   test('serves the metadata with any-origin CORS', async () => {
-    const [get] = metadataRoutes(OPTIONS, '/mcp');
-    const response = await get?.handler(
-      new Request(
-        'https://agent.example/.well-known/oauth-protected-resource/mcp',
-      ),
-      // The metadata routes read nothing from eve's route arguments.
-      {} as Parameters<NonNullable<typeof get>['handler']>[1],
+    const response = metadataResponse(
+      new Request('https://app.example/x'),
+      OAUTH,
     );
 
-    assert.equal(response?.headers.get('access-control-allow-origin'), '*');
-    assert.deepEqual(await response?.json(), {
+    assert.equal(response.headers.get('access-control-allow-origin'), '*');
+    assert.deepEqual(await response.json(), {
       // biome-ignore-start lint/style/useNamingConvention: RFC 9728 field names
       authorization_servers: ['https://auth.example'],
-      resource: 'https://agent.example/mcp',
+      resource: 'https://app.example/eve/v1/tools',
       scopes_supported: ['tools:call'],
       // biome-ignore-end lint/style/useNamingConvention: RFC 9728 field names
     });

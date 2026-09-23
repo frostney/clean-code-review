@@ -1,133 +1,107 @@
-import { GET, HEAD, type HttpRouteDefinition, OPTIONS } from 'eve/channels';
-import {
-  type AuthFn,
-  escapeAuthChallengeParameter,
-  type OAuthResourceOptions,
-  readOAuthResourceOptions,
-} from 'eve/channels/auth';
-
 /**
- * RFC 9728 protected-resource metadata for an `auth` wrapped in eve's
- * `oauthResource()`, published the way eve's own `mcpChannel` does.
- *
- * `readOAuthResourceOptions` is exported from `eve/channels/auth` but tagged
- * internal in its declaration; this module is the only reader, so a rename
- * there is a one-line change here.
+ * RFC 9728 protected-resource metadata, and the `resource_metadata`
+ * parameter that points an MCP client's 401 at it, from explicit settings.
+ * eve's `oauthResource()` carries the same settings, but only through an
+ * internal reader, so they are passed to the channel instead.
  */
 
-const UNAUTHORIZED = 401;
-const FORBIDDEN = 403;
-const NO_CONTENT = 204;
-
-const METADATA_ROOT = '/.well-known/oauth-protected-resource';
-
-export function oauthOptions(
-  auth: AuthFn<Request> | readonly AuthFn<Request>[],
-): OAuthResourceOptions | undefined {
-  return readOAuthResourceOptions(auth);
+export interface McpOAuthOptions {
+  /** The public URL of this MCP endpoint, as clients reach it. */
+  readonly resource: string;
+  /** Exactly one of `issuer` and `authorizationServers`. */
+  readonly issuer?: string;
+  readonly authorizationServers?: readonly string[];
+  /** Advertised to clients; the auth strategy still enforces them. */
+  readonly scopes?: readonly string[];
+  /** Defaults to RFC 9728's path for `resource`; behind `withEve` it must be under `/eve/v1/`. */
+  readonly metadataPath?: string;
 }
 
-export function metadataPath(
-  options: OAuthResourceOptions,
-  route: string,
-): string {
-  if (options.metadataPath !== undefined) {
-    return options.metadataPath;
+export interface OAuthConfig {
+  readonly document: Readonly<Record<string, unknown>>;
+  readonly metadataPath: string;
+  readonly metadataUrl: string;
+  readonly scopes: readonly string[];
+}
+
+const WELL_KNOWN = '/.well-known/oauth-protected-resource';
+
+function absoluteUrl(label: string, value: string): URL {
+  let url: URL;
+
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`oauth.${label} must be an absolute URL.`);
   }
-  const resourcePath =
-    options.resource === undefined ? route : new URL(options.resource).pathname;
+  if (url.hash) {
+    throw new Error(`oauth.${label} must not have a fragment.`);
+  }
 
-  return resourcePath === '/'
-    ? METADATA_ROOT
-    : `${METADATA_ROOT}${resourcePath}`;
+  return url;
 }
 
-function resourceUrl(
-  options: OAuthResourceOptions,
-  route: string,
-  request: Request,
-): string {
-  return options.resource ?? new URL(route, request.url).toString();
-}
-
-const CORS_HEADERS = {
-  'access-control-allow-origin': '*',
-  'cache-control': 'no-store',
-};
-
-function metadataResponse(
-  options: OAuthResourceOptions,
-  route: string,
-  request: Request,
-): Response {
+export function resolveOAuth(options: McpOAuthOptions): OAuthConfig {
+  const resource = absoluteUrl('resource', options.resource);
   const servers =
     options.issuer === undefined
-      ? options.authorizationServers
+      ? (options.authorizationServers ?? [])
       : [options.issuer];
 
-  return Response.json(
-    {
+  if (
+    (options.issuer === undefined) ===
+      (options.authorizationServers === undefined) ||
+    servers.length === 0
+  ) {
+    throw new Error(
+      'oauth needs exactly one of issuer and authorizationServers.',
+    );
+  }
+  for (const server of servers) {
+    absoluteUrl('issuer', server);
+  }
+  const resourcePath = resource.pathname.replace(/(.)\/$/, '$1');
+  const metadataPath =
+    options.metadataPath ??
+    (resourcePath === '/' ? WELL_KNOWN : `${WELL_KNOWN}${resourcePath}`);
+
+  if (!metadataPath.startsWith('/')) {
+    throw new Error('oauth.metadataPath must start with "/".');
+  }
+
+  return {
+    document: {
       // biome-ignore-start lint/style/useNamingConvention: RFC 9728 field names
-      authorization_servers: servers,
-      resource: resourceUrl(options, route, request),
+      authorization_servers: [...servers],
+      resource: resource.href,
       ...(options.scopes === undefined
         ? {}
-        : { scopes_supported: options.scopes }),
+        : { scopes_supported: [...options.scopes] }),
       // biome-ignore-end lint/style/useNamingConvention: RFC 9728 field names
     },
-    { headers: CORS_HEADERS },
-  );
+    metadataPath,
+    metadataUrl: new URL(metadataPath, resource).href,
+    scopes: options.scopes ?? [],
+  };
 }
 
-/** Browser-hosted clients discover the authorization server cross-origin. */
-export function metadataRoutes(
-  options: OAuthResourceOptions,
-  route: string,
-): HttpRouteDefinition[] {
-  const path = metadataPath(options, route);
+/** RFC 9110 quoted-string: escape the two characters it reserves; line breaks cannot appear in a header. */
+export function quoteParameter(value: string): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what it removes
+  const printable = value.replace(/[\u0000-\u001f\u007f]/g, '');
 
-  return [
-    GET(path, async (request) => metadataResponse(options, route, request)),
-    HEAD(path, async (request) => {
-      const full = metadataResponse(options, route, request);
-
-      return new Response(null, { headers: full.headers });
-    }),
-    OPTIONS(path, async (request) => {
-      const headers = new Headers({
-        ...CORS_HEADERS,
-        'access-control-allow-methods': 'GET, HEAD, OPTIONS',
-      });
-      const asked = request.headers.get('access-control-request-headers');
-
-      if (asked) {
-        headers.set('access-control-allow-headers', asked);
-        headers.set('vary', 'Access-Control-Request-Headers');
-      }
-
-      return new Response(null, { headers, status: NO_CONTENT });
-    }),
-  ];
-}
-
-function withParameter(challenge: string, name: string, value: string): string {
-  if (new RegExp(`(?:^|[\\s,])${name}\\s*=`, 'i').test(challenge)) {
-    return challenge;
-  }
-  const separator = /^\S+$/.test(challenge.trim()) ? ' ' : ', ';
-
-  return `${challenge}${separator}${name}="${escapeAuthChallengeParameter(value)}"`;
+  return `"${printable.replace(/[\\"]/g, '\\$&')}"`;
 }
 
 /** Splits on commas that are not inside a quoted string. */
-function splitOutsideQuotes(header: string): string[] {
+function splitOutsideQuotes(text: string): string[] {
   const pieces: string[] = [];
   let quoted = false;
   let escaped = false;
   let start = 0;
 
-  for (let i = 0; i < header.length; i++) {
-    const char = header[i];
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
 
     if (escaped) {
       escaped = false;
@@ -136,80 +110,185 @@ function splitOutsideQuotes(header: string): string[] {
     } else if (char === '"') {
       quoted = !quoted;
     } else if (char === ',' && !quoted) {
-      pieces.push(header.slice(start, i).trim());
+      pieces.push(text.slice(start, i).trim());
       start = i + 1;
     }
   }
-  pieces.push(header.slice(start).trim());
+  pieces.push(text.slice(start).trim());
 
   return pieces.filter(Boolean);
 }
 
-/** One entry per challenge, with each parameter re-joined to its scheme. */
-export function splitChallenges(header: string): string[] {
-  const challenges: string[] = [];
+const TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+/;
+
+export interface Challenge {
+  readonly scheme: string;
+  /** Parameter names in lower case, values unquoted. */
+  readonly params: ReadonlyMap<string, string>;
+  readonly raw: string;
+}
+
+function unquote(value: string): string {
+  const trimmed = value.trim();
+
+  return trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length > 1
+    ? trimmed.slice(1, -1).replace(/\\(.)/g, '$1')
+    : trimmed;
+}
+
+/** `name=value` into the map; anything else (a token68) is kept only in `raw`. */
+function addParameter(params: Map<string, string>, piece: string): void {
+  const name = TOKEN.exec(piece)?.[0];
+  const rest = name === undefined ? '' : piece.slice(name.length).trimStart();
+
+  if (name !== undefined && rest.startsWith('=')) {
+    params.set(name.toLowerCase(), unquote(rest.slice(1)));
+  }
+}
+
+/** One entry per challenge, with parameters parsed so quoted text is never mistaken for one. */
+export function parseChallenges(header: string): Challenge[] {
+  const challenges: {
+    scheme: string;
+    params: Map<string, string>;
+    raw: string;
+  }[] = [];
 
   for (const piece of splitOutsideQuotes(header)) {
-    // `Bearer error="…"` opens a challenge; `scope="…"` continues one.
-    const token = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+/.exec(piece)?.[0];
-    const startsScheme =
+    const token = TOKEN.exec(piece)?.[0];
+    const opensChallenge =
       token !== undefined &&
       !piece.slice(token.length).trimStart().startsWith('=');
+    const current = challenges.at(-1);
 
-    if (startsScheme || challenges.length === 0) {
-      challenges.push(piece);
+    if (opensChallenge || current === undefined) {
+      const params = new Map<string, string>();
+      const first = piece.slice(token?.length ?? 0).trim();
+
+      if (first) {
+        addParameter(params, first);
+      }
+      challenges.push({ params, raw: piece, scheme: token ?? piece });
     } else {
-      challenges[challenges.length - 1] += `, ${piece}`;
+      addParameter(current.params, piece);
+      current.raw += `, ${piece}`;
     }
   }
 
   return challenges;
 }
 
+function withParameters(
+  challenge: Challenge,
+  added: readonly (readonly [string, string])[],
+): string {
+  const missing = added.filter(([name]) => !challenge.params.has(name));
+  const text = missing.map(
+    ([name, value]) => `${name}=${quoteParameter(value)}`,
+  );
+
+  if (text.length === 0) {
+    return challenge.raw;
+  }
+
+  return challenge.raw.trim() === challenge.scheme
+    ? `${challenge.raw} ${text.join(', ')}`
+    : `${challenge.raw}, ${text.join(', ')}`;
+}
+
+const UNAUTHORIZED = 401;
+const FORBIDDEN = 403;
+
+function isBearer(challenge: Challenge): boolean {
+  return challenge.scheme.toLowerCase() === 'bearer';
+}
+
 /**
- * Points a refusal at the metadata, so an MCP client can start sign-in: every
- * 401, and a 403 that already says `insufficient_scope`.
+ * Points a refusal at the metadata, so an MCP client can start sign-in: a
+ * 401's Bearer challenge (one naming an `error` first), or on a 403 the
+ * Bearer challenge whose `error` is `insufficient_scope`.
  */
 export function withResourceChallenge(
   response: Response,
-  options: OAuthResourceOptions,
-  route: string,
-  request: Request,
+  oauth: OAuthConfig,
 ): Response {
-  const existing = response.headers.get('www-authenticate') ?? '';
-  const scopeRefusal =
-    response.status === FORBIDDEN && /insufficient_scope/i.test(existing);
+  const challenges = parseChallenges(
+    response.headers.get('www-authenticate') ?? '',
+  );
+  let target: number;
 
-  if (response.status !== UNAUTHORIZED && !scopeRefusal) {
+  if (response.status === UNAUTHORIZED) {
+    const withError = challenges.findIndex(
+      (c) => isBearer(c) && c.params.has('error'),
+    );
+
+    target = withError === -1 ? challenges.findIndex(isBearer) : withError;
+  } else if (response.status === FORBIDDEN) {
+    target = challenges.findIndex(
+      (c) => isBearer(c) && c.params.get('error') === 'insufficient_scope',
+    );
+    if (target === -1) {
+      return response;
+    }
+  } else {
     return response;
   }
-  const metadata = new URL(
-    metadataPath(options, route),
-    options.resource ?? request.url,
-  ).toString();
-  const challenges = splitChallenges(existing);
-  const bearerAt = challenges.findIndex((c) => /^bearer\b/i.test(c));
-  let bearer = withParameter(
-    bearerAt === -1 ? 'Bearer' : (challenges[bearerAt] ?? 'Bearer'),
-    'resource_metadata',
-    metadata,
-  );
+  const added: [string, string][] = [['resource_metadata', oauth.metadataUrl]];
 
-  if (options.scopes?.length && response.status === UNAUTHORIZED) {
-    bearer = withParameter(bearer, 'scope', options.scopes.join(' '));
+  if (response.status === UNAUTHORIZED && oauth.scopes.length > 0) {
+    added.push(['scope', oauth.scopes.join(' ')]);
   }
-  if (bearerAt === -1) {
-    challenges.push(bearer);
+  const bearer = challenges[target] ?? {
+    params: new Map<string, string>(),
+    raw: 'Bearer',
+    scheme: 'Bearer',
+  };
+  const values = challenges.map((c) => c.raw);
+
+  if (target === -1) {
+    values.push(withParameters(bearer, added));
   } else {
-    challenges[bearerAt] = bearer;
+    values[target] = withParameters(bearer, added);
   }
   const headers = new Headers(response.headers);
 
-  headers.set('www-authenticate', challenges.join(', '));
+  headers.set('www-authenticate', values.join(', '));
 
   return new Response(response.body, {
     headers,
     status: response.status,
     statusText: response.statusText,
   });
+}
+
+const CORS_HEADERS = {
+  'access-control-allow-origin': '*',
+  'cache-control': 'no-store',
+};
+const NO_CONTENT = 204;
+
+/** Browser-hosted clients discover the authorization server cross-origin. */
+export function metadataResponse(
+  request: Request,
+  oauth: OAuthConfig,
+): Response {
+  if (request.method === 'OPTIONS') {
+    const headers = new Headers({
+      ...CORS_HEADERS,
+      'access-control-allow-methods': 'GET, HEAD, OPTIONS',
+    });
+    const asked = request.headers.get('access-control-request-headers');
+
+    if (asked) {
+      headers.set('access-control-allow-headers', asked);
+      headers.set('vary', 'Access-Control-Request-Headers');
+    }
+
+    return new Response(null, { headers, status: NO_CONTENT });
+  }
+  const full = Response.json(oauth.document, { headers: CORS_HEADERS });
+
+  return request.method === 'HEAD'
+    ? new Response(null, { headers: full.headers })
+    : full;
 }

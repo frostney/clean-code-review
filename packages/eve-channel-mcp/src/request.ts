@@ -1,128 +1,140 @@
 /** eve's own MCP channel refuses bodies past 1 MiB; the same bound is the default here. */
 export const DEFAULT_MAX_BODY_BYTES = 1_048_576;
 
+/** A caller under the byte limit could otherwise hold the read, and the function, open. */
+export const DEFAULT_BODY_TIMEOUT_MS = 10_000;
+
 const PARSE_ERROR = -32_700;
-const INVALID_REQUEST = -32_600;
 const SERVER_ERROR = -32_000;
 
 const BAD_REQUEST = 400;
-const FORBIDDEN = 403;
+const REQUEST_TIMEOUT = 408;
 const PAYLOAD_TOO_LARGE = 413;
 
 export function jsonRpcError(
   status: number,
   code: number,
   message: string,
+  id: string | number | null = null,
 ): Response {
   return Response.json(
-    { error: { code, message }, id: null, jsonrpc: '2.0' },
+    { error: { code, message }, id, jsonrpc: '2.0' },
     { status },
   );
-}
-
-/**
- * MCP requires servers to check `Origin` against DNS rebinding. A request
- * without one is not from a browser; one from another origin is refused.
- */
-export function crossOriginRefusal(request: Request): Response | null {
-  const origin = request.headers.get('origin');
-
-  if (!origin) {
-    return null;
-  }
-  let claimed: string;
-
-  try {
-    claimed = new URL(origin).origin;
-  } catch {
-    return jsonRpcError(FORBIDDEN, SERVER_ERROR, 'Invalid Origin header.');
-  }
-
-  return claimed === new URL(request.url).origin
-    ? null
-    : jsonRpcError(FORBIDDEN, SERVER_ERROR, `Invalid Origin: ${claimed}`);
-}
-
-async function readCapped(
-  request: Request,
-  maxBytes: number,
-): Promise<string | null> {
-  const declared = Number(request.headers.get('content-length'));
-
-  if (Number.isFinite(declared) && declared > maxBytes) {
-    return null;
-  }
-  const reader = request.body?.getReader();
-
-  if (!reader) {
-    return '';
-  }
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-
-  for (;;) {
-    const { done, value } = await reader.read();
-
-    if (done) {
-      break;
-    }
-    total += value.byteLength;
-    if (total > maxBytes) {
-      await reader.cancel();
-
-      return null;
-    }
-    chunks.push(value);
-  }
-
-  return Buffer.concat(chunks).toString('utf8');
 }
 
 export type ParsedBody =
   | { readonly ok: true; readonly value: unknown }
   | { readonly ok: false; readonly response: Response };
 
+function refused(status: number, code: number, message: string): ParsedBody {
+  return { ok: false, response: jsonRpcError(status, code, message) };
+}
+
 /**
- * Reads a clone, so the request stays readable for the SDK, and refuses what
- * the SDK should never see: an oversized body, one that is not JSON, and a
- * JSON-RPC batch unless batches are allowed.
+ * Not awaited: cancelling can wait on the peer that is still sending, which
+ * is the caller this bound exists to stop.
+ */
+function abandon(reader: ReadableStreamDefaultReader<Uint8Array>): void {
+  reader.cancel().catch(() => undefined);
+}
+
+const TIMED_OUT = Symbol('timed out');
+
+type Read =
+  | { kind: 'text'; text: string }
+  | { kind: 'too-large' }
+  | { kind: 'timeout' }
+  | { kind: 'failed' };
+
+async function readCapped(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  maxBytes: number,
+  timeoutMs: number,
+): Promise<Read> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<typeof TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => resolve(TIMED_OUT), timeoutMs);
+  });
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  try {
+    for (;;) {
+      const next = await Promise.race([reader.read(), expired]);
+
+      if (next === TIMED_OUT) {
+        abandon(reader);
+
+        return { kind: 'timeout' };
+      }
+      if (next.done) {
+        return { kind: 'text', text: Buffer.concat(chunks).toString('utf8') };
+      }
+      total += next.value.byteLength;
+      if (total > maxBytes) {
+        abandon(reader);
+
+        return { kind: 'too-large' };
+      }
+      chunks.push(next.value);
+    }
+  } catch {
+    abandon(reader);
+
+    return { kind: 'failed' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Reads the request's own stream once, so the SDK is handed `parsedBody`
+ * and never reads it again, and refuses a body that is too large, too slow,
+ * unreadable or not JSON.
  */
 export async function readJsonRpcBody(
   request: Request,
-  options: { allowBatches: boolean; maxBodyBytes: number },
+  limits: { maxBodyBytes: number; timeoutMs: number },
 ): Promise<ParsedBody> {
-  const text = await readCapped(request.clone(), options.maxBodyBytes);
+  const reader = request.body?.getReader();
+  const declared = Number(request.headers.get('content-length'));
 
-  if (text === null) {
-    return {
-      ok: false,
-      response: jsonRpcError(
+  if (Number.isFinite(declared) && declared > limits.maxBodyBytes) {
+    if (reader) {
+      abandon(reader);
+    }
+
+    return refused(PAYLOAD_TOO_LARGE, SERVER_ERROR, 'Request body too large.');
+  }
+  const read = reader
+    ? await readCapped(reader, limits.maxBodyBytes, limits.timeoutMs)
+    : { kind: 'text' as const, text: '' };
+
+  switch (read.kind) {
+    case 'too-large':
+      return refused(
         PAYLOAD_TOO_LARGE,
         SERVER_ERROR,
         'Request body too large.',
-      ),
-    };
-  }
-  let value: unknown;
-
-  try {
-    value = JSON.parse(text);
-  } catch {
-    return {
-      ok: false,
-      response: jsonRpcError(BAD_REQUEST, PARSE_ERROR, 'Parse error.'),
-    };
-  }
-  if (Array.isArray(value) && !options.allowBatches) {
-    return {
-      ok: false,
-      response: jsonRpcError(
+      );
+    case 'timeout':
+      return refused(
+        REQUEST_TIMEOUT,
+        SERVER_ERROR,
+        'The request body did not arrive in time.',
+      );
+    case 'failed':
+      return refused(
         BAD_REQUEST,
-        INVALID_REQUEST,
-        'Batches are not accepted: send one JSON-RPC message per request.',
-      ),
-    };
+        PARSE_ERROR,
+        'The request body could not be read.',
+      );
+    default:
+      try {
+        return { ok: true, value: JSON.parse(read.text) };
+      } catch {
+        return refused(BAD_REQUEST, PARSE_ERROR, 'Parse error.');
+      }
   }
-
-  return { ok: true, value };
 }

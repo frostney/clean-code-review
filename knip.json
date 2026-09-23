@@ -1,18 +1,25 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": [
-    "src/app/**/*.{ts,tsx}",
-    "src/app/globals.css",
-    "agent/agent.ts",
-    "agent/instructions.ts",
-    "agent/channels/*.ts",
-    "agent/schedules/*.ts",
-    "agent/**/*.test.ts",
-    "scripts/*.ts",
-    "agent/**/*.test.ts",
-    "src/**/*.test.ts"
-  ],
-  "ignore": ["packages/**"],
-  "ignoreDependencies": ["server-only", "vercel"],
-  "project": ["**/*.{ts,tsx,mjs,css}"]
+  "workspaces": {
+    ".": {
+      "entry": [
+        "src/app/**/*.{ts,tsx}",
+        "src/app/globals.css",
+        "agent/agent.ts",
+        "agent/instructions.ts",
+        "agent/channels/*.ts",
+        "agent/schedules/*.ts",
+        "agent/**/*.test.ts",
+        "scripts/*.ts",
+        "agent/**/*.test.ts",
+        "src/**/*.test.ts"
+      ],
+      "ignoreDependencies": ["server-only", "vercel"],
+      "project": ["**/*.{ts,tsx,mjs,css}"]
+    },
+    "packages/eve-channel-mcp": {
+      "entry": ["src/index.ts", "src/**/*.test.ts", "example/agent/**/*.ts"],
+      "project": ["src/**/*.ts", "example/**/*.ts"]
+    }
+  }
 }
