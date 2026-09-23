@@ -2,9 +2,13 @@
 // leaves files out reads as a review of the whole change.
 import { z } from 'zod';
 
+// Every object is loose, so the published schema allows properties it does
+// not name: a field added later cannot fail a client that cached this schema
+// and validates against it.
+
 const probability = z.number().min(0).max(1);
 
-const noulAnswer = z.object({
+const noulAnswer = z.looseObject({
   group: z
     .string()
     .describe('The Clean Code chapter this question belongs to.'),
@@ -15,7 +19,7 @@ const noulAnswer = z.object({
   type: z.literal('noul'),
 });
 
-const scoreAnswer = z.object({
+const scoreAnswer = z.looseObject({
   confidence: probability
     .optional()
     .describe("Jev's own certainty in this score, when it reported one."),
@@ -41,7 +45,7 @@ const scoreAnswer = z.object({
   type: z.literal('score'),
 });
 
-const judgedFile = z.object({
+const judgedFile = z.looseObject({
   answers: z
     .record(z.string(), z.discriminatedUnion('type', [noulAnswer, scoreAnswer]))
     .describe(
@@ -51,6 +55,31 @@ const judgedFile = z.object({
     .boolean()
     .describe(
       "True when Jev's answers came from the one-hour cache rather than a fresh evaluation.",
+    ),
+  coverage: z
+    .looseObject({
+      complete: z
+        .boolean()
+        .describe(
+          'False when Jev answered for only part of this file, in which case `note` says what is missing.',
+        ),
+      note: z
+        .string()
+        .nullable()
+        .describe(
+          'What was not answered and what that means for the answers: whether asking again can only lower the verdict and add findings, or can move them either way. Null when complete.',
+        ),
+      parts: z
+        .number()
+        .describe(
+          'Windows the file was judged in: a long file is read in parts, each once as written and once with its comments removed.',
+        ),
+      partsJudged: z
+        .number()
+        .describe('Parts answered in at least one of the two readings.'),
+    })
+    .describe(
+      "How much of the file Jev's answers cover. A part that went unanswered is not in them.",
     ),
   kind: z
     .enum(['diff', 'file'])
@@ -98,7 +127,7 @@ const NOT_JUDGED_TEXT: Record<NotJudgedReason, string> = {
   over_prose_cap: 'past the cap on prose files per review',
 };
 
-const pullRequestSource = z.object({
+const pullRequestSource = z.looseObject({
   changedFiles: z
     .number()
     .describe('Files GitHub reports the pull request touches.'),
@@ -112,13 +141,13 @@ const pullRequestSource = z.object({
   url: z.string().describe('The pull request on GitHub.'),
 });
 
-const pasteSource = z.object({
+const pasteSource = z.looseObject({
   kind: z.literal('paste'),
 });
 
-export const reviewOutputSchema = z.object({
+export const reviewOutputSchema = z.looseObject({
   cache: z
-    .object({
+    .looseObject({
       judgedFromCache: z
         .number()
         .describe("How many files' answers came from the cache."),
@@ -138,7 +167,7 @@ export const reviewOutputSchema = z.object({
       'What was answered from the cache instead of being computed again.',
     ),
   costUsd: z
-    .object({
+    .looseObject({
       judge: z.number(),
       review: z.number(),
       total: z.number(),
@@ -155,7 +184,7 @@ export const reviewOutputSchema = z.object({
   files: z
     .array(judgedFile)
     .describe('Every judged code file, in the order of the change.'),
-  models: z.object({
+  models: z.looseObject({
     judge: z.string().describe('The model that answered the questions.'),
     reviewer: z.string().describe('The model that wrote the review.'),
   }),
@@ -169,7 +198,7 @@ export const reviewOutputSchema = z.object({
     ),
   notJudged: z
     .array(
-      z.object({
+      z.looseObject({
         path: z.string(),
         reason: z.enum(NOT_JUDGED_REASONS),
       }),
@@ -187,7 +216,7 @@ export const reviewOutputSchema = z.object({
       'True when the overall paragraph was cut off at its output ceiling twice, so `overall` is as far as it got.',
     ),
   prose: z
-    .array(z.object({ path: z.string(), truncated: z.boolean() }))
+    .array(z.looseObject({ path: z.string(), truncated: z.boolean() }))
     .describe(
       'Markdown, plain text and other prose files. The page shows them beside the review; none of the questions is about prose, so they are never judged or sent to a model.',
     ),
@@ -242,10 +271,14 @@ function fileText(file: JudgedFile): string {
     file.cached ? 'answers from cache' : null,
     file.truncated ? 'truncated' : null,
     file.reviewIncomplete ? 'review cut off' : null,
+    file.coverage.complete ? null : 'partly judged',
   ].filter(Boolean);
 
   return [
     `### ${file.path} (${flags.join(', ')})`,
+    ...(file.coverage.complete || !file.coverage.note
+      ? []
+      : [`Partly judged: ${file.coverage.note}`]),
     file.review ?? '(No paragraph was written for this file.)',
     '',
     `Findings: ${findings.length ? '' : 'none at even odds or better.'}`,

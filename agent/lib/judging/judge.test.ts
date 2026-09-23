@@ -284,7 +284,11 @@ function gateway(fails: (code: string) => boolean = () => false, delayMs = 0) {
     peak: 0,
     restore() {
       globalThis.fetch = real;
-      process.env.AI_GATEWAY_API_KEY = key;
+      if (key === undefined) {
+        delete process.env.AI_GATEWAY_API_KEY;
+      } else {
+        process.env.AI_GATEWAY_API_KEY = key;
+      }
     },
   };
 
@@ -384,6 +388,8 @@ describe('coverage', () => {
 
       assert.equal(judgment.windowsPlanned, 2);
       assert.equal(judgment.windows, 1);
+      // Its code was still read, without the comments.
+      assert.equal(judgment.strippedOnly, 1);
       assert.equal(judgment.strippedMissing, undefined);
       // The passes cover different code, so they are not compared.
       assert.equal(judgment.commentLean, undefined);
@@ -417,6 +423,7 @@ describe('coverage', () => {
 
       assert.equal(judgment.windowsPlanned, 2);
       assert.equal(judgment.windows, 2);
+      assert.equal(judgment.strippedOnly, undefined);
       assert.equal(judgment.strippedMissing, undefined);
       assert.equal(judgment.commentLean, 0);
     } finally {
@@ -437,6 +444,7 @@ describe('coverage', () => {
 
       assert.equal(read?.files[lost.path].windows, 1);
       assert.equal(read?.files[lost.path].windowsPlanned, 2);
+      assert.equal(read?.files[lost.path].strippedOnly, 1);
       assert.equal(read?.files[stripped.path].windows, 2);
       assert.equal(read?.files[stripped.path].strippedMissing, true);
     } finally {
@@ -509,5 +517,43 @@ test('one review keeps at most eight Jev calls in flight', async () => {
     assert.equal(jev.peak, 8);
   } finally {
     jev.restore();
+  }
+});
+
+test('a review past its signal returns what answered and names the rest', async () => {
+  const quick = twoWindows('deadline-quick');
+  const stuck = twoWindows('deadline-stuck');
+  const held = new Set(sentOf(stuck).a.concat(sentOf(stuck).b));
+  const real = gateway();
+  // Answers everything but `stuck`, which it holds until the caller gives up.
+  const answer = globalThis.fetch;
+
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as {
+      state: { code?: string };
+    };
+
+    if (!held.has(body.state.code ?? '')) {
+      return answer(input, init);
+    }
+
+    return await new Promise<Response>((_, reject) => {
+      init?.signal?.addEventListener('abort', () =>
+        reject(init.signal?.reason),
+      );
+    });
+  }) as typeof fetch;
+  try {
+    const judged = await judgeReview(
+      { files: [quick, stuck] },
+      AbortSignal.timeout(200),
+    );
+
+    assert.ok(judged.result.files[quick.path]);
+    assert.equal(judged.result.files[stuck.path], undefined);
+    assert.equal(judged.errors.length, 1);
+    assert.deepEqual(judged.stopped, [stuck.path]);
+  } finally {
+    real.restore();
   }
 });

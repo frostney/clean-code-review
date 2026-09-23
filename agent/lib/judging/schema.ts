@@ -53,6 +53,7 @@ const fileSchema = z.object({
   cut: z.boolean().optional(),
   ms: z.number(),
   strippedMissing: z.boolean().optional(),
+  strippedOnly: z.number().optional(),
   usage: usageSchema,
   windows: z.number().optional(),
   windowsPlanned: z.number().optional(),

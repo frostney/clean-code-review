@@ -265,9 +265,12 @@ class JudgeFileError extends Error {
 /** Thrown only when every file failed. */
 export class JudgeFailedError extends Error {
   readonly spentUsd: number;
-  constructor(message: string, spentUsd: number) {
+  /** How many were still being judged when the signal stopped judging. */
+  readonly stopped: number;
+  constructor(message: string, spentUsd: number, stopped = 0) {
     super(message);
     this.spentUsd = spentUsd;
+    this.stopped = stopped;
   }
 }
 
@@ -280,6 +283,15 @@ export class JudgeFailedError extends Error {
  * longer the window, which no cap changes; 8 is where the loss bottomed out.
  */
 const MAX_JEV_CALLS_IN_FLIGHT = 8;
+
+/**
+ * Past this a review stops asking and returns what answered; the rest is
+ * reported as partly judged or unjudged, which the reader can ask again. A
+ * 66-call review took at most 6.2 s at the cap, but a stalled gateway queued
+ * behind it could hold one for minutes: each attempt's 12 s timeout starts
+ * only when it gets a slot.
+ */
+const MAX_JUDGING_MS = 60_000;
 
 type Slots = <T>(work: () => Promise<T>, signal?: AbortSignal) => Promise<T>;
 
@@ -512,6 +524,13 @@ function answersOfWindows(
   return worstOf(windows);
 }
 
+/** Windows only the reading without comments answered, so no comment question covers them. */
+function strippedOnly(written: PassResult, bare: PassResult | null): number {
+  return [...(bare?.answers.keys() ?? [])].filter(
+    (window) => !written.answers.has(window),
+  ).length;
+}
+
 /** A window read as written whose reading without comments did not answer. */
 function strippedMissing(
   plan: JudgePlan,
@@ -580,6 +599,7 @@ export async function judgeFile(
   if (a.status === 'rejected') {
     throw new JudgeFileError(spent.failedUsd + (bare?.cost ?? 0), a.reason);
   }
+  const readOnlyBare = strippedOnly(a.value, bare);
   const judgment: FileJudgment = {
     answers: answersOfWindows(plan, a.value, bare),
     // A failed attempt was paid for, so this is not a free answer.
@@ -594,6 +614,7 @@ export async function judgeFile(
     },
     windows: a.value.answers.size,
     windowsPlanned: plan.a.length,
+    ...(readOnlyBare ? { strippedOnly: readOnlyBare } : {}),
     ...(plan.cut ? { cut: true } : {}),
     ...(strippedMissing(plan, a.value, bare) ? { strippedMissing: true } : {}),
   };
@@ -679,8 +700,19 @@ function toJudgment(result: Awaited<ReturnType<typeof evaluateFile>>) {
 /** Throws `JudgeFailedError` only when every file fails; otherwise failures are listed in `errors`. */
 export async function judgeReview(input: ReviewInput, signal?: AbortSignal) {
   const slots = slotsOf(MAX_JEV_CALLS_IN_FLIGHT);
+  const ceiling = AbortSignal.timeout(MAX_JUDGING_MS);
+  const within = signal ? AbortSignal.any([signal, ceiling]) : ceiling;
+  // A file that failed only once judging was stopped failed because of it; one
+  // that failed before then failed on its own.
+  const endedStopped: boolean[] = [];
   const settled = await Promise.allSettled(
-    input.files.map((file) => judgeFile(file, signal, slots)),
+    input.files.map(async (file, i) => {
+      try {
+        return await judgeFile(file, within, slots);
+      } finally {
+        endedStopped[i] = within.aborted;
+      }
+    }),
   );
   const result: ReviewResult = {
     files: {},
@@ -691,6 +723,8 @@ export async function judgeReview(input: ReviewInput, signal?: AbortSignal) {
   let failedUsd = 0;
   const warnings: Awaited<ReturnType<typeof judgeFile>>['warnings'] = [];
   const errors: string[] = [];
+  /** Files with no answer because judging was stopped before they had one. */
+  const stopped: string[] = [];
 
   settled.forEach((outcome, i) => {
     const path = input.files[i].path;
@@ -698,6 +732,9 @@ export async function judgeReview(input: ReviewInput, signal?: AbortSignal) {
     if (outcome.status === 'rejected') {
       const reason = outcome.reason;
 
+      if (endedStopped[i]) {
+        stopped.push(path);
+      }
       failedUsd += reason instanceof JudgeFileError ? reason.spentUsd : 0;
       errors.push(
         `${path}: ${String(reason instanceof JudgeFileError ? reason.cause : reason)}`,
@@ -715,8 +752,8 @@ export async function judgeReview(input: ReviewInput, signal?: AbortSignal) {
     warnings.push(...w);
   });
   if (errors.length === input.files.length && input.files.length > 0) {
-    throw new JudgeFailedError(errors.join('; '), failedUsd);
+    throw new JudgeFailedError(errors.join('; '), failedUsd, stopped.length);
   }
 
-  return { cost, errors, failedUsd, result, warnings };
+  return { cost, errors, failedUsd, result, stopped, warnings };
 }

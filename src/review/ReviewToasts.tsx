@@ -2,12 +2,11 @@
 
 import { useState } from 'react';
 
-import { isProsePath, type ReviewFile } from '@/agent/lib/review/review';
 import { describePullRequestError } from '@/src/pull-request/errors';
 import { type ToastItem, ToastRegion } from '@/src/ui/Toast';
 
-import { partialCoverage } from './display';
 import { describeTurnError } from './errors';
+import { gapPaths, gapsSentence, judgingGaps } from './judging-gaps';
 import { useReviewControls, useReviewView } from './ReviewProvider';
 import type { ReviewState } from './useReview';
 
@@ -159,54 +158,6 @@ function useJudgeToast(retryable: boolean): ToastItem | null {
   };
 }
 
-interface Gaps {
-  /** Given up on after two turns without an answer. */
-  unjudged: string[];
-  partial: string[];
-}
-
-/** Files on screen whose last answer is missing or partial, and not being asked about. */
-function judgingGaps(files: readonly ReviewFile[], s: ReviewState): Gaps {
-  const gaps: Gaps = { partial: [], unjudged: [] };
-
-  for (const { path, content } of files) {
-    if (
-      isProsePath(path) ||
-      !content.trim() ||
-      s.pending[path] === true ||
-      s.pausedFiles[path] === true
-    ) {
-      continue;
-    }
-    const judgment = s.judgments[path];
-
-    if (s.givenUp[path] === true && !judgment) {
-      gaps.unjudged.push(path);
-    } else if (partialCoverage(judgment)) {
-      gaps.partial.push(path);
-    }
-  }
-
-  return gaps;
-}
-
-function filesText(n: number): string {
-  return n === 1 ? 'one file' : `${n} files`;
-}
-
-function gapsSentence({ unjudged, partial }: Gaps): string {
-  const none = `Jev sent no answer for ${filesText(unjudged.length)}`;
-
-  if (!partial.length) {
-    return `${none}.`;
-  }
-  const some = partial.length === 1 ? 'one' : String(partial.length);
-
-  return unjudged.length
-    ? `${none} and judged ${some} more only in part.`
-    : `Jev judged ${filesText(partial.length)} only in part; ${partial.length === 1 ? 'its card says' : 'their cards say'} what the verdict covers.`;
-}
-
 interface Rejudging {
   paths: string[];
   message: string;
@@ -248,7 +199,7 @@ function useCoverageToast(): ToastItem | null {
   const { review, reviewState } = useReviewView();
   const { rejudge } = useReviewControls();
   const gaps = judgingGaps(review.files, reviewState);
-  const paths = [...gaps.unjudged, ...gaps.partial];
+  const paths = gapPaths(gaps);
   const key = paths.join('\n');
   const [rejudging, setRejudging] = useState<Rejudging | null>(null);
   const phase = nextRejudging(
@@ -262,6 +213,10 @@ function useCoverageToast(): ToastItem | null {
   }
   const [dismissed, setDismissed] = useState<string | null>(null);
 
+  // Nothing more is asked in a tab past its cost cap; its own notice says so.
+  if (reviewState.budgetSpent) {
+    return null;
+  }
   if (!phase && (!paths.length || dismissed === key)) {
     return null;
   }

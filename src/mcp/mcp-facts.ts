@@ -11,7 +11,7 @@ export const MCP_SERVER_CARD_PATH = `${MCP_PATH}/server-card`;
 
 /** Reverse-DNS because the server card format requires it; the runtime matches. */
 export const MCP_SERVER_NAME = 'app.vercel.clean-code-review/review';
-export const MCP_SERVER_VERSION = '1.0.0';
+export const MCP_SERVER_VERSION = '1.1.0';
 
 export const MCP_TOOLS = {
   paste: 'review_pasted_code',
@@ -20,6 +20,12 @@ export const MCP_TOOLS = {
 
 /** Below the page's GitHub brake: one call here fetches, judges and writes a review. */
 export const MCP_CALLS_PER_WINDOW = 10;
+
+/**
+ * The endpoint's function lifetime. Next reads `maxDuration` in `route.ts` as
+ * a literal, so it is typed there too and `mcp-review.test.ts` holds the two equal.
+ */
+export const MCP_MAX_DURATION_SECONDS = 120;
 
 /** The review caps bound what reaches a model; this bounds what is parsed first. */
 export const MAX_PASTE_CHARS = 1_000_000;

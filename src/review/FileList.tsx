@@ -112,10 +112,7 @@ function Standing({
         {answers ? (
           <>
             <span className="text-xs text-subtle">·</span>
-            <SmellCount
-              atLeast={coverage?.unread}
-              count={smellCount(answers)}
-            />
+            <SmellCount atLeast={coverage?.floor} count={smellCount(answers)} />
           </>
         ) : null}
       </span>

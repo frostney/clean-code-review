@@ -23,6 +23,7 @@ import { GROUPS, questionById } from '@/agent/lib/judging/questions';
 import { type Answers, parseReview } from '@/agent/lib/judging/schema';
 import { selectReviewFiles } from '@/agent/lib/judging/select';
 import {
+  type FileJudgment,
   isProsePath,
   REVIEW_LIMITS,
   type ReviewFile,
@@ -41,9 +42,14 @@ import {
   MCP_DAILY_BUDGET_USD,
   MCP_HOURLY_BUDGET_USD,
 } from '@/agent/lib/spend/budgets';
-import { createSpendBrake, type SpendRefusal } from '@/agent/lib/spend/spend';
+import {
+  createSpendBrake,
+  type SpendBrake,
+  type SpendRefusal,
+} from '@/agent/lib/spend/spend';
 import { pullRequestPath } from '@/src/pull-request/address';
 import { withPatchHeader } from '@/src/review/diff';
+import { coverageSentence, partialCoverage } from '@/src/review/display';
 import {
   cappedText,
   fromPaste,
@@ -53,6 +59,7 @@ import {
 import { filesFromPaste, uniquePaths } from '@/src/review/paste';
 import { SITE } from '@/src/site/site';
 
+import { MCP_MAX_DURATION_SECONDS } from './mcp-facts';
 import type { NotJudgedReason, ReviewOutput } from './mcp-result';
 
 /** A review that could not be made, with the reason in words an agent can act on. */
@@ -72,6 +79,28 @@ function storedBytes(pr: PullRequestReview): number {
 // open until the platform kills it.
 const REVIEW_TIMEOUT_MS = 60_000;
 const MS_PER_SECOND = 1000;
+
+/**
+ * Everything after judging that is not the written review's own minute:
+ * reserving and planning it, settling both reservations, and building and
+ * sending the reply.
+ */
+const REPLY_ROOM_MS = 15_000;
+
+/**
+ * Counted from the call's start, so fetching the pull request spends it too.
+ * Calls wait for one of judging's slots before their own timeout starts, so a
+ * stalled gateway could otherwise hold a review past the function's life with
+ * its spend still reserved.
+ */
+export const JUDGE_DEADLINE_MS =
+  MCP_MAX_DURATION_SECONDS * MS_PER_SECOND - REVIEW_TIMEOUT_MS - REPLY_ROOM_MS;
+
+/** Quoted by the tools' descriptions. */
+export const TIMING_SECONDS = {
+  judging: JUDGE_DEADLINE_MS / MS_PER_SECOND,
+  review: REVIEW_TIMEOUT_MS / MS_PER_SECOND,
+} as const;
 const MS_PER_MINUTE = 60_000;
 const MINUTES_PER_HOUR = 60;
 /** Where `14:00` sits in an ISO timestamp. */
@@ -403,6 +432,99 @@ function cutOffWhat(files: number, overall: boolean): string {
   return files ? `${paragraphs} are` : 'the overall paragraph is';
 }
 
+/**
+ * Reserves, judges within `deadline` and settles, so a deadline that fires
+ * returns what answered, or refuses, rather than leaving the reservation held
+ * by a function the platform then kills. A fault other than every file
+ * failing keeps the reservation, as everywhere else.
+ */
+export async function judgeCode(
+  code: ReviewFile[],
+  signal: AbortSignal,
+  deadline: AbortSignal,
+  brake: SpendBrake = spend,
+): Promise<Awaited<ReturnType<typeof judgeReview>>> {
+  // Estimates uncached files only, so a fully cached review is always served.
+  const admission = await brake.reserve(await judgeEstimateUsd(code));
+
+  if (!admission.ok) {
+    throw new ReviewError(budgetSpent(admission));
+  }
+  let judged: Awaited<ReturnType<typeof judgeReview>>;
+
+  try {
+    judged = await judgeReview(
+      { files: code },
+      AbortSignal.any([signal, deadline]),
+    );
+  } catch (err) {
+    // Only a JudgeFailedError settles at its real (often zero) cost; any other
+    // fault keeps the reservation.
+    if (err instanceof JudgeFailedError) {
+      await admission.hold.settle(err.spentUsd);
+    }
+    const stopped =
+      err instanceof JudgeFailedError &&
+      err.stopped === code.length &&
+      deadline.aborted &&
+      !signal.aborted;
+
+    throw new ReviewError(
+      stopped
+        ? `Jev had answered for none of these files when judging stopped, ${DEADLINE_TEXT}. Try again in a minute.`
+        : 'Jev could not judge any of these files. Try again in a minute.',
+    );
+  }
+  await admission.hold.settle(judgeSettleUsd(judged));
+
+  return judged;
+}
+
+const DEADLINE_TEXT = `${JUDGE_DEADLINE_MS / MS_PER_SECOND} seconds after the call began (fetching the pull request counts toward them)`;
+
+/** What an agent needs to know about files judged only in part, or not reached. */
+function coverageNotices(
+  judged: Awaited<ReturnType<typeof judgeReview>>,
+): string[] {
+  const notices: string[] = [];
+  const partial = Object.values(judged.result.files).filter(
+    (j) => partialCoverage(j) !== null,
+  ).length;
+
+  if (judged.stopped.length) {
+    notices.push(
+      `Judging stopped ${DEADLINE_TEXT}. ${judged.stopped.length} ${judged.stopped.length === 1 ? 'file had' : 'files had'} no answer by then and ${judged.stopped.length === 1 ? 'is' : 'are'} listed as not judged.`,
+    );
+  }
+  if (partial) {
+    notices.push(
+      `Jev answered for only part of ${partial} ${partial === 1 ? 'file' : 'files'}: each one's \`coverage\` says what is missing and what that means for its answers.`,
+    );
+  }
+  if (notices.length) {
+    notices.push(
+      'Call again to retry: the answers that came back are cached, so only what is missing is asked for.',
+    );
+  }
+
+  return notices;
+}
+
+/** A file's coverage as the MCP result reports it. */
+function coverageOutput(judgment: FileJudgment | undefined) {
+  const partial = partialCoverage(judgment);
+  const parts = judgment?.windowsPlanned ?? 1;
+
+  return partial
+    ? {
+        complete: false,
+        note: coverageSentence(partial),
+        parts: partial.planned,
+        partsJudged: partial.read,
+      }
+    : { complete: true, note: null, parts, partsJudged: parts };
+}
+
 async function reviewOpened(
   opened: Opened,
   signal: AbortSignal,
@@ -421,28 +543,10 @@ async function reviewOpened(
     throw new ReviewError('Nothing in that input is code to judge.');
   }
 
-  // Estimates uncached files only, so a fully cached review is always served.
-  const admission = await spend.reserve(await judgeEstimateUsd(code));
-
-  if (!admission.ok) {
-    throw new ReviewError(budgetSpent(admission));
-  }
-
-  let judged: Awaited<ReturnType<typeof judgeReview>>;
-
-  try {
-    judged = await judgeReview({ files: code }, signal);
-  } catch (err) {
-    // Only a JudgeFailedError settles at its real (often zero) cost; any other
-    // fault keeps the reservation.
-    if (err instanceof JudgeFailedError) {
-      await admission.hold.settle(err.spentUsd);
-    }
-    throw new ReviewError(
-      'Jev could not judge any of these files. Try again in a minute.',
-    );
-  }
-  await admission.hold.settle(judgeSettleUsd(judged));
+  const deadline = AbortSignal.timeout(
+    Math.max(0, JUDGE_DEADLINE_MS - (performance.now() - started)),
+  );
+  const judged = await judgeCode(code, signal, deadline);
   // Parsed as the page parses a judge turn, so review-part cache keys match.
   const answers =
     parseReview(JSON.stringify({ kind: 'judged', ...judged.result }))?.files ??
@@ -457,6 +561,8 @@ async function reviewOpened(
   const notices = [cappedText(opened.review)].filter(
     (n): n is string => n !== null,
   );
+
+  notices.push(...coverageNotices(judged));
   const reviewInput = {
     files: summarized,
     judgments: Object.fromEntries(
@@ -487,6 +593,7 @@ async function reviewOpened(
   const files = summarized.map((f) => ({
     answers: labelled(answers[f.path]?.answers ?? {}),
     cached: judged.result.files[f.path]?.cached === true,
+    coverage: coverageOutput(judged.result.files[f.path]),
     kind: f.patch ? ('diff' as const) : ('file' as const),
     path: f.path,
     review: paragraphs.get(f.path) || null,

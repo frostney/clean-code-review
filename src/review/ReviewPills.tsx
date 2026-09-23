@@ -28,7 +28,9 @@ export function ReviewPills({
     !review.asking && stalled,
   );
   const smells = judged.reduce((total, j) => total + smellCount(j.answers), 0);
-  const unread = judged.some((j) => partialCoverage(j)?.unread === true);
+  // A floor only while no partly judged file could lose a smell on asking again.
+  const partial = judged.map(partialCoverage).filter((c) => c !== null);
+  const atLeast = partial.length > 0 && partial.every((c) => c.floor);
 
   return (
     <>
@@ -46,7 +48,7 @@ export function ReviewPills({
           }`}
           data-smells-total={smells}
         >
-          {smellLabel(smells, unread)}
+          {smellLabel(smells, atLeast)}
         </span>
       )}
       <ReviewStatus review={review} />

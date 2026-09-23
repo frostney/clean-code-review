@@ -35,11 +35,17 @@ export interface FileJudgment {
   /** Windows of the file that answered as written; above one, it was read in parts. */
   windows?: number;
   /**
-   * Windows the file was cut into. Fewer answered than this means part of the
-   * file went unjudged, so the answers are the worst of what was read: judging
-   * the rest can only lower the verdict and add smells.
+   * Windows the file was cut into. Fewer read, in either reading, means part
+   * of the file went unjudged; the answers are the worst of what was read, so
+   * judging the rest can only lower the verdict and add smells — unless
+   * `strippedMissing`, where it can move either way.
    */
   windowsPlanned?: number;
+  /**
+   * Windows answered only with their comments removed, and so not counted in
+   * `windows`: their code was judged, but no comment question covers them.
+   */
+  strippedOnly?: number;
   /**
    * A window answered as written but not with its comments removed, so its
    * code was judged with the comments in view and there is no `commentLean`.

@@ -104,8 +104,17 @@ JSON-RPC batches are refused with HTTP 400 in
 in a batch would start a review behind a single Firewall-counted request. MCP
 dropped batches in 2025-06-18, but the SDK's stateless path still accepts them.
 
-The route's `maxDuration` is 120 seconds. The written review is given 60 of
-them; past that the call returns what it has with the reason.
+The route's `maxDuration` is 120 seconds. Judging must finish within
+`JUDGE_DEADLINE_MS` of the call's start (fetching the pull request included),
+which [`mcp-review.ts`](../src/mcp/mcp-review.ts) derives as the 120 less the
+written review's 60 and 15 for settling and replying, so 45 today; the written
+review is given 60; past either, the call returns what it has
+with the reason. Each file reports its `coverage`, so a file judged only in
+part is not mistaken for a whole one. Judging's reservation settles when it
+returns and when every file fails; any other fault keeps the full reservation,
+erring towards reserving. Judging anywhere also stops after 60 seconds on its
+own, page included, and reports what did not answer as partly judged or
+unjudged.
 
 ## Limits and budgets
 

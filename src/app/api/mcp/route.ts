@@ -55,7 +55,10 @@ function get(request: Request): Promise<Response> {
   return handler.fetch(request);
 }
 
-/** Judging is seconds; Luna's written review can take most of a minute. */
+/**
+ * Judging is seconds; Luna's written review can take most of a minute. Equal
+ * to `MCP_MAX_DURATION_SECONDS`, which the review's deadlines are cut from.
+ */
 export const maxDuration = 120;
 
 export { get as GET, post as POST };

@@ -279,7 +279,7 @@ export function smellCount(answers: Answers | undefined): number {
   return n;
 }
 
-/** `atLeast` when part of the code went unread, where more may be hiding. */
+/** `atLeast` when asking again can only find more (see `PartialCoverage.floor`). */
 export function smellLabel(count: number, atLeast = false): string {
   if (count === 0) {
     return atLeast ? 'no smells so far' : 'no smells';
@@ -295,13 +295,20 @@ export function smellLabel(count: number, atLeast = false): string {
 
 /** How much of a file Jev answered for, when that was less than all of it. */
 export interface PartialCoverage {
-  /** Windows answered as written. */
-  judged: number;
   planned: number;
-  /** Code answers are the worst of the windows read, so the rest can only add faults. */
-  unread: boolean;
+  /** Windows read at all, as written or without their comments. */
+  read: number;
+  /** Windows read only without their comments: no comment question covers them. */
+  strippedOnly: number;
   /** Some code was judged with its comments in view only. */
   strippedMissing: boolean;
+  /**
+   * The answers are the worst of what was read and nothing read will be
+   * replaced, so asking again can only lower the verdict and add smells.
+   * Not so when a window's code answers came from the reading with comments:
+   * the reading without them would replace those, either way.
+   */
+  floor: boolean;
 }
 
 /** Null when the whole file was judged, or the reply predates coverage. */
@@ -312,39 +319,65 @@ export function partialCoverage(
     return null;
   }
   const planned = judgment.windowsPlanned ?? 0;
-  const judged = judgment.windows ?? planned;
-  const unread = judged < planned;
+  const strippedOnly = judgment.strippedOnly ?? 0;
+  const read = (judgment.windows ?? planned) + strippedOnly;
   const strippedMissing = judgment.strippedMissing === true;
 
-  return unread || strippedMissing
-    ? { judged, planned, strippedMissing, unread }
-    : null;
+  if (read >= planned && !strippedOnly && !strippedMissing) {
+    return null;
+  }
+
+  return {
+    floor: !strippedMissing,
+    planned,
+    read,
+    strippedMissing,
+    strippedOnly,
+  };
 }
 
 export const PARTLY_JUDGED = 'Partly judged';
 
 /** Short enough for a card header. */
 export function coverageChip(coverage: PartialCoverage): string {
-  return coverage.unread
-    ? `${coverage.judged} of ${coverage.planned} parts judged`
-    : 'Judged as written only';
+  if (coverage.read < coverage.planned) {
+    return `${coverage.read} of ${coverage.planned} parts judged`;
+  }
+
+  return coverage.strippedMissing
+    ? 'Partly judged as written'
+    : 'Partly judged without comments';
 }
 
-/** What the verdict and smell count mean for a partly judged file. */
-export function coverageSentence(coverage: PartialCoverage): string {
-  const parts = coverage.unread
-    ? [
-        `Jev answered for ${coverage.judged} of this file's ${coverage.planned} parts; the rest went unjudged. These answers cover only the parts judged, so judging the rest can only lower the verdict or add smells.`,
-      ]
-    : [];
+const partsText = (n: number) => (n === 1 ? 'One part' : `${n} parts`);
 
-  if (coverage.strippedMissing) {
+/** What is missing, then what the verdict and smell count mean because of it. */
+export function coverageSentence(coverage: PartialCoverage): string {
+  const parts: string[] = [];
+
+  if (coverage.read < coverage.planned) {
     parts.push(
-      coverage.unread
-        ? 'Some of it was also judged only with its comments in view, which can move the verdict either way.'
-        : 'Part of this file was judged only with its comments in view: the reading without them did not answer, so the verdict can move either way, and how far the comments sway it was not measured.',
+      `Jev answered for ${coverage.read} of this file's ${coverage.planned} parts; the rest went unjudged.`,
     );
   }
+  if (coverage.strippedOnly) {
+    parts.push(
+      `${partsText(coverage.strippedOnly)} answered only with ${coverage.strippedOnly === 1 ? 'its' : 'their'} comments removed, so no question about comments covers ${coverage.strippedOnly === 1 ? 'it' : 'them'}.`,
+    );
+  }
+  if (coverage.strippedMissing) {
+    parts.push(
+      'Some of the code was judged only with its comments in view: the reading without them did not answer.',
+    );
+  }
+  const rest =
+    coverage.read < coverage.planned ? 'judging the rest' : 'asking again';
+
+  parts.push(
+    coverage.floor
+      ? `These answers are the worst of what was read, so ${rest} can only lower the verdict or add smells.`
+      : 'Judging it again can move the verdict and the smell count either way, and how far the comments sway the verdict was not measured.',
+  );
 
   return parts.join(' ');
 }

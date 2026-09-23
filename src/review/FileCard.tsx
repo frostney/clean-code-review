@@ -136,7 +136,7 @@ export function SmellCount({
   className = '',
 }: {
   count: number;
-  /** Part of the file went unread, so this is a floor. */
+  /** Asking again can only find more, so this is a floor. */
   atLeast?: boolean;
   className?: string;
 }) {
@@ -230,7 +230,7 @@ function CardHeader({
               <span className="text-xs text-muted">{pct(confidence)} sure</span>
             )}
             {answers ? (
-              <SmellCount atLeast={coverage?.unread} count={smells} />
+              <SmellCount atLeast={coverage?.floor} count={smells} />
             ) : null}
             <span
               className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold ${verdict.className}`}

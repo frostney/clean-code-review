@@ -188,9 +188,16 @@ function costOf(events: readonly { type: string; data?: unknown }[]): number {
     }, 0);
 }
 
-/** A file left unjudged is not an error of the turn: see `givenUp` and the coverage toast. */
-function replyError(review: ReviewResult | null): string | null {
-  return review ? null : 'the reply was not a review';
+/**
+ * A file left unjudged is not an error of the turn: it is asked again or given
+ * up on, and the coverage toast names it. A reply that is not a review leaves
+ * every file it carried unjudged, so it is only an error when none were.
+ */
+function replyError(
+  review: ReviewResult | null,
+  unjudged: number,
+): string | null {
+  return review || unjudged ? null : 'the reply was not a review';
 }
 
 function without(
@@ -501,6 +508,7 @@ function withPausedSummary(
   };
 }
 
+/** Nothing more will be written, so no block may keep saying Luna is reviewing. */
 function withBudgetSpentSummary(s: ReviewState, costUsd: number): ReviewState {
   return {
     ...s,
@@ -508,6 +516,7 @@ function withBudgetSpentSummary(s: ReviewState, costUsd: number): ReviewState {
     spentUsd: s.spentUsd + costUsd,
     summary: {
       ...s.summary,
+      failed: true,
       replacing: {},
       running: false,
       streaming: false,
@@ -537,7 +546,7 @@ function freshJudgments(
   return fresh;
 }
 
-interface JudgeTurn {
+export interface JudgeTurn {
   cached: boolean;
   costUsd: number;
   /** Unanswered twice running; given up on. */
@@ -546,6 +555,9 @@ interface JudgeTurn {
   ms: number;
   paths: readonly string[];
   review: ReviewResult | null;
+  /** Given up on, holding a judgment of earlier code. */
+  stale: readonly string[];
+  unjudged: number;
 }
 
 function withBudgetSpentTurn(
@@ -579,15 +591,136 @@ function withPausedTurn(
   };
 }
 
-function withUnansweredTurn(
+/** Every way a judge turn can end with no answers for its files. */
+export type Unanswered =
+  /** The request threw: HTTP, network or session. */
+  | { kind: 'thrown'; message: string }
+  /** The turn ran and failed. */
+  | { kind: 'failed'; costUsd: number }
+  /** The site's model budget refused it until the window resets. */
+  | { kind: 'paused'; pause: LocalPause }
+  /** This tab's session reached its cost cap, for good. */
+  | { kind: 'spent'; costUsd: number };
+
+/**
+ * `stale` (see `staleJudgments`) lose their answers whichever way the turn
+ * ended. With nothing held, a failed file reads "Could not judge" and a paused
+ * one "Paused". The spent cap settles every file, not only the turn's: see
+ * `withCapReached`.
+ */
+export function withUnanswered(
   s: ReviewState,
   paths: readonly string[],
+  outcome: Unanswered,
+  stale: readonly string[],
+): ReviewState {
+  const kept = withoutJudgments(s, stale);
+
+  switch (outcome.kind) {
+    case 'paused':
+      return withPausedTurn(kept, paths, outcome.pause);
+    case 'failed':
+      return withFailedTurn(kept, paths, outcome.costUsd);
+    case 'spent':
+      return withBudgetSpentTurn(kept, paths, outcome.costUsd);
+    default:
+      return withThrownTurn(kept, paths, outcome.message);
+  }
+}
+
+/**
+ * Past the session's cost cap nothing is asked again, so every code file on
+ * screen settles now: an answer about other code than is shown goes (`stale`,
+ * over every file, since edits queued behind the last turn are dropped with
+ * the queue), and a file left with no answer is given up on rather than left
+ * pulsing "Judging…".
+ */
+export function withCapReached(
+  s: ReviewState,
+  codePaths: readonly string[],
+  stale: readonly string[],
+  outdatedNotes: readonly string[] = [],
+): ReviewState {
+  const kept = withoutJudgments(s, stale);
+  const unanswered = codePaths.filter((path) => !kept.judgments[path]);
+  const files = { ...kept.summary.files };
+
+  for (const path of outdatedNotes) {
+    delete files[path];
+  }
+
+  return {
+    ...kept,
+    budgetSpent: true,
+    givenUp: {
+      ...kept.givenUp,
+      ...Object.fromEntries(unanswered.map((p) => [p, true as const])),
+    },
+    pending: {},
+    // Luna will not be asked either, so no block may keep saying she is writing.
+    summary: {
+      ...kept.summary,
+      failed: true,
+      files,
+      incomplete: without(kept.summary.incomplete, outdatedNotes),
+    },
+  };
+}
+
+/**
+ * Of `codePaths`, those whose paragraph, if any, was written for other answers
+ * than the ones now held: the page would have asked Luna again, by the same
+ * test it uses to decide that, and past the cap it never will.
+ */
+export function outdatedParagraphs(
+  codePaths: readonly string[],
+  summarized: ReadonlyMap<string, Answers>,
+  judgments: Readonly<Record<string, FileJudgment>>,
+): string[] {
+  return codePaths.filter((path) => {
+    const answers = judgments[path]?.answers;
+
+    return (
+      answers !== undefined && judgmentMoved(summarized.get(path), answers)
+    );
+  });
+}
+
+/** Remembers which code each fresh judgment was made for: the code sent, not what is on screen now. */
+export function recordJudgedFor(
+  judgedFor: Map<string, string>,
+  fresh: Record<string, FileJudgment>,
+  sent: ReadonlyMap<string, string>,
+): void {
+  for (const path of Object.keys(fresh)) {
+    judgedFor.set(path, sent.get(path) ?? '');
+  }
+}
+
+function refusedOrFailed(
   paused: LocalPause | null,
   costUsd: number,
-): ReviewState {
+): Unanswered {
   return paused
-    ? withPausedTurn(s, paths, paused)
-    : withFailedTurn(s, paths, costUsd);
+    ? { kind: 'paused', pause: paused }
+    : { costUsd, kind: 'failed' };
+}
+
+function withThrownTurn(
+  s: ReviewState,
+  paths: readonly string[],
+  message: string,
+): ReviewState {
+  return {
+    ...s,
+    asking: false,
+    error: message,
+    pending: without(s.pending, paths),
+    stalled: {
+      ...s.stalled,
+      ...Object.fromEntries(paths.map((p) => [p, true as const])),
+    },
+  };
 }
 
 function withFailedTurn(
@@ -609,17 +742,63 @@ function withFailedTurn(
   });
 }
 
-function withJudgeTurn(s: ReviewState, turn: JudgeTurn): ReviewState {
-  return withPauseReconciled({
+/**
+ * Of `paths`, those holding a judgment made for other code than is on screen
+ * now. An edit keeps the old answers up while new ones are asked for; once
+ * none are coming they would pass for answers about the new code. Compared
+ * with the code on screen, not the code sent: undone back to what was
+ * judged, the judgment is right again.
+ */
+export function staleJudgments(
+  paths: readonly string[],
+  judgedFor: ReadonlyMap<string, string>,
+  current: ReadonlyMap<string, string>,
+): string[] {
+  return paths.filter(
+    (path) => judgedFor.has(path) && judgedFor.get(path) !== current.get(path),
+  );
+}
+
+/** Drops the answers and Luna's paragraph for `paths`, which no longer describe their code. */
+export function withoutJudgments(
+  s: ReviewState,
+  paths: readonly string[],
+): ReviewState {
+  if (!paths.length) {
+    return s;
+  }
+  const judgments = { ...s.judgments };
+  const files = { ...s.summary.files };
+
+  for (const path of paths) {
+    delete judgments[path];
+    delete files[path];
+  }
+
+  return {
     ...s,
+    judgments,
+    summary: {
+      ...s.summary,
+      files,
+      incomplete: without(s.summary.incomplete, paths),
+    },
+  };
+}
+
+export function withJudgeTurn(s: ReviewState, turn: JudgeTurn): ReviewState {
+  const kept = withoutJudgments(s, turn.stale);
+
+  return withPauseReconciled({
+    ...kept,
     asking: false,
     cached: turn.cached,
-    error: replyError(turn.review),
+    error: replyError(turn.review, turn.unjudged),
     givenUp: {
       ...without(s.givenUp, turn.paths),
       ...Object.fromEntries(turn.failed.map((p) => [p, true as const])),
     },
-    judgments: { ...s.judgments, ...turn.fresh },
+    judgments: { ...kept.judgments, ...turn.fresh },
     lastTurnMs: turn.ms,
     pausedFiles: without(s.pausedFiles, turn.paths),
     pending: without(s.pending, turn.paths),
@@ -638,7 +817,7 @@ function pruneKeys(
   }
 }
 
-function withoutStalePaths(
+export function withoutStalePaths(
   s: ReviewState,
   stale: (path: string) => boolean,
 ): ReviewState {
@@ -767,6 +946,8 @@ export function useReview(
   const budgetSpentRef = useRef(false);
 
   const judgmentsRef = useRef<Record<string, FileJudgment>>({});
+  /** Path → the content its judgment on screen was made for. */
+  const judgedForRef = useRef(new Map<string, string>());
   /** Path → answers the last summarize turn was sent. */
   const summarizedRef = useRef(new Map<string, Answers>());
   const summaryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -929,6 +1110,35 @@ export function useReview(
       await pending;
     }
   }, []);
+
+  /** Forgets the judgments of `paths` made for other code than is on screen, and returns those paths. */
+  const dropStale = useCallback((paths: readonly string[]): string[] => {
+    const current = new Map(filesRef.current.map((f) => [f.path, f.content]));
+    const stale = staleJudgments(paths, judgedForRef.current, current);
+
+    for (const path of stale) {
+      delete judgmentsRef.current[path];
+      judgedForRef.current.delete(path);
+      summarizedRef.current.delete(path);
+    }
+
+    return stale;
+  }, []);
+
+  /** Settles every code file on screen once the session's cost cap is reached. */
+  const settleCap = useCallback(() => {
+    const codePaths = filesRef.current
+      .filter((f) => !isProsePath(f.path) && f.content.trim())
+      .map((f) => f.path);
+    const stale = dropStale(codePaths);
+    const outdated = outdatedParagraphs(
+      codePaths,
+      summarizedRef.current,
+      judgmentsRef.current,
+    );
+
+    setState((s) => withCapReached(s, codePaths, stale, outdated));
+  }, [dropStale]);
 
   const forgetSummarized = useCallback((paths: readonly string[]) => {
     for (const path of paths) {
@@ -1103,6 +1313,7 @@ export function useReview(
         budgetSpentRef.current = true;
         queuedRef.current.clear();
         setState((s) => withBudgetSpentSummary(s, run.costUsd));
+        settleCap();
 
         return;
       }
@@ -1134,6 +1345,7 @@ export function useReview(
       endSummaryTurn,
       forgetSummarized,
       sendTurn,
+      settleCap,
       settleSummary,
     ],
   );
@@ -1228,6 +1440,33 @@ export function useReview(
     [],
   );
 
+  /** Every turn that ends without answers ends here. */
+  const settleUnanswered = useCallback(
+    (paths: readonly string[], outcome: Unanswered) => {
+      const stale = dropStale(paths);
+
+      setState((s) => withUnanswered(s, paths, outcome, stale));
+    },
+    [dropStale],
+  );
+
+  /** Returns the given-up files whose held judgment was of other code, now dropped. */
+  const recordJudged = useCallback(
+    (
+      fresh: Record<string, FileJudgment>,
+      failed: readonly string[],
+      sent: ReadonlyMap<string, string>,
+    ): string[] => {
+      const stale = dropStale(failed);
+
+      judgmentsRef.current = { ...judgmentsRef.current, ...fresh };
+      recordJudgedFor(judgedForRef.current, fresh, sent);
+
+      return stale;
+    },
+    [dropStale],
+  );
+
   const applyJudgeResult = useCallback(
     (
       result: TurnResult,
@@ -1243,7 +1482,8 @@ export function useReview(
       if (result.events.some((e) => e.type === 'input.requested')) {
         budgetSpentRef.current = true;
         queuedRef.current.clear();
-        setState((s) => withBudgetSpentTurn(s, paths, costUsd));
+        settleUnanswered(paths, { costUsd, kind: 'spent' });
+        settleCap();
 
         return;
       }
@@ -1251,10 +1491,10 @@ export function useReview(
         result.status === 'failed' ? null : pausedIn(result.message);
 
       if (result.status === 'failed' || paused) {
-        // Forget what was sent so the files can be retried (a refusal by
-        // `resumeRef`, a failure by Retry or an edit).
+        // Forget what was sent so the files can be asked again: a refusal by
+        // `resumeRef`, a failure by Retry or an edit.
         pruneKeys(sentRef.current, (path) => paths.includes(path));
-        setState((s) => withUnansweredTurn(s, paths, paused, costUsd));
+        settleUnanswered(paths, refusedOrFailed(paused, costUsd));
 
         return;
       }
@@ -1268,8 +1508,8 @@ export function useReview(
       const judged = Object.values(fresh);
       const cached =
         judged.length > 0 && judged.every((j) => j.cached === true);
+      const stale = recordJudged(fresh, failed, sent);
 
-      judgmentsRef.current = { ...judgmentsRef.current, ...fresh };
       setState((s) =>
         withJudgeTurn(s, {
           cached,
@@ -1279,13 +1519,21 @@ export function useReview(
           ms,
           paths,
           review,
+          stale,
+          unjudged: unjudged.length,
         }),
       );
       if (Object.keys(fresh).length) {
         scheduleSummary(summarizedOnceRef.current ? SUMMARY_DEBOUNCE_MS : 0);
       }
     },
-    [recordUnjudged, scheduleSummary],
+    [
+      recordJudged,
+      recordUnjudged,
+      scheduleSummary,
+      settleCap,
+      settleUnanswered,
+    ],
   );
 
   const clearSummaryTimer = useCallback(() => {
@@ -1315,29 +1563,23 @@ export function useReview(
     }));
   }, []);
 
-  const failTurn = useCallback((err: unknown, paths: readonly string[]) => {
-    const message =
-      turnRuntime && err instanceof turnRuntime.ClientError
-        ? `HTTP ${err.status}`
-        : String(err);
+  const failTurn = useCallback(
+    (err: unknown, paths: readonly string[]) => {
+      const message =
+        turnRuntime && err instanceof turnRuntime.ClientError
+          ? `HTTP ${err.status}`
+          : String(err);
 
-    // The session may be what failed (a retired id throws), so open a fresh
-    // one. Unless sent is forgotten, `unsent` reads these files as judged.
-    sessionRef.current = null;
-    for (const path of paths) {
-      sentRef.current.delete(path);
-    }
-    setState((s) => ({
-      ...s,
-      asking: false,
-      error: message,
-      pending: without(s.pending, paths),
-      stalled: {
-        ...s.stalled,
-        ...Object.fromEntries(paths.map((p) => [p, true as const])),
-      },
-    }));
-  }, []);
+      // The session may be what failed (a retired id throws), so open a fresh
+      // one. Unless sent is forgotten, `unsent` reads these files as judged.
+      sessionRef.current = null;
+      for (const path of paths) {
+        sentRef.current.delete(path);
+      }
+      settleUnanswered(paths, { kind: 'thrown', message });
+    },
+    [settleUnanswered],
+  );
 
   const startTurn: (batch: ReviewFile[]) => Promise<void> = useCallback(
     async (batch) => {
@@ -1479,6 +1721,7 @@ export function useReview(
     queuedRef.current.clear();
     unjudgedRef.current.clear();
     judgmentsRef.current = {};
+    judgedForRef.current.clear();
     summarizedRef.current.clear();
     summarizedOnceRef.current = false;
     summaryWantedRef.current = false;
@@ -1500,9 +1743,6 @@ export function useReview(
 
   useEffect(() => {
     filesRef.current = files;
-    if (budgetSpentRef.current) {
-      return;
-    }
     const paths = new Set(files.map((f) => f.path));
     // Emptied files lose their judgment; forgetting what was sent means typing
     // the same text back is judged again.
@@ -1515,12 +1755,19 @@ export function useReview(
     pruneKeys(queuedRef.current, stale);
     pruneKeys(unjudgedRef.current, stale);
     pruneKeys(summarizedRef.current, stale);
+    pruneKeys(judgedForRef.current, stale);
     for (const path of Object.keys(judgmentsRef.current)) {
       if (stale(path)) {
         delete judgmentsRef.current[path];
       }
     }
     setState((s) => withoutStalePaths(s, stale));
+    if (budgetSpentRef.current) {
+      // Nothing is asked any more, so an edit only settles what is shown.
+      settleCap();
+
+      return;
+    }
     const dirty = unsent(files, sentRef.current);
 
     if (!dirty.length) {
@@ -1539,7 +1786,7 @@ export function useReview(
     }, DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [files, startTurn]);
+  }, [files, settleCap, startTurn]);
 
   // A failed turn forgot what it sent, so its files are unsent again. Files
   // waiting on the budget wait for the reset. The failure stays shown until

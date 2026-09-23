@@ -36,15 +36,17 @@ export function ReviewBody() {
 
   const judged = Object.keys(reviewState.judgments).length > 0;
 
-  // When no answer can ever arrive (no code, budget spent before the first
-  // answer, every file given up on), the pill must settle, not pulse forever.
+  // A prose-only change never starts a judging turn, so its pill must settle
+  // rather than pulse. Past the session cap every unanswered file is given
+  // up on, which settles the pill as a failure below.
   const codePaths = review.files
     .filter((file) => !isProsePath(file.path) && file.content.trim())
     .map((file) => file.path);
-  const judgeable =
+  const judgeable = codePaths.length > 0;
+  // Code went unanswered: a failure, not "nothing to judge".
+  const allGivenUp =
     codePaths.length > 0 &&
-    !(reviewState.budgetSpent && !judged) &&
-    !codePaths.every((path) => reviewState.givenUp[path] === true);
+    codePaths.every((path) => reviewState.givenUp[path] === true);
 
   // Budget-paused files show as paused instead. The hook prunes emptied and
   // removed files from `stalled`.
@@ -124,7 +126,7 @@ export function ReviewBody() {
               <ReviewPills
                 judgeable={judgeable}
                 review={reviewState}
-                stalled={anyStalled}
+                stalled={anyStalled || allGivenUp}
               />
             }
             status={overallSummaryStatus(reviewState.summary)}
@@ -142,7 +144,7 @@ export function ReviewBody() {
               <ReviewPills
                 judgeable={judgeable}
                 review={reviewState}
-                stalled={anyStalled}
+                stalled={anyStalled || allGivenUp}
               />
             </div>
             {footnote}
