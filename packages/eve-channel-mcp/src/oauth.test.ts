@@ -47,6 +47,59 @@ describe('resolveOAuth', () => {
     );
   });
 
+  // C8: the rules eve's oauthResource() applies, which explicit settings skipped.
+  test('refuses URLs eve would refuse', () => {
+    const issuer = 'https://auth.example';
+
+    for (const resource of [
+      'http://app.example/mcp',
+      'https://user:pass@app.example/mcp',
+      'https://app.example/mcp?token=secret',
+      'https://app.example/mcp#part',
+    ]) {
+      assert.throws(
+        () => resolveOAuth({ issuer, resource }),
+        /HTTPS URL/,
+        resource,
+      );
+    }
+    for (const bad of [
+      'ftp://auth.example',
+      'http://auth.example',
+      'https://auth.example?x=1',
+    ]) {
+      assert.throws(
+        () =>
+          resolveOAuth({ issuer: bad, resource: 'https://app.example/mcp' }),
+        /HTTPS URL/,
+        bad,
+      );
+    }
+    for (const metadataPath of [
+      '//evil.example/meta',
+      'meta',
+      '/meta?x=1',
+      '/meta#x',
+    ]) {
+      assert.throws(
+        () =>
+          resolveOAuth({
+            issuer,
+            metadataPath,
+            resource: 'https://app.example/mcp',
+          }),
+        /metadataPath/,
+        metadataPath,
+      );
+    }
+    assert.ok(
+      resolveOAuth({
+        issuer: 'http://127.0.0.1:9000',
+        resource: 'http://localhost:3104/mcp',
+      }),
+    );
+  });
+
   test('refuses settings it cannot publish', () => {
     assert.throws(
       () => resolveOAuth({ issuer: 'https://a.example', resource: '/mcp' }),

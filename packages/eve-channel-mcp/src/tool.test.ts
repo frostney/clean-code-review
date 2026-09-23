@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import { runInNewContext } from 'node:vm';
 
+import type { StandardSchemaWithJSON } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
 import {
   defineMcpTool,
-  guardSchema,
+  describeOnly,
+  executeTool,
   McpToolOperationError,
   runToolCall,
 } from './tool.js';
@@ -76,58 +79,146 @@ describe('runToolCall', () => {
   });
 });
 
-describe('guardSchema', () => {
+describe('executeTool', () => {
   const reported: unknown[] = [];
   const report = (error: unknown) => {
     reported.push(error);
   };
-
-  // Blocker 6b: the SDK validates outside the callback and sent the throw to the client.
-  test('turns a throwing refinement into one generic issue', async () => {
-    const guarded = guardSchema(
-      z.string().refine(throwSecret),
-      'input',
+  const signal = new AbortController().signal;
+  const echo = async (value: unknown) => ({
+    content: [],
+    structuredContent: value as Record<string, unknown>,
+  });
+  const run = (
+    inputSchema: StandardSchemaWithJSON,
+    value: unknown,
+    outputSchema?: StandardSchemaWithJSON,
+  ) =>
+    executeTool(
+      { inputSchema, name: 'probe', ...(outputSchema ? { outputSchema } : {}) },
+      echo,
+      value,
+      signal,
       report,
     );
-    const result = await guarded['~standard'].validate('x');
+
+  test('turns a throwing refinement into one generic issue', async () => {
+    const result = await run(z.object({ v: z.string().refine(throwSecret) }), {
+      v: 'x',
+    });
 
     assert.equal(JSON.stringify(result).includes(SECRET), false);
     assert.match(JSON.stringify(result), /could not check this input/);
     assert.equal((reported.at(-1) as Error).message, SECRET);
   });
 
-  test('keeps deliberate input feedback', async () => {
-    const guarded = guardSchema(
-      z.number().min(0, 'Must not be negative.'),
-      'input',
-      report,
-    );
-    const result = await guarded['~standard'].validate(-1);
+  // C1: `instanceof Promise` missed a promise from another realm, and its
+  // rejection reached the client.
+  test('catches a rejection from a promise made in another realm', async () => {
+    const base = z.object({ v: z.string() });
+    const foreign: StandardSchemaWithJSON = {
+      '~standard': {
+        ...base['~standard'],
+        validate: () =>
+          runInNewContext(
+            `Promise.reject(new Error('${SECRET}'))`,
+          ) as Promise<never>,
+      },
+    };
+    const result = await run(foreign, { v: 'x' });
 
-    assert.match(JSON.stringify(result), /Must not be negative/);
+    assert.equal(JSON.stringify(result).includes(SECRET), false);
+    assert.match(JSON.stringify(result), /could not check this input/);
+  });
+
+  test('keeps deliberate input feedback, in the SDK wording', async () => {
+    const result = await run(
+      z.object({ n: z.number().min(0, 'Must not be negative.') }),
+      {
+        n: -1,
+      },
+    );
+
+    assert.deepEqual(result.content, [
+      {
+        text: 'Input validation error: Invalid arguments for tool probe: n: Must not be negative.',
+        type: 'text',
+      },
+    ]);
   });
 
   test('logs, and does not send, why the server output failed its schema', async () => {
-    const guarded = guardSchema(
+    const result = await run(
+      z.object({ count: z.unknown() }),
+      { count: SECRET },
       z.object({ count: z.number() }),
-      'output',
-      report,
     );
-    const result = await guarded['~standard'].validate({ count: SECRET });
 
     assert.equal(JSON.stringify(result).includes(SECRET), false);
     assert.match(JSON.stringify(result), /could not check this output/);
   });
 
-  test('keeps the JSON Schema the SDK lists', () => {
+  test('does not start the call once the client has gone', async () => {
+    const gone = new AbortController();
+    let called = false;
+
+    gone.abort();
+    const result = await executeTool(
+      { inputSchema: z.object({}), name: 'probe' },
+      async () => {
+        called = true;
+
+        return { content: [] };
+      },
+      {},
+      gone.signal,
+      report,
+    );
+
+    assert.equal(called, false);
+    assert.equal(result.isError, true);
+  });
+});
+
+describe('describeOnly', () => {
+  const target = { target: 'draft-2020-12' } as const;
+
+  test('keeps the JSON Schema the SDK lists, and leaves validation to executeTool', async () => {
     const schema = z.object({ celsius: z.number() });
-    const guarded = guardSchema(schema, 'input', report);
-    const target = { target: 'draft-2020-12' } as const;
+    const described = describeOnly(schema, () => undefined);
 
     assert.deepEqual(
-      guarded['~standard'].jsonSchema.input(target),
+      described['~standard'].jsonSchema.input(target),
       schema['~standard'].jsonSchema.input(target),
     );
+    assert.deepEqual(await described['~standard'].validate('anything'), {
+      value: 'anything',
+    });
+  });
+
+  // C1: a throwing conversion's text reached the client on tools/list.
+  test('replaces a throwing conversion with a generic message', () => {
+    const base = z.object({});
+    const reported: unknown[] = [];
+    const described = describeOnly(
+      {
+        '~standard': {
+          ...base['~standard'],
+          jsonSchema: { input: throwSecret, output: throwSecret },
+        },
+      },
+      (error) => {
+        reported.push(error);
+      },
+    );
+
+    assert.throws(
+      () => described['~standard'].jsonSchema.input(target),
+      (error: Error) =>
+        !error.message.includes(SECRET) &&
+        /could not describe this tool/.test(error.message),
+    );
+    assert.equal((reported[0] as Error).message, SECRET);
   });
 });
 

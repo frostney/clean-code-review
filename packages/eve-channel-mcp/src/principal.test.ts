@@ -47,4 +47,17 @@ describe('isolatePrincipal', () => {
     }, TypeError);
     assert.equal('leak' in shared.attributes, false);
   });
+
+  // C12: copying `__proto__` by assignment set the copy's prototype instead.
+  test('keeps a __proto__ attribute a plain key', () => {
+    const copy = isolatePrincipal({
+      ...PRINCIPAL,
+      attributes: JSON.parse('{"__proto__":["admin"],"team":"core"}'),
+    });
+
+    assert.ok(copy);
+    assert.equal(Object.getPrototypeOf(copy.attributes), Object.prototype);
+    assert.deepEqual(Object.keys(copy.attributes), ['__proto__', 'team']);
+    assert.equal((copy.attributes as Record<string, unknown>)[0], undefined);
+  });
 });

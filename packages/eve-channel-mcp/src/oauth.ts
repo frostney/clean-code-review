@@ -26,7 +26,24 @@ export interface OAuthConfig {
 
 const WELL_KNOWN = '/.well-known/oauth-protected-resource';
 
-function absoluteUrl(label: string, value: string): URL {
+/** `localhost`, `*.localhost`, 127.0.0.0/8 and `::1`, as eve's `oauthResource()` counts them. */
+function isLoopbackHostname(hostname: string): boolean {
+  const name = hostname.toLowerCase().replace(/\.$/, '');
+
+  return (
+    name === 'localhost' ||
+    name.endsWith('.localhost') ||
+    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(name) ||
+    name === '[::1]'
+  );
+}
+
+/**
+ * The rules eve's `oauthResource()` applies: HTTPS, or HTTP on loopback
+ * only, and no credentials, query or fragment, since these URLs are
+ * published to anyone who asks.
+ */
+function identifierUrl(label: string, value: string): URL {
   let url: URL;
 
   try {
@@ -34,15 +51,54 @@ function absoluteUrl(label: string, value: string): URL {
   } catch {
     throw new Error(`oauth.${label} must be an absolute URL.`);
   }
-  if (url.hash) {
-    throw new Error(`oauth.${label} must not have a fragment.`);
+  const secure =
+    url.protocol === 'https:' ||
+    (url.protocol === 'http:' && isLoopbackHostname(url.hostname));
+
+  if (
+    !(
+      secure &&
+      url.username === '' &&
+      url.password === '' &&
+      url.search === '' &&
+      url.hash === ''
+    )
+  ) {
+    throw new Error(
+      `oauth.${label} must be an HTTPS URL without credentials, query or fragment (HTTP only on loopback).`,
+    );
   }
 
   return url;
 }
 
+/** An absolute path on the resource's own origin, with no query or fragment. */
+function checkedMetadataPath(path: string): string {
+  const probe = 'https://resource.invalid';
+  let resolved: URL | null = null;
+
+  try {
+    resolved = new URL(path, probe);
+  } catch {
+    // Reported below.
+  }
+  if (
+    !path.startsWith('/') ||
+    path.startsWith('//') ||
+    resolved?.origin !== probe ||
+    resolved.search !== '' ||
+    resolved.hash !== ''
+  ) {
+    throw new Error(
+      'oauth.metadataPath must be an absolute path without a host, query or fragment.',
+    );
+  }
+
+  return path;
+}
+
 export function resolveOAuth(options: McpOAuthOptions): OAuthConfig {
-  const resource = absoluteUrl('resource', options.resource);
+  const resource = identifierUrl('resource', options.resource);
   const servers =
     options.issuer === undefined
       ? (options.authorizationServers ?? [])
@@ -58,16 +114,13 @@ export function resolveOAuth(options: McpOAuthOptions): OAuthConfig {
     );
   }
   for (const server of servers) {
-    absoluteUrl('issuer', server);
+    identifierUrl('issuer', server);
   }
   const resourcePath = resource.pathname.replace(/(.)\/$/, '$1');
-  const metadataPath =
+  const metadataPath = checkedMetadataPath(
     options.metadataPath ??
-    (resourcePath === '/' ? WELL_KNOWN : `${WELL_KNOWN}${resourcePath}`);
-
-  if (!metadataPath.startsWith('/')) {
-    throw new Error('oauth.metadataPath must start with "/".');
-  }
+      (resourcePath === '/' ? WELL_KNOWN : `${WELL_KNOWN}${resourcePath}`),
+  );
 
   return {
     document: {

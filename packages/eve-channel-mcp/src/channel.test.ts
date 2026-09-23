@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, test } from 'node:test';
+import { runInNewContext } from 'node:vm';
 
 import type { RouteHandlerArgs } from 'eve/channels';
 import { type AuthFn, none, oauthResource } from 'eve/channels/auth';
@@ -128,6 +129,8 @@ function channel(overrides: Partial<McpServerChannelOptions> = {}) {
   return mcpServerChannel({
     allowedHosts: ['127.0.0.1'],
     auth: none(),
+    // A self-hosted setup must say how it knows about HTTPS; these tests are local.
+    https: 'off',
     name: 'test',
     onToolError: () => undefined,
     route: '/mcp',
@@ -162,6 +165,7 @@ async function send(
       headers: {
         accept: 'application/json, text/event-stream',
         'content-type': 'application/json',
+        host: new URL(init.url ?? `http://127.0.0.1${path}`).host,
         ...init.headers,
       },
       method,
@@ -231,6 +235,20 @@ describe('options', () => {
         /concurrency/,
       );
     }
+  });
+
+  // C6: `allowBatches: 'false'` switched batches on.
+  test('takes only a boolean or a plain object for allowBatches', () => {
+    const loose = (value: unknown) => value as never;
+
+    for (const bad of ['false', 1, [], null, new Date(0)]) {
+      assert.throws(
+        () => channel({ allowBatches: loose(bad) }),
+        /allowBatches/,
+        String(bad),
+      );
+    }
+    assert.ok(channel({ allowBatches: { maxMessages: 2 } }));
   });
 
   test('refuses settings it does not know', () => {
@@ -388,19 +406,55 @@ describe('admission', () => {
   });
 
   // Blocker 3.
-  test('refuses plain HTTP off loopback, whatever X-Forwarded-Proto says', async () => {
-    const target = channel({ allowedHosts: ['mcp.example'] });
-    const { status } = await send(target, {
+  test('on Vercel refuses plain HTTP, whatever X-Forwarded-Proto says', async () => {
+    process.env.VERCEL = '1';
+    process.env.VERCEL_ENV = 'production';
+    const before = calls;
+    const { status } = await send(channel({ https: 'auto' }), {
       ...toolCall('whoami'),
-      headers: {
-        ...toolCall('whoami').headers,
-        host: 'mcp.example',
-        'x-forwarded-proto': 'https',
-      },
-      url: 'http://mcp.example/mcp',
+      headers: { ...toolCall('whoami').headers, 'x-forwarded-proto': 'https' },
+      url: 'http://127.0.0.1/mcp',
     });
 
     assert.equal(status, 403);
+    assert.equal(calls, before);
+  });
+
+  // L5 and C2: every refused request is reported, and a reporter that throws
+  // or rejects neither reaches the client nor becomes an unhandled rejection.
+  test('reports each request a misconfigured deployment refuses, safely', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    const reported: string[] = [];
+
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      for (const onError of [
+        (error: Error) => {
+          reported.push(error.message);
+          throw new Error(SECRET);
+        },
+        async (error: Error) => {
+          reported.push(error.message);
+          throw new Error(SECRET);
+        },
+      ]) {
+        const target = channel({ https: 'auto', onError });
+
+        for (const _ of [1, 2]) {
+          const { body, status } = await send(target, toolCall('whoami'));
+
+          assert.equal(status, 500);
+          assert.match(JSON.stringify(body), /allowedHosts.*https/);
+          assert.equal(JSON.stringify(body).includes(SECRET), false);
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+    assert.equal(reported.length, 4);
+    assert.deepEqual(unhandled, []);
   });
 
   test('runs auth before reading the body', async () => {
@@ -491,6 +545,113 @@ describe('isolation and errors', () => {
     const { body } = await send(channel(), toolCall('refining', { value: 3 }));
 
     assert.match(JSON.stringify(body), /value/);
+  });
+});
+
+describe('schemas', () => {
+  // C1: a schema whose JSON Schema conversion throws leaked on tools/list.
+  test('keeps a throwing JSON Schema conversion out of tools/list', async () => {
+    const base = z.object({});
+    const undescribable = defineMcpTool({
+      async call() {
+        return { content: [] };
+      },
+      definition: {
+        inputSchema: {
+          '~standard': {
+            ...base['~standard'],
+            jsonSchema: {
+              input: () => {
+                throw new Error(SECRET);
+              },
+              output: () => {
+                throw new Error(SECRET);
+              },
+            },
+          },
+        },
+        name: 'undescribable',
+      },
+    });
+
+    for (const era of [modern('tools/list'), legacy('tools/list')]) {
+      const { body } = await send(channel({ tools: [undescribable] }), era);
+
+      assert.equal(JSON.stringify(body).includes(SECRET), false);
+    }
+  });
+
+  // C1: a rejection from a promise made in another realm slipped past `instanceof Promise`.
+  test('keeps a foreign-realm rejection from reaching the client', async () => {
+    const base = z.object({});
+    const foreign = defineMcpTool({
+      async call() {
+        return { content: [] };
+      },
+      definition: {
+        inputSchema: {
+          '~standard': {
+            ...base['~standard'],
+            validate: () =>
+              runInNewContext(
+                `Promise.reject(new Error('${SECRET}'))`,
+              ) as Promise<never>,
+          },
+        },
+        name: 'foreign',
+      },
+    });
+
+    for (const era of [
+      toolCall('foreign'),
+      legacy('tools/call', { arguments: {}, name: 'foreign' }),
+    ]) {
+      const { body } = await send(channel({ tools: [foreign] }), era);
+
+      assert.equal((body as Result).result.isError, true);
+      assert.equal(JSON.stringify(body).includes(SECRET), false);
+    }
+  });
+
+  // C4: validation ran outside the batch bound, so a slow validator ran in parallel.
+  test('validates inside the batch concurrency bound', async () => {
+    const base = z.object({});
+    let validating = 0;
+    let peakValidating = 0;
+    const slowlyChecked = defineMcpTool({
+      async call() {
+        return { content: [] };
+      },
+      definition: {
+        inputSchema: {
+          '~standard': {
+            ...base['~standard'],
+            validate: async (value: unknown) => {
+              validating++;
+              peakValidating = Math.max(peakValidating, validating);
+              await new Promise((resolve) => setTimeout(resolve, 10));
+              validating--;
+
+              return { value };
+            },
+          },
+        },
+        name: 'slowly_checked',
+      },
+    });
+    const batch = [1, 2, 3].map((id) => ({
+      id,
+      jsonrpc: '2.0',
+      method: 'tools/call',
+      params: { arguments: {}, name: 'slowly_checked' },
+    }));
+    const { status } = await send(
+      channel({ allowBatches: true, tools: [slowlyChecked] }),
+      { body: batch, headers: { 'mcp-protocol-version': '2025-11-25' } },
+    );
+
+    assert.equal(status, 200);
+    assert.equal(peakValidating, 1);
   });
 });
 

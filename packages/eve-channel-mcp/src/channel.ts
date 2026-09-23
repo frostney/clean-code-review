@@ -22,6 +22,7 @@ import {
   type AllowedHosts,
   admissionRefusal,
   type HttpsPolicy,
+  MISCONFIGURED_MESSAGE,
   normalizeHostname,
 } from './admission.js';
 import { type BatchLimits, messageRefusal } from './messages.js';
@@ -39,6 +40,7 @@ import {
   jsonRpcError,
   readJsonRpcBody,
 } from './request.js';
+import { createSchedule } from './schedule.js';
 import type {
   McpHttpContext,
   McpRequestScope,
@@ -73,20 +75,28 @@ export interface McpServerChannelOptions {
   readonly version: string;
   readonly instructions?: string;
   readonly tools?: readonly McpTool[];
-  /** The SDK's own server, per request, for anything `tools` does not cover. */
+  /**
+   * The SDK's own server, per request, for anything `tools` does not cover.
+   * What is registered on it directly bypasses this package's error
+   * handling and the batch concurrency bound; `context.addTool` does not.
+   */
   readonly register?: (
     server: McpServer,
     context: McpRegisterContext,
   ) => void | Promise<void>;
   /** Hostnames this endpoint answers to, or `'any'`. Required outside `eve dev` and Vercel. */
   readonly allowedHosts?: AllowedHosts;
-  /** How to tell a request arrived over HTTPS; loopback is always allowed. Default `'auto'`. */
+  /** How to tell a request arrived over HTTPS. `eve dev` and `vercel dev` take plain HTTP. Default `'auto'`. */
   readonly https?: HttpsPolicy;
   /** Protected-resource metadata for OAuth sign-in. */
   readonly oauth?: McpOAuthOptions;
   /** `stateless` (default) also serves 2025-era clients; `reject` serves 2026-07-28 only. */
   readonly legacy?: 'stateless' | 'reject';
-  /** Off by default: a batch runs many calls behind one admitted request. */
+  /**
+   * Off by default: a batch runs many calls behind one admitted request.
+   * `concurrency` bounds `tools` and `addTool` tools only, validation
+   * included; anything registered straight on the server is not bounded.
+   */
   readonly allowBatches?: boolean | McpBatchOptions;
   /** Shaping of 2026-07-28 responses. Default `'auto'`. */
   readonly responseMode?: 'auto' | 'json' | 'sse';
@@ -96,8 +106,12 @@ export interface McpServerChannelOptions {
   readonly bodyTimeoutMs?: number;
   /** A tool's unexpected failure, which the client sees only as an error id. */
   readonly onToolError?: ToolErrorReporter;
-  /** Requests the SDK refused, its out-of-band failures, and a misconfigured deployment. */
-  readonly onError?: (error: Error) => void;
+  /**
+   * Requests the SDK refused, its out-of-band failures, each request refused
+   * for a deployment without allowedHosts or https, and a malformed principal.
+   * A throw or rejection here is ignored.
+   */
+  readonly onError?: (error: Error) => void | Promise<void>;
 }
 
 const SERVER_ERROR = -32_000;
@@ -144,7 +158,17 @@ function batchLimits(
   if (option === undefined || option === false) {
     return null;
   }
-  const given = option === true ? {} : option;
+  const plainObject =
+    typeof option === 'object' &&
+    option !== null &&
+    [Object.prototype, null].includes(Object.getPrototypeOf(option));
+
+  if (option !== true && !plainObject) {
+    throw new Error(
+      'mcpServerChannel: allowBatches must be true, false, or { maxMessages, concurrency }.',
+    );
+  }
+  const given: McpBatchOptions = option === true ? {} : option;
 
   return {
     concurrency: positiveInteger(
@@ -214,31 +238,6 @@ function assertOptions(options: McpServerChannelOptions): void {
   }
 }
 
-function semaphore(limit: number): <T>(run: () => Promise<T>) => Promise<T> {
-  let active = 0;
-  const waiting: (() => void)[] = [];
-
-  return async (run) => {
-    if (active < limit) {
-      active++;
-    } else {
-      // The finishing call hands its slot over, so no newcomer can take it in between.
-      await new Promise<void>((resolve) => waiting.push(resolve));
-    }
-    try {
-      return await run();
-    } finally {
-      const next = waiting.shift();
-
-      if (next) {
-        next();
-      } else {
-        active--;
-      }
-    }
-  };
-}
-
 /**
  * Publishes an eve app's own typed tools as an MCP server: 2026-07-28 and,
  * by default, stateless 2025-era serving, through the SDK's `createMcpHandler`.
@@ -294,18 +293,23 @@ export function mcpServerChannel(options: McpServerChannelOptions): Channel {
     ((error, errorId) => {
       console.error(`[eve-channel-mcp] tool call failed (${errorId})`, error);
     });
-  let misconfigurationReported = false;
+  const onError = options.onError;
+  // A reporter must not decide what the client reads, nor, by rejecting,
+  // take the process down as an unhandled rejection.
+  const reportError = (error: Error): void => {
+    try {
+      Promise.resolve((onError ?? console.error)(error)).catch(() => undefined);
+    } catch {
+      // Swallowed on purpose: the reporter's own failure has nowhere safe to go.
+    }
+  };
 
   function admit(request: Request, checkOrigin: boolean): Response | null {
     const refused = admissionRefusal(request, { ...policy, checkOrigin });
 
-    if (refused?.status === MISCONFIGURED && !misconfigurationReported) {
-      misconfigurationReported = true;
-      (options.onError ?? console.error)(
-        new Error(
-          'eve-channel-mcp: set allowedHosts (or allowedHosts: "any" behind a proxy that checks Host) outside eve dev and Vercel.',
-        ),
-      );
+    // Every refused request is reported, so a misconfigured deployment leaves a trail.
+    if (refused?.status === MISCONFIGURED) {
+      reportError(new Error(`eve-channel-mcp: ${MISCONFIGURED_MESSAGE}`));
     }
 
     return refused;
@@ -351,7 +355,7 @@ export function mcpServerChannel(options: McpServerChannelOptions): Channel {
     const principal = isolatePrincipal(accepted);
 
     if (principal === null) {
-      (options.onError ?? console.error)(
+      reportError(
         new Error(
           'eve-channel-mcp: an auth strategy accepted the request without a well-formed principal.',
         ),
@@ -413,13 +417,13 @@ export function mcpServerChannel(options: McpServerChannelOptions): Channel {
       auth,
       http: { channel, request, requestIp: channel.requestIp },
       report,
-      schedule: semaphore(batches?.concurrency ?? 1),
+      schedule: createSchedule(batches?.concurrency ?? 1),
     };
     // One handler per request: its factory closes over this caller's scope,
     // which the SDK would otherwise carry only as an OAuth-shaped `authInfo`.
     const handler = createMcpHandler(({ era }) => buildServer(scope, era), {
       legacy,
-      ...(options.onError === undefined ? {} : { onerror: options.onError }),
+      ...(onError === undefined ? {} : { onerror: reportError }),
       ...(responseMode === undefined ? {} : { responseMode }),
     });
 

@@ -14,22 +14,24 @@ function copyAttributes(value: unknown): Attributes | null {
   if (!isRecord(value)) {
     return null;
   }
-  const copy: Record<string, string | readonly string[]> = {};
+  const entries: [string, string | readonly string[]][] = [];
 
   for (const [key, entry] of Object.entries(value)) {
     if (typeof entry === 'string') {
-      copy[key] = entry;
+      entries.push([key, entry]);
     } else if (
       Array.isArray(entry) &&
       entry.every((item) => typeof item === 'string')
     ) {
-      copy[key] = Object.freeze([...entry]);
+      entries.push([key, Object.freeze([...entry])]);
     } else {
       return null;
     }
   }
 
-  return Object.freeze(copy);
+  // `fromEntries` defines own properties, so a `__proto__` key stays a key;
+  // assigning it would set the copy's prototype instead.
+  return Object.freeze(Object.fromEntries(entries));
 }
 
 /**

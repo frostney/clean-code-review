@@ -11,8 +11,12 @@ directly in the route handler, with no model call unless a tool makes one.
 
 It serves MCP `2026-07-28` and, by default, 2025-era clients (`2025-11-25`,
 `2025-06-18` and older) through `createMcpHandler` from
-`@modelcontextprotocol/server`. It uses only eve's public API: `defineChannel`,
+`@modelcontextprotocol/server`. It is built on eve's public API: `defineChannel`,
 the route helpers from `eve/channels` and `routeAuth` from `eve/channels/auth`.
+One further dependency on eve is not a public API: to refuse an
+`oauthResource()` policy that comes without the `oauth` option, it looks for
+the registered symbol `Symbol.for('eve.channels.auth.oauthResource')` that
+eve marks such policies with. If eve renames it, only that refusal is lost.
 
 ## Install
 
@@ -73,9 +77,9 @@ not include it: clone the repository and run `bun run example` in
 | `name`, `version` | required | The server's identity in `server/discover` and `initialize`. |
 | `instructions` | none | Sent in `server/discover` and `initialize`. |
 | `tools` | none | Tools made with `defineMcpTool`. You need `tools`, `register`, or both. |
-| `register(server, context)` | none | Called once per request with the SDK's `McpServer`. `context` holds `era` (`modern` or `legacy`), `auth`, the HTTP details and `addTool`. See [Errors](#errors). |
+| `register(server, context)` | none | Called once per request with the SDK's `McpServer`. `context` holds `era` (`modern` or `legacy`), `auth`, the HTTP details and `addTool`. What you register on `server` directly bypasses this package's error handling and the batch concurrency bound; see [Errors](#errors). |
 | `allowedHosts` | see [Host checks](#host-and-origin-checks) | A list of hostnames, or `'any'`. Required outside `eve dev` and Vercel. |
-| `https` | `'auto'` | `'auto'`, `'trusted-proxy'` or `'off'`. See [HTTPS](#https). |
+| `https` | `'auto'` | `'auto'`, `'trusted-proxy'` or `'off'`. Outside `eve dev` and Vercel, `'auto'` is a setup error. See [HTTPS](#https). |
 | `oauth` | none | Protected-resource metadata. See [OAuth](#oauth). |
 | `legacy` | `'stateless'` | `'reject'` serves `2026-07-28` only. |
 | `allowBatches` | `false` | `true`, or `{ maxMessages, concurrency }`. See [Batches](#batches). |
@@ -83,7 +87,7 @@ not include it: clone the repository and run `bun run example` in
 | `maxBodyBytes` | 1 MiB | The same limit eve's `mcpChannel` uses. A larger body gets a `413`. |
 | `bodyTimeoutMs` | 10 000 | A body that has not fully arrived by then gets a `408`. |
 | `onToolError(error, errorId)` | `console.error` | Called when a tool, or a schema, fails unexpectedly. A throw or rejection here is ignored. |
-| `onError(error)` | none | Requests the SDK refused, its out-of-band failures, a missing `allowedHosts`, and an auth strategy that returned a malformed principal. |
+| `onError(error)` | `console.error` for the last two | Requests the SDK refused, its out-of-band failures, every request refused because `allowedHosts` or `https` is not set for the deployment, and an auth strategy that returned a malformed principal. A throw or rejection here is ignored. |
 
 Every option is checked when the channel is built. Unknown values, empty host
 lists, and limits that are not positive integers (`NaN`, `Infinity`, `0`)
@@ -140,18 +144,21 @@ that uses only that much can be moved to eve's version. The differences:
 - **An output schema failure** is a fault in your tool, so the client gets
   only a generic message and the details go to `onToolError`.
 
-Tools registered directly with `server.registerTool` inside `register` get
-none of this: the SDK sends whatever they throw to the client. Register them
-with `context.addTool(defineMcpTool(…))` instead, or handle their errors
-yourself. The same applies to resources and prompts registered there.
+Tools, resources and prompts registered directly on `server` inside
+`register` get none of this: the SDK sends their own error text to the
+client, and they run outside the batch concurrency bound. Register tools with
+`context.addTool(defineMcpTool(…))` instead, and catch errors yourself in
+anything else registered there.
 
 ## Admission
 
 Each request passes these checks in this order before anything reaches the SDK:
 
-1. The `Host` header is checked against `allowedHosts`.
-2. The request must have arrived over HTTPS, unless its host is loopback.
-3. A browser request's `Origin` must be one of the allowed hosts.
+1. The `Host` header must be a bare authority that matches the request URL,
+   on the `allowedHosts` list.
+2. The request must have arrived over HTTPS, except under `eve dev` and
+   `vercel dev`.
+3. A browser request's `Origin` must be exactly this endpoint's origin.
 4. eve's `routeAuth` runs, and the principal it accepts must be well formed.
 5. The body is read once, bounded by `maxBodyBytes` and `bodyTimeoutMs`.
 6. Batch rules and `subscriptions/listen` are checked, and so are the routing
@@ -159,6 +166,15 @@ Each request passes these checks in this order before anything reaches the SDK:
 
 The OAuth metadata routes run only the first two checks. They are public and
 readable from any origin by design, as RFC 9728 expects.
+
+Auth runs before the body is read, so the body bounds do not apply to an auth
+strategy that reads the body itself: it can wait on a slow upload or buffer a
+large one. Keep auth to headers, and make decisions that depend on the
+operation (which tool, which arguments) inside the tool, where the body has
+already been read within its bounds.
+
+None of these checks shows where a connection came from. That depends on
+where the server listens: `eve dev` listens on loopback.
 
 ### Host and origin checks
 
@@ -172,24 +188,35 @@ attacker domain. So the `Host` header is checked against an allowlist:
   you set `allowedHosts`.
 - **Vercel**: any host, because Vercel's edge only routes the project's own
   domains to the deployment.
-- **Anywhere else**: `allowedHosts` is required. Until it is set, every
-  request gets a 500 and `onError` is told why. Use `'any'` only behind a
-  proxy that checks `Host` itself.
+- **Anywhere else**: `allowedHosts` is required, and so is an `https` other
+  than `'auto'`. Until both are set, every request gets a 500 naming both, and
+  each one is reported to `onError`. Use `'any'` only behind a proxy that
+  checks `Host` itself.
 
-A browser request's `Origin` hostname must be on the same list; on Vercel or
-with `'any'`, it must match the `Host` hostname.
+The `Host` header must also be a bare authority (no userinfo, path, query or
+fragment) naming the same authority as the URL the server built for the
+request, and it must be present.
+
+A browser request's `Origin` must equal this endpoint's origin exactly:
+scheme, host and port. There is no cross-origin allowlist, because nothing
+here needs one: MCP clients do not run as web pages on another origin.
 
 ### HTTPS
 
 HTTP Basic credentials and bearer tokens must not cross the network in the
-clear. Loopback hosts are always allowed. Otherwise:
+clear. `eve dev` and `vercel dev` take plain HTTP whatever `https` says; a
+loopback `Host` header does not, since any client can send one. Otherwise:
 
-- **`'auto'`**: HTTPS as reported by Vercel's edge, and nothing else. A
-  self-hosted server cannot tell a real HTTPS connection from a client that
-  simply sends `X-Forwarded-Proto: https`, so `'auto'` refuses self-hosted
-  traffic that is not on loopback.
-- **`'trusted-proxy'`**: trusts `X-Forwarded-Proto` or the request URL. Use it
-  only when a proxy you run terminates TLS and overwrites that header.
+- **`'auto'`**: HTTPS as reported by Vercel's edge, and nothing else. Under
+  `eve start`, the request URL describes the connection to eve itself, which
+  is plain HTTP behind a TLS-terminating proxy, and eve's server ignores
+  `X-Forwarded-Proto` unless it is configured to trust a proxy. So the
+  channel cannot tell how the client connected, and `'auto'` outside Vercel
+  and development is refused as a setup error (500) until you choose.
+- **`'trusted-proxy'`**: a present `X-Forwarded-Proto` decides, by its last
+  entry, the one the nearest proxy wrote: `http` is refused even when the
+  proxy reached eve over TLS. Without the header, the request URL decides.
+  Use it only when a proxy you run terminates TLS and overwrites that header.
 - **`'off'`**: no check, for example on a private network.
 
 ## Auth
@@ -243,9 +270,12 @@ and every call in a batch runs behind one auth decision and one request that a
 rate limit counts once.
 
 `allowBatches: true` accepts up to 10 messages per batch and runs their tool
-calls one at a time. `{ maxMessages, concurrency }` changes either bound. A
-rate limit that should count calls rather than requests has to count inside
-the tool.
+calls one at a time, argument and result validation included. A queued call
+whose client has disconnected never starts. `{ maxMessages, concurrency }`
+changes either bound; anything else throws when the channel is built. The
+concurrency bound covers tools from `tools` and `context.addTool` only, not
+tools, resources or prompts registered directly on the server. A rate limit
+that should count calls rather than requests has to count inside the tool.
 
 ## Protocol eras, streams, GET and DELETE
 
@@ -257,9 +287,11 @@ Each request gets a new `McpServer` built from `tools` and `register`.
   streams.
 - **2025 era**: a request without the envelope. It is served statelessly over
   SSE. `Mcp-Method` and `Mcp-Name` are optional here, but when present they
-  must agree with the body, or the request gets a 400 (`-32020`). A policy
-  that authorises by operation should still read the body, or decide inside
-  the tool, because a request can simply leave the headers out.
+  must agree with the body, or the request gets a 400 (`-32020`). As in the
+  SDK, this applies to requests, not notifications; `Mcp-Name` is compared
+  only for `tools/call`, `prompts/get` and `resources/read`, after decoding
+  its `=?base64?…?=` form. A request can simply leave the headers out, so
+  decide by operation inside the tool, not in auth.
 - **`subscriptions/listen`** is refused with `-32601`. Each request has its
   own event bus that nothing publishes to, so a listen stream would stay open
   and never receive anything. For the same reason `tools.listChanged` is
@@ -267,9 +299,11 @@ Each request gets a new `McpServer` built from `tools` and `register`.
 - **GET and DELETE** answer 405 with a JSON-RPC body, since there is no
   session to stream or end.
 
-A response streams for as long as its tool runs. A 2025-era client's
-`notifications/cancelled` arrives as a separate request and does not reach a
-call running on another one. Only a disconnect aborts `signal` there.
+A response streams for as long as its tool runs, and the channel sets no
+deadline of its own. A 2025-era client's `notifications/cancelled` arrives as
+a separate request and does not reach a call running on another one; only a
+disconnect aborts `signal` there. Bound slow work inside the tool, for
+example with `AbortSignal.any([signal, AbortSignal.timeout(ms)])`.
 
 ## What you still add yourself
 
@@ -279,13 +313,14 @@ call running on another one. Only a disconnect aborts `signal` there.
   `channel.attachSession` or `channel.from`, and that work spends model
   tokens.
 - **Timeouts on tool work.** Nothing here stops a slow tool before the host's
-  function timeout does.
+  function timeout does; combine `signal` with a timeout of your own.
 
 ### How far to trust `requestIp`
 
 `requestIp` is what eve's host reports:
 
-- **Vercel**: the first `X-Forwarded-For` entry, which Vercel's edge sets.
+- **Vercel**: the first `X-Forwarded-For` entry. Its provenance rests on
+  Vercel's edge setting that header; this package cannot check it.
 - **Standalone Node** (`eve start`): the socket's peer. Behind a reverse
   proxy that is the proxy, so every caller shares one address.
 - **`eve dev`**: an address the dev proxy signs.
@@ -311,6 +346,12 @@ two can only coexist on different paths.
     self-hosted eve.
   - For a named workspace agent, a route declared as `/eve/v1/tools` is served
     at `/eve/<name>/v1/tools`.
+  - Self-hosted (`next start`), Next reaches eve through a rewrite to
+    `127.0.0.1`, and eve sees that hop: `Host` names `127.0.0.1` and the
+    scheme is plain HTTP, whatever the client used. The channel cannot check
+    the client's host or scheme there, so enforce them at Next or at the
+    proxy in front of it, and configure the channel for the hop
+    (`allowedHosts: ['127.0.0.1'], https: 'off'`).
 
 ## Channel file
 

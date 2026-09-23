@@ -9,6 +9,8 @@ import type {
 import type { RouteHandlerArgs } from 'eve/channels';
 import type { routeAuth } from 'eve/channels/auth';
 
+import type { Schedule } from './schedule.js';
+
 /** The principal eve's auth walk accepted; eve does not export the type by name. */
 export type SessionAuthContext = Exclude<
   Awaited<ReturnType<typeof routeAuth>>,
@@ -35,8 +37,8 @@ export interface McpHttpContext {
 export interface McpRequestScope {
   readonly auth: SessionAuthContext;
   readonly http: McpHttpContext;
-  /** Runs one tool call under the request's concurrency bound. */
-  readonly schedule: <T>(run: () => Promise<T>) => Promise<T>;
+  /** Runs one tool call, validation included, under the request's concurrency bound. */
+  readonly schedule: Schedule;
   readonly report: ToolErrorReporter;
 }
 
@@ -173,44 +175,123 @@ export async function runToolCall(
   }
 }
 
-type Validate = StandardSchemaWithJSON['~standard']['validate'];
-type ValidateResult = Awaited<ReturnType<Validate>>;
+type Standard = StandardSchemaWithJSON['~standard'];
+type ValidateResult = Awaited<ReturnType<Standard['validate']>>;
+type Issue = NonNullable<ValidateResult['issues']>[number];
+
+/** The SDK's own wording, so a client sees the same text either way. */
+function formatIssues(issues: readonly Issue[]): string {
+  return issues
+    .map((issue) =>
+      issue.path?.length
+        ? `${issue.path.map((p) => String(typeof p === 'object' ? p.key : p)).join('.')}: ${issue.message}`
+        : issue.message,
+    )
+    .join(', ');
+}
+
+function textError(text: string): CallToolResult {
+  return { content: [{ text, type: 'text' }], isError: true };
+}
+
+const CANCELLED = textError('The call was cancelled.');
 
 /**
- * The SDK runs schemas outside the tool callback and sends whatever they
- * throw to the client. A throw becomes one generic issue; an output schema's
- * issues describe the server's own result, so they are logged, not sent.
+ * What the SDK is given: the schema's JSON Schema for listing, and a
+ * validator that accepts anything. The real validation runs in
+ * `executeTool`, under the concurrency bound and with one catch for every
+ * way a schema can fail. A conversion that throws is reported and replaced
+ * by one generic message, since the SDK would send its text on `tools/list`.
  */
-export function guardSchema(
+export function describeOnly(
   schema: StandardSchemaWithJSON,
-  stage: 'input' | 'output',
   report: ToolErrorReporter,
 ): StandardSchemaWithJSON {
   const standard = schema['~standard'];
-  const generic = (error: unknown): ValidateResult => ({
-    issues: [
-      {
-        message: `The server could not check this ${stage} (errorId: ${reportSafely(report, error)}).`,
-      },
-    ],
-  });
-  const settle = (result: ValidateResult): ValidateResult =>
-    stage === 'output' && result.issues?.length
-      ? generic(new Error(result.issues.map((i) => i.message).join('; ')))
-      : result;
-  const validate: Validate = (value, options) => {
-    try {
-      const result = standard.validate(value, options);
+  const convert =
+    (io: 'input' | 'output'): Standard['jsonSchema']['input'] =>
+    (options) => {
+      try {
+        return standard.jsonSchema[io](options);
+      } catch (error) {
+        throw new Error(
+          `The server could not describe this tool (errorId: ${reportSafely(report, error)}).`,
+        );
+      }
+    };
 
-      return result instanceof Promise
-        ? result.then(settle, generic)
-        : settle(result);
-    } catch (error) {
-      return generic(error);
-    }
+  return {
+    '~standard': {
+      ...standard,
+      jsonSchema: { input: convert('input'), output: convert('output') },
+      validate: (value) => ({ value }),
+    },
   };
+}
 
-  return { '~standard': { ...standard, validate } };
+/**
+ * Validates, calls and validates again. A schema that throws, synchronously
+ * or through a promise from any realm, becomes one generic issue; an output
+ * schema's issues describe the server's own result, so they are logged and
+ * not sent.
+ */
+export async function executeTool(
+  definition: McpToolDefinition<
+    StandardSchemaWithJSON,
+    StandardSchemaWithJSON | undefined
+  >,
+  call: (value: unknown) => Promise<CallToolResult>,
+  value: unknown,
+  signal: AbortSignal,
+  report: ToolErrorReporter,
+): Promise<CallToolResult> {
+  const inputError = (detail: string) =>
+    textError(
+      `Input validation error: Invalid arguments for tool ${definition.name}: ${detail}`,
+    );
+  let input: unknown;
+
+  try {
+    const checked = await definition.inputSchema['~standard'].validate(
+      value ?? {},
+    );
+
+    if (checked.issues?.length) {
+      return inputError(formatIssues(checked.issues));
+    }
+    input = 'value' in checked ? checked.value : undefined;
+  } catch (error) {
+    return inputError(
+      `The server could not check this input (errorId: ${reportSafely(report, error)}).`,
+    );
+  }
+  if (signal.aborted) {
+    return CANCELLED;
+  }
+  const result = await runToolCall(() => call(input), report);
+  const output = definition.outputSchema;
+
+  if (
+    output === undefined ||
+    result.isError ||
+    result.structuredContent === undefined
+  ) {
+    return result;
+  }
+  try {
+    const checked = await output['~standard'].validate(
+      result.structuredContent,
+    );
+
+    if (!checked.issues?.length) {
+      return result;
+    }
+    throw new Error(formatIssues(checked.issues));
+  } catch (error) {
+    return textError(
+      `Output validation error: Invalid structured content for tool ${definition.name}: The server could not check this output (errorId: ${reportSafely(report, error)}).`,
+    );
+  }
 }
 
 /**
@@ -239,35 +320,39 @@ export function defineMcpTool<
           ...(definition.annotations === undefined
             ? {}
             : { annotations: definition.annotations }),
-          inputSchema: guardSchema(
-            definition.inputSchema,
-            'input',
-            scope.report,
-          ),
+          inputSchema: describeOnly(definition.inputSchema, scope.report),
           ...(definition.outputSchema === undefined
             ? {}
             : {
-                outputSchema: guardSchema(
+                outputSchema: describeOnly(
                   definition.outputSchema,
-                  'output',
                   scope.report,
                 ),
               }),
         },
-        (value, ctx) =>
-          scope.schedule(() =>
-            runToolCall(async () => {
-              const result = await options.call(
-                // The SDK has validated `value` against this very schema.
-                value as SchemaOutput<TInput>,
-                { auth: scope.auth, signal: ctx.mcpReq.signal },
-                scope.http,
-              );
+        (value, ctx) => {
+          const signal = ctx.mcpReq.signal;
 
-              // Widened for the SDK, which checks it against the output schema.
-              return result as unknown as CallToolResult;
-            }, scope.report),
-          ),
+          return scope.schedule(
+            signal,
+            () =>
+              executeTool(
+                definition,
+                async (input) =>
+                  // Widened for the SDK; `input` passed this very schema, and
+                  // the result is checked against the output schema.
+                  (await options.call(
+                    input as SchemaOutput<TInput>,
+                    { auth: scope.auth, signal },
+                    scope.http,
+                  )) as unknown as CallToolResult,
+                value,
+                signal,
+                scope.report,
+              ),
+            () => CANCELLED,
+          );
+        },
       );
     },
   };

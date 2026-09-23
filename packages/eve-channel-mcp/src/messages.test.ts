@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { messageRefusal } from './messages.js';
+import { decodeMcpName, messageRefusal } from './messages.js';
 
 const LIMITS = { concurrency: 1, maxMessages: 3 };
 const META = {
@@ -120,5 +120,56 @@ describe('messageRefusal', () => {
       ),
       null,
     );
+  });
+
+  // L2: the SDK checks requests only, and Mcp-Name only where a method names something.
+  test('checks what the SDK checks, and nothing more', async () => {
+    const notification = {
+      jsonrpc: '2.0',
+      method: 'notifications/cancelled',
+      params: {},
+    };
+    const list = { id: 1, jsonrpc: '2.0', method: 'tools/list', params: {} };
+    const unnamed = { id: 1, jsonrpc: '2.0', method: 'tools/call', params: {} };
+
+    assert.equal(
+      await refusal({ 'mcp-method': 'tools/call' }, notification),
+      null,
+    );
+    assert.equal(await refusal({ 'mcp-name': 'anything' }, list), null);
+    assert.equal(await refusal({ 'mcp-name': 'anything' }, unnamed), null);
+    assert.equal(
+      await refusal({ 'mcp-method': ' tools/call\t' }, call('a')),
+      null,
+    );
+  });
+
+  // L2: a non-ASCII name arrives Base64-encoded, and must compare decoded.
+  test('decodes a Base64 Mcp-Name before comparing it', async () => {
+    const encoded = `=?base64?${Buffer.from('überprüfen').toString('base64')}?=`;
+
+    assert.equal(
+      await refusal({ 'mcp-name': encoded }, call('überprüfen')),
+      null,
+    );
+    assert.deepEqual(await refusal({ 'mcp-name': encoded }, call('other')), {
+      code: -32_020,
+      status: 400,
+    });
+    assert.deepEqual(
+      await refusal({ 'mcp-name': '=?base64?not base64!?=' }, call('a')),
+      {
+        code: -32_020,
+        status: 400,
+      },
+    );
+  });
+});
+
+describe('decodeMcpName', () => {
+  test('passes plain names through and refuses a malformed sentinel', () => {
+    assert.equal(decodeMcpName('read'), 'read');
+    assert.equal(decodeMcpName('=?base64?cmVhZA==?='), 'read');
+    assert.equal(decodeMcpName('=?base64?cmVhZA?='), undefined);
   });
 });

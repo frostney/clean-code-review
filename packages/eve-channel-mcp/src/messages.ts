@@ -44,12 +44,37 @@ const NAME_FIELD: Readonly<Record<string, 'name' | 'uri'>> = {
   'tools/call': 'name',
 };
 
-function nameOf(message: Message): unknown {
-  const field =
-    typeof message.method === 'string' ? NAME_FIELD[message.method] : undefined;
-  const params = asMessage(message.params) as Record<string, unknown>;
+/** RFC 9110 optional whitespace is spaces and tabs only. */
+function stripOws(value: string): string {
+  return value.replace(/^[ \t]+|[ \t]+$/g, '');
+}
 
-  return field === undefined ? undefined : params[field];
+const SENTINEL_PREFIX = '=?base64?';
+const SENTINEL_SUFFIX = '?=';
+const CANONICAL_BASE64 =
+  /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+
+/**
+ * `Mcp-Name` as the SDK reads it: a non-ASCII name arrives as
+ * `=?base64?…?=`. The SDK does not export its decoder, so this is a copy of
+ * its rule; undefined means a malformed sentinel.
+ */
+export function decodeMcpName(value: string): string | undefined {
+  if (!(value.startsWith(SENTINEL_PREFIX) && value.endsWith(SENTINEL_SUFFIX))) {
+    return value;
+  }
+  const encoded = value.slice(SENTINEL_PREFIX.length, -SENTINEL_SUFFIX.length);
+
+  if (!CANONICAL_BASE64.test(encoded)) {
+    return undefined;
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(
+      Buffer.from(encoded, 'base64'),
+    );
+  } catch {
+    return undefined;
+  }
 }
 
 function mismatch(message: Message, detail: string): Response {
@@ -61,10 +86,52 @@ function mismatch(message: Message, detail: string): Response {
   );
 }
 
+function isRequest(message: Message): message is Message & { method: string } {
+  return (
+    typeof message.method === 'string' &&
+    (typeof message.id === 'string' || typeof message.id === 'number')
+  );
+}
+
+/** The SDK's own comparison, applied to a request it would not check. */
+function headerMismatch(
+  message: Message & { method: string },
+  method: string | null,
+  name: string | null,
+): Response | null {
+  if (method !== null && stripOws(method) !== message.method) {
+    return mismatch(
+      message,
+      `Mcp-Method is ${stripOws(method)} but the body names ${message.method}`,
+    );
+  }
+  const field = Object.hasOwn(NAME_FIELD, message.method)
+    ? NAME_FIELD[message.method]
+    : undefined;
+
+  if (name === null || field === undefined) {
+    return null;
+  }
+  const decoded = decodeMcpName(stripOws(name));
+  const source = (asMessage(message.params) as Record<string, unknown>)[field];
+
+  if (decoded === undefined) {
+    return mismatch(
+      message,
+      'the Mcp-Name header carries an invalid Base64 sentinel value',
+    );
+  }
+
+  return typeof source === 'string' && decoded !== source
+    ? mismatch(message, `Mcp-Name is ${decoded} but the body names ${source}`)
+    : null;
+}
+
 /**
  * The SDK checks `Mcp-Method` and `Mcp-Name` only on 2026-07-28 requests.
- * A 2025-era body with headers that name another operation is refused here,
- * so a policy that reads the headers cannot be steered past by the body.
+ * The same check runs here on a 2025-era request that carries them, so a
+ * policy that reads the headers cannot be steered past by the body.
+ * Notifications are left alone, as the SDK leaves them.
  */
 async function legacyHeaderRefusal(
   request: Request,
@@ -84,20 +151,7 @@ async function legacyHeaderRefusal(
   }
   const message = asMessage(body);
 
-  if (method !== null && method.trim() !== message.method) {
-    return mismatch(
-      message,
-      `Mcp-Method is ${method.trim()} but the body names ${String(message.method)}`,
-    );
-  }
-  if (name !== null && name.trim() !== nameOf(message)) {
-    return mismatch(
-      message,
-      `Mcp-Name is ${name.trim()} but the body names ${String(nameOf(message))}`,
-    );
-  }
-
-  return null;
+  return isRequest(message) ? headerMismatch(message, method, name) : null;
 }
 
 /**
