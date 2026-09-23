@@ -1,7 +1,9 @@
 /**
  * Jev does not chat, but eve's `model` slot takes an AI SDK language model,
  * so this adapter dispatches two turn kinds: judge (JSON result) and
- * summarize (streamed Luna review). Anything else gets a bare ack.
+ * summarize (streamed Luna review). eve's own calls, such as compaction, are
+ * answered here without Jev or Luna (`framework-calls.ts`); anything else gets
+ * a bare ack.
  *
  * The page's spend brake lives here, not in a channel or route, because this
  * is the only place that knows both what a turn will run and what it cost. A
@@ -16,7 +18,11 @@ import type {
   LanguageModelV4Usage,
 } from '@ai-sdk/provider';
 
-import { parseMessage, type SummarizeInput } from '../review/prompt';
+import {
+  type ParsedMessage,
+  parseMessage,
+  type SummarizeInput,
+} from '../review/prompt';
 import {
   emptyReviewUsage,
   planReview,
@@ -32,6 +38,7 @@ import {
   pausedReply,
 } from '../spend/budgets';
 import { createSpendBrake, type Hold } from '../spend/spend';
+import { frameworkReply } from './framework-calls';
 import {
   JEV,
   JudgeFailedError,
@@ -158,11 +165,24 @@ async function judge(
   });
 }
 
+type Route = ParsedMessage | { kind: 'framework'; reply: string };
+
+/** eve's own calls come first: a compaction prompt quotes turns that parse as code. */
+function route(options: LanguageModelV4CallOptions): Route {
+  const reply = frameworkReply(options.prompt);
+
+  return reply === null
+    ? parseMessage(lastUserText(options))
+    : { kind: 'framework', reply };
+}
+
 async function generate(
   options: LanguageModelV4CallOptions,
+  parsed: Route = route(options),
 ): Promise<LanguageModelV4GenerateResult> {
-  const parsed = parseMessage(lastUserText(options));
-
+  if (parsed.kind === 'framework') {
+    return textResult(parsed.reply);
+  }
   if (parsed.kind === 'other') {
     return textResult(JSON.stringify({ kind: 'ack' }));
   }
@@ -192,12 +212,12 @@ async function generate(
 
 export function jev(): LanguageModelV4 {
   return {
-    doGenerate: generate,
+    doGenerate: (options) => generate(options),
     async doStream(options) {
-      const parsed = parseMessage(lastUserText(options));
+      const parsed = route(options);
 
       if (parsed.kind !== 'summarize') {
-        const r = await generate(options);
+        const r = await generate(options, parsed);
         const text = r.content[0]?.type === 'text' ? r.content[0].text : '';
         const parts: LanguageModelV4StreamPart[] = [
           { type: 'stream-start', warnings: r.warnings },

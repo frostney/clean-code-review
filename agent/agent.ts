@@ -21,13 +21,14 @@ export default defineAgent({
   model: jev(),
   // Not a real window. Before each model call eve estimates the instructions,
   // history and new message at JSON characters / 4, and past 90% of this
-  // figure it compacts, sending its summary request to `jev()`, which judges
-  // it as a code snippet. No model call receives a turn's message whole, and
+  // figure it compacts. No model call receives a turn's message whole, and
   // the page clears history every turn, so the figure is sized for one
   // message: printable text at every page cap stays under the trigger
-  // (`prompt.test.ts`). Control characters, very long paths or a direct
-  // caller can still pass it. Each summary request then costs a Jev judgment,
-  // clamped like any judge turn and charged to the page's spend brake, never a
-  // Luna call; eve's per-session caps miss it, as eve drops compaction usage.
+  // (`prompt.test.ts`), which spares eve a pointless compaction pass. Control
+  // characters, very long paths or a direct caller can still pass it; `jev()`
+  // then answers eve's summary request itself, with no Jev or Luna call
+  // (`framework-calls.ts`). A message sent as a string, as the page sends it,
+  // then runs as usual; one sent as parts is folded into the checkpoint and
+  // gets an ack, with no judgment and no spend.
   modelContextWindowTokens: TURN_CONTEXT_WINDOW_TOKENS,
 });
