@@ -79,6 +79,7 @@ not include it: clone the repository and run `bun run example` in
 | `tools` | none | Tools made with `defineMcpTool`. You need `tools`, `register`, or both. |
 | `register(server, context)` | none | Called once per request with the SDK's `McpServer`. `context` holds `era` (`modern` or `legacy`), `auth`, the HTTP details and `addTool`. What you register on `server` directly bypasses this package's error handling and the batch concurrency bound; see [Errors](#errors). |
 | `allowedHosts` | see [Host checks](#host-and-origin-checks) | A list of hostnames, or `'any'`. Required outside `eve dev` and Vercel. |
+| `allowedOrigins` | none | Browser origins (`scheme://host[:port]`) accepted besides the endpoint's own. See [Origin](#origin). |
 | `https` | `'auto'` | `'auto'`, `'trusted-proxy'` or `'off'`. Outside `eve dev` and Vercel, `'auto'` is a setup error. See [HTTPS](#https). |
 | `oauth` | none | Protected-resource metadata. See [OAuth](#oauth). |
 | `legacy` | `'stateless'` | `'reject'` serves `2026-07-28` only. |
@@ -87,11 +88,11 @@ not include it: clone the repository and run `bun run example` in
 | `maxBodyBytes` | 1 MiB | The same limit eve's `mcpChannel` uses. A larger body gets a `413`. |
 | `bodyTimeoutMs` | 10 000 | A body that has not fully arrived by then gets a `408`. |
 | `onToolError(error, errorId)` | `console.error` | Called when a tool, or a schema, fails unexpectedly. A throw or rejection here is ignored. |
-| `onError(error)` | `console.error` for the last two | Requests the SDK refused, its out-of-band failures, every request refused because `allowedHosts` or `https` is not set for the deployment, and an auth strategy that returned a malformed principal. A throw or rejection here is ignored. |
+| `onError(error)` | `console.error` for the last two | Requests the SDK refused, its out-of-band failures, a deployment where `allowedHosts` or `https` is not set (at most once a minute; every such request still gets a 500), and an auth strategy that returned a malformed principal. A throw or rejection here is ignored. |
 
 Every option is checked when the channel is built. Unknown values, empty host
-lists, and limits that are not positive integers (`NaN`, `Infinity`, `0`)
-throw instead of switching a bound off.
+or origin lists, and limits that are not positive integers (`NaN`, `Infinity`,
+`0`) throw instead of switching a bound off.
 
 ## `defineMcpTool`
 
@@ -103,7 +104,8 @@ defineMcpTool({
 ```
 
 Any Standard Schema that also produces JSON Schema can be used, such as Zod 4.
-The SDK validates the arguments before `call` runs, so `value` is typed. With
+The channel validates the arguments against `inputSchema` before `call` runs,
+so `value` is typed. With
 an `outputSchema`, TypeScript requires a successful result's
 `structuredContent` to match the schema's type.
 
@@ -138,7 +140,9 @@ that uses only that much can be moved to eve's version. The differences:
 - **Any other throw** from a tool reaches the client as one generic sentence
   with an `errorId`. The error itself goes to `onToolError`.
 - **A schema that throws** (for example a Zod refinement that throws rather
-  than returning false) is handled the same way.
+  than returning false) is handled the same way. A schema whose JSON Schema
+  conversion throws fails every `tools/list` with one error id, reported
+  once.
 - **Invalid arguments** come back naming the field that failed, as the SDK
   words it.
 - **An output schema failure** is a fault in your tool, so the client gets
@@ -154,11 +158,12 @@ anything else registered there.
 
 Each request passes these checks in this order before anything reaches the SDK:
 
-1. The `Host` header must be a bare authority that matches the request URL,
-   on the `allowedHosts` list.
-2. The request must have arrived over HTTPS, except under `eve dev` and
-   `vercel dev`.
-3. A browser request's `Origin` must be exactly this endpoint's origin.
+1. The `Host` header (`:authority` on HTTP/2) must be a bare authority that
+   matches the request URL, on the `allowedHosts` list.
+2. The request must have arrived over HTTPS, except from a loopback address
+   under `eve dev`.
+3. A browser request's `Origin` must be exactly this endpoint's origin, or
+   one listed in `allowedOrigins`.
 4. eve's `routeAuth` runs, and the principal it accepts must be well formed.
 5. The body is read once, bounded by `maxBodyBytes` and `bodyTimeoutMs`.
 6. Batch rules and `subscriptions/listen` are checked, and so are the routing
@@ -173,8 +178,12 @@ large one. Keep auth to headers, and make decisions that depend on the
 operation (which tool, which arguments) inside the tool, where the body has
 already been read within its bounds.
 
-None of these checks shows where a connection came from. That depends on
-where the server listens: `eve dev` listens on loopback.
+Only the development HTTPS waiver looks at where a connection came from. It
+reads `requestIp`, which under `eve dev` is the peer address eve's dev server
+saw and signed. `eve dev --host 0.0.0.0` accepts other machines, and they get
+no waiver: they need HTTPS, or `https: 'off'`. Behind `withEve` in
+development the peer is Next, on loopback, so a Next dev server that listens
+on other interfaces passes its clients' plain HTTP through.
 
 ### Host and origin checks
 
@@ -184,40 +193,76 @@ attacker's domain. Comparing `Origin` with the request's own URL does not
 catch this: the URL's host comes from the `Host` header, which says the same
 attacker domain. So the `Host` header is checked against an allowlist:
 
-- **`eve dev` and `vercel dev`**: `localhost`, `127.0.0.1` and `[::1]`, unless
-  you set `allowedHosts`.
+- **`eve dev`**, also when `vercel dev` or `withEve` starts it: `localhost`,
+  `127.0.0.1` and `[::1]`, unless you set `allowedHosts`.
 - **Vercel**: any host, because Vercel's edge only routes the project's own
-  domains to the deployment.
+  domains to the deployment, and a rewrite from another domain arrives with
+  `Host` naming this deployment. A page on the rewriting domain sends that
+  domain as `Origin`, so it needs `allowedOrigins` (see [Origin](#origin)).
 - **Anywhere else**: `allowedHosts` is required, and so is an `https` other
-  than `'auto'`. Until both are set, every request gets a 500 naming both, and
-  each one is reported to `onError`. Use `'any'` only behind a proxy that
-  checks `Host` itself.
+  than `'auto'`. Until both are set, every request gets a 500 naming both,
+  and `onError` hears of it at most once a minute. Use `'any'` only behind a
+  proxy that checks `Host` itself.
+
+The channel tells these apart by environment. Development is `EVE_DEV=1`,
+which `eve dev` sets for itself; Vercel is `VERCEL=1`. `eve start` loads
+`.env.local` and the other development env files, and `vercel env pull` can
+write `VERCEL=1` and `VERCEL_ENV=development` there, so that pair counts as
+neither: a self-hosted server with such a file needs `allowedHosts` and
+`https`. Do not keep a pulled production or preview environment
+(`VERCEL_ENV=production`) where a self-hosted `eve start` loads it: it is
+taken for Vercel, and with the defaults that server refuses plain HTTP and
+checks no `Host`.
 
 The `Host` header must also be a bare authority (no userinfo, path, query or
 fragment) naming the same authority as the URL the server built for the
-request, and it must be present.
+request, and it must be present. An HTTP/2 request without `Host` is read by
+its `:authority`, the field srvx, eve's server, builds the URL from.
+
+### Origin
 
 A browser request's `Origin` must equal this endpoint's origin exactly:
-scheme, host and port. There is no cross-origin allowlist, because nothing
-here needs one: MCP clients do not run as web pages on another origin.
+scheme, host and port, where the host is the one `Host` names. Browser-based
+MCP clients exist, but this channel sends no CORS headers, so a page on
+another origin cannot call it. `allowedOrigins` is for pages the browser
+calls on their own origin that reach eve under another name:
+
+- **`withEve` in development**: Next's rewrite hands eve a request for
+  `127.0.0.1:<port>`, while the page sends `Origin: http://localhost:3000`.
+  List `'http://localhost:3000'`.
+- **A TLS proxy with `https: 'off'`**: eve sees plain HTTP, so its own origin
+  is `http://app.example`, while the page sends `https://app.example`. List
+  `'https://app.example'`.
+- **A rewrite from another domain**, such as a `vercel.json` rewrite or a
+  Next `rewrites()` entry on another project: `Origin` names the rewriting
+  domain while `Host` names this deployment. The rewriting domain shows up
+  only in `X-Forwarded-Host`, which is not trusted, since anyone can point a
+  rewrite at a deployment. On Vercel, list the rewriting domain's origin.
+
+Each entry must be an origin exactly as a browser sends it, in lower case
+and without a default port, path or trailing slash; anything else throws
+when the channel is built. `null` is never accepted.
 
 ### HTTPS
 
 HTTP Basic credentials and bearer tokens must not cross the network in the
-clear. `eve dev` and `vercel dev` take plain HTTP whatever `https` says; a
-loopback `Host` header does not, since any client can send one. Otherwise:
+clear. `eve dev` takes plain HTTP from a loopback address whatever `https`
+says; a loopback `Host` header does not count, since any client can send
+one. Otherwise:
 
 - **`'auto'`**: HTTPS as reported by Vercel's edge, and nothing else. Under
   `eve start`, the request URL describes the connection to eve itself, which
-  is plain HTTP behind a TLS-terminating proxy, and eve's server ignores
-  `X-Forwarded-Proto` unless it is configured to trust a proxy. So the
-  channel cannot tell how the client connected, and `'auto'` outside Vercel
-  and development is refused as a setup error (500) until you choose.
+  is plain HTTP behind a TLS-terminating proxy. srvx, eve's server, can
+  trust a proxy's `X-Forwarded-Proto` (`trustProxy`), but neither eve nor
+  Nitro exposes that setting. So the channel cannot tell how the client
+  connected, and `'auto'` outside Vercel and development is refused as a
+  setup error (500) until you choose.
 - **`'trusted-proxy'`**: a present `X-Forwarded-Proto` decides, by its last
   entry, the one the nearest proxy wrote: `http` is refused even when the
   proxy reached eve over TLS. Without the header, the request URL decides.
   Use it only when a proxy you run terminates TLS and overwrites that header.
-- **`'off'`**: no check, for example on a private network.
+- **`'off'`**: no check, for example on a private network. Behind a TLS
+  proxy, list the public `https://` origin in `allowedOrigins`.
 
 ## Auth
 
@@ -272,7 +317,8 @@ rate limit counts once.
 `allowBatches: true` accepts up to 10 messages per batch and runs their tool
 calls one at a time, argument and result validation included. A queued call
 whose client has disconnected never starts. `{ maxMessages, concurrency }`
-changes either bound; anything else throws when the channel is built. The
+changes either bound; any other key or value throws when the channel is
+built. The
 concurrency bound covers tools from `tools` and `context.addTool` only, not
 tools, resources or prompts registered directly on the server. A rate limit
 that should count calls rather than requests has to count inside the tool.
@@ -319,11 +365,12 @@ example with `AbortSignal.any([signal, AbortSignal.timeout(ms)])`.
 
 `requestIp` is what eve's host reports:
 
-- **Vercel**: the first `X-Forwarded-For` entry. Its provenance rests on
-  Vercel's edge setting that header; this package cannot check it.
+- **Vercel**: the first `X-Forwarded-For` entry, which Vercel's edge
+  overwrites whatever the client sent.
 - **Standalone Node** (`eve start`): the socket's peer. Behind a reverse
   proxy that is the proxy, so every caller shares one address.
-- **`eve dev`**: an address the dev proxy signs.
+- **`eve dev`**: the peer address eve's dev server saw, which it signs.
+  Behind `withEve` that is Next, on loopback.
 
 Prefer principal-based limits, and treat an address as a coarse second bound.
 
@@ -351,7 +398,8 @@ two can only coexist on different paths.
     scheme is plain HTTP, whatever the client used. The channel cannot check
     the client's host or scheme there, so enforce them at Next or at the
     proxy in front of it, and configure the channel for the hop
-    (`allowedHosts: ['127.0.0.1'], https: 'off'`).
+    (`allowedHosts: ['127.0.0.1'], https: 'off'`), with the page's origin in
+    `allowedOrigins`.
 
 ## Channel file
 

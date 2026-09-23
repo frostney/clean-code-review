@@ -21,6 +21,7 @@ import {
   type AdmissionPolicy,
   type AllowedHosts,
   admissionRefusal,
+  checkedOrigin,
   type HttpsPolicy,
   MISCONFIGURED_MESSAGE,
   normalizeHostname,
@@ -34,6 +35,7 @@ import {
   withResourceChallenge,
 } from './oauth.js';
 import { isolatePrincipal } from './principal.js';
+import { reportSafely } from './report.js';
 import {
   DEFAULT_BODY_TIMEOUT_MS,
   DEFAULT_MAX_BODY_BYTES,
@@ -86,7 +88,12 @@ export interface McpServerChannelOptions {
   ) => void | Promise<void>;
   /** Hostnames this endpoint answers to, or `'any'`. Required outside `eve dev` and Vercel. */
   readonly allowedHosts?: AllowedHosts;
-  /** How to tell a request arrived over HTTPS. `eve dev` and `vercel dev` take plain HTTP. Default `'auto'`. */
+  /**
+   * Browser origins (`scheme://host[:port]`) accepted besides the endpoint's
+   * own, for a page served from another origin or through a rewrite.
+   */
+  readonly allowedOrigins?: readonly string[];
+  /** How to tell a request arrived over HTTPS. `eve dev` takes plain HTTP from loopback. Default `'auto'`. */
   readonly https?: HttpsPolicy;
   /** Protected-resource metadata for OAuth sign-in. */
   readonly oauth?: McpOAuthOptions;
@@ -107,8 +114,8 @@ export interface McpServerChannelOptions {
   /** A tool's unexpected failure, which the client sees only as an error id. */
   readonly onToolError?: ToolErrorReporter;
   /**
-   * Requests the SDK refused, its out-of-band failures, each request refused
-   * for a deployment without allowedHosts or https, and a malformed principal.
+   * Requests the SDK refused, its out-of-band failures, a deployment without
+   * allowedHosts or https (at most once a minute), and a malformed principal.
    * A throw or rejection here is ignored.
    */
   readonly onError?: (error: Error) => void | Promise<void>;
@@ -116,6 +123,7 @@ export interface McpServerChannelOptions {
 
 const SERVER_ERROR = -32_000;
 const MISCONFIGURED = 500;
+const MISCONFIGURATION_REPORT_INTERVAL_MS = 60_000;
 const DEFAULT_BATCH: Required<McpBatchOptions> = {
   concurrency: 1,
   maxMessages: 10,
@@ -169,6 +177,15 @@ function batchLimits(
     );
   }
   const given: McpBatchOptions = option === true ? {} : option;
+  const unknown = Object.keys(given).filter(
+    (key) => !Object.hasOwn(DEFAULT_BATCH, key),
+  );
+
+  if (unknown.length > 0) {
+    throw new Error(
+      `mcpServerChannel: allowBatches takes maxMessages and concurrency only, not ${unknown.join(', ')}.`,
+    );
+  }
 
   return {
     concurrency: positiveInteger(
@@ -197,6 +214,19 @@ function hostsOption(
   }
 
   return option.map(normalizeHostname);
+}
+
+function originsOption(option: readonly string[] | undefined): string[] {
+  if (option === undefined) {
+    return [];
+  }
+  if (!Array.isArray(option) || option.length === 0) {
+    throw new Error(
+      'mcpServerChannel: allowedOrigins must be a non-empty list of origins.',
+    );
+  }
+
+  return option.map(checkedOrigin);
 }
 
 /** eve marks `oauthResource()` with this registered symbol; its settings are not public. */
@@ -280,6 +310,7 @@ export function mcpServerChannel(options: McpServerChannelOptions): Channel {
   const allowedHosts = hostsOption(options.allowedHosts);
   const policy: AdmissionPolicy = {
     ...(allowedHosts === undefined ? {} : { allowedHosts }),
+    allowedOrigins: originsOption(options.allowedOrigins),
     checkOrigin: true,
     https: oneOf(
       'https',
@@ -294,21 +325,29 @@ export function mcpServerChannel(options: McpServerChannelOptions): Channel {
       console.error(`[eve-channel-mcp] tool call failed (${errorId})`, error);
     });
   const onError = options.onError;
-  // A reporter must not decide what the client reads, nor, by rejecting,
-  // take the process down as an unhandled rejection.
-  const reportError = (error: Error): void => {
-    try {
-      Promise.resolve((onError ?? console.error)(error)).catch(() => undefined);
-    } catch {
-      // Swallowed on purpose: the reporter's own failure has nowhere safe to go.
-    }
-  };
+  const reportError = (error: Error): void =>
+    reportSafely(onError ?? console.error, error);
+  let misconfigurationReportedAt = Number.NEGATIVE_INFINITY;
 
-  function admit(request: Request, checkOrigin: boolean): Response | null {
-    const refused = admissionRefusal(request, { ...policy, checkOrigin });
+  function admit(
+    request: Request,
+    requestIp: string | null,
+    checkOrigin: boolean,
+  ): Response | null {
+    const refused = admissionRefusal(
+      request,
+      { ...policy, checkOrigin },
+      process.env,
+      requestIp,
+    );
+    const now = Date.now();
 
-    // Every refused request is reported, so a misconfigured deployment leaves a trail.
-    if (refused?.status === MISCONFIGURED) {
+    // Enough for a trail, without one report per unauthenticated request.
+    if (
+      refused?.status === MISCONFIGURED &&
+      now - misconfigurationReportedAt >= MISCONFIGURATION_REPORT_INTERVAL_MS
+    ) {
+      misconfigurationReportedAt = now;
       reportError(new Error(`eve-channel-mcp: ${MISCONFIGURED_MESSAGE}`));
     }
 
@@ -398,7 +437,7 @@ export function mcpServerChannel(options: McpServerChannelOptions): Channel {
     request: Request,
     channel: RouteHandlerArgs,
   ): Promise<Response> {
-    const refused = admit(request, true);
+    const refused = admit(request, channel.requestIp, true);
 
     if (refused) {
       return refused;
@@ -433,9 +472,13 @@ export function mcpServerChannel(options: McpServerChannelOptions): Channel {
     );
   }
 
-  const metadata = (request: Request): Promise<Response> =>
+  const metadata = (
+    request: Request,
+    { requestIp }: RouteHandlerArgs,
+  ): Promise<Response> =>
     Promise.resolve(
-      admit(request, false) ?? metadataResponse(request, oauth as OAuthConfig),
+      admit(request, requestIp, false) ??
+        metadataResponse(request, oauth as OAuthConfig),
     );
   const routes: HttpRouteDefinition[] = [
     ...(oauth

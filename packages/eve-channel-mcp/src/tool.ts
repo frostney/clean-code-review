@@ -9,6 +9,7 @@ import type {
 import type { RouteHandlerArgs } from 'eve/channels';
 import type { routeAuth } from 'eve/channels/auth';
 
+import { reportSafely } from './report.js';
 import type { Schedule } from './schedule.js';
 
 /** The principal eve's auth walk accepted; eve does not export the type by name. */
@@ -120,15 +121,11 @@ const reportToConsole: ToolErrorReporter = (error, errorId) => {
   console.error(`[eve-channel-mcp] tool call failed (${errorId})`, error);
 };
 
-/** A reporter that throws or rejects must not decide what the client reads. */
-function reportSafely(report: ToolErrorReporter, error: unknown): string {
+/** The id the client reads, so a report can be found from it. */
+function reportWithId(report: ToolErrorReporter, error: unknown): string {
   const errorId = randomUUID();
 
-  try {
-    Promise.resolve(report(error, errorId)).catch(() => undefined);
-  } catch {
-    // Swallowed on purpose: the reporter's own failure has nowhere safe to go.
-  }
+  reportSafely(report, error, errorId);
 
   return errorId;
 }
@@ -169,7 +166,7 @@ export async function runToolCall(
 
     return toolError({
       code: 'internal',
-      errorId: reportSafely(report, error),
+      errorId: reportWithId(report, error),
       message: GENERIC_MESSAGE,
     });
   }
@@ -196,6 +193,17 @@ function textError(text: string): CallToolResult {
 
 const CANCELLED = textError('The call was cancelled.');
 
+type Direction = 'input' | 'output';
+
+/**
+ * A server is built per request, so a schema that cannot be converted fails
+ * on every `tools/list`; it is reported once, and its error id repeated.
+ */
+const conversionFailures = new WeakMap<
+  StandardSchemaWithJSON,
+  Partial<Record<Direction, string>>
+>();
+
 /**
  * What the SDK is given: the schema's JSON Schema for listing, and a
  * validator that accepts anything. The real validation runs in
@@ -209,14 +217,27 @@ export function describeOnly(
 ): StandardSchemaWithJSON {
   const standard = schema['~standard'];
   const convert =
-    (io: 'input' | 'output'): Standard['jsonSchema']['input'] =>
+    (io: Direction): Standard['jsonSchema']['input'] =>
     (options) => {
+      const failed = (errorId: string) =>
+        new Error(
+          `The server could not describe this tool (errorId: ${errorId}).`,
+        );
+      const known = conversionFailures.get(schema)?.[io];
+
+      if (known !== undefined) {
+        throw failed(known);
+      }
       try {
         return standard.jsonSchema[io](options);
       } catch (error) {
-        throw new Error(
-          `The server could not describe this tool (errorId: ${reportSafely(report, error)}).`,
-        );
+        const errorId = reportWithId(report, error);
+
+        conversionFailures.set(schema, {
+          ...conversionFailures.get(schema),
+          [io]: errorId,
+        });
+        throw failed(errorId);
       }
     };
 
@@ -262,7 +283,7 @@ export async function executeTool(
     input = 'value' in checked ? checked.value : undefined;
   } catch (error) {
     return inputError(
-      `The server could not check this input (errorId: ${reportSafely(report, error)}).`,
+      `The server could not check this input (errorId: ${reportWithId(report, error)}).`,
     );
   }
   if (signal.aborted) {
@@ -289,7 +310,7 @@ export async function executeTool(
     throw new Error(formatIssues(checked.issues));
   } catch (error) {
     return textError(
-      `Output validation error: Invalid structured content for tool ${definition.name}: The server could not check this output (errorId: ${reportSafely(report, error)}).`,
+      `Output validation error: Invalid structured content for tool ${definition.name}: The server could not check this output (errorId: ${reportWithId(report, error)}).`,
     );
   }
 }

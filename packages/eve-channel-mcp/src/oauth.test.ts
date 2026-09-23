@@ -100,6 +100,43 @@ describe('resolveOAuth', () => {
     );
   });
 
+  // C8: URL parsing dropped a bare ? or #, and resolved dot segments, so the
+  // route was registered at one path while the metadata named another.
+  test('refuses what URL parsing would silently change', () => {
+    const issuer = 'https://auth.example';
+
+    for (const metadataPath of ['/x?', '/x#', '/a/../meta', '/a/./meta']) {
+      assert.throws(
+        () =>
+          resolveOAuth({
+            issuer,
+            metadataPath,
+            resource: 'https://app.example/mcp',
+          }),
+        /metadataPath/,
+        metadataPath,
+      );
+    }
+    for (const resource of [
+      'https://app.example/mcp?',
+      'https://app.example/mcp#',
+    ]) {
+      assert.throws(
+        () => resolveOAuth({ issuer, resource }),
+        /HTTPS URL/,
+        resource,
+      );
+    }
+    assert.throws(
+      () =>
+        resolveOAuth({
+          issuer: 'https://auth.example?',
+          resource: 'https://app.example/mcp',
+        }),
+      /HTTPS URL/,
+    );
+  });
+
   test('refuses settings it cannot publish', () => {
     assert.throws(
       () => resolveOAuth({ issuer: 'https://a.example', resource: '/mcp' }),
