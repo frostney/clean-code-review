@@ -19,7 +19,9 @@ bun install
 ```
 
 You need [Bun](https://bun.sh) 1.4 and Node.js 24, which eve requires, and a
-Vercel account for the AI Gateway credential.
+Vercel account for the AI Gateway credential. `.nvmrc` and `.node-version` pin
+Node 24 for nvm and the managers that read the other file, so `next dev` runs
+the version the deployment does.
 
 ```sh
 bunx eve link --non-interactive --project <your-project>   # gateway credential into .env.local
