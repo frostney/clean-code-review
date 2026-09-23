@@ -6,7 +6,6 @@ import { SITE } from '@/src/site/site';
 const UNFURLERS = [
   'Twitterbot',
   'facebookexternalhit',
-  // biome-ignore lint/security/noSecrets: a user-agent name, not a credential
   'Slackbot-LinkExpanding',
   'Slackbot',
   'LinkedInBot',

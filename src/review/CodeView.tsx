@@ -15,7 +15,7 @@ const PAD_Y = 'py-2';
 
 /** Always renders something, so empty lines keep their height. */
 function Tokens({ line }: { line: TokenLine | undefined }) {
-  if (!line || !line.length) {
+  if (!line?.length) {
     return <> </>;
   }
 

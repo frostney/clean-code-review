@@ -930,7 +930,7 @@ export function useReview(
   const awaitCancel = useCallback(async () => {
     const pending = cancellingRef.current;
 
-    if (pending) {
+    if (pending !== null) {
       await pending;
     }
   }, []);

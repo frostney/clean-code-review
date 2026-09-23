@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.11/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
   "assist": {
     "actions": {
       "source": {
@@ -79,8 +79,10 @@
         "noUselessTernary": "error",
         "noUselessThisAlias": "error",
         "noUselessTypeConstraint": "error",
+        "noUselessUndefined": "error",
         "noUselessUndefinedInitialization": "error",
         "noVoid": "error",
+        "useArrayFind": "error",
         "useArrowFunction": "error",
         "useDateNow": "error",
         "useFlatMap": "error",
@@ -130,23 +132,8 @@
         "useParseIntRadix": "error"
       },
       "nursery": {
-        "noDeprecatedImports": "error",
-        "noDuplicatedSpreadProps": "error",
-        "noEmptySource": "error",
-        "noEqualsToNull": "error",
         "noFloatingPromises": "error",
-        "noForIn": "error",
-        "noImportCycles": "error",
-        "noLeakedRender": "error",
-        "noMisusedPromises": "error",
-        "noMultiAssign": "error",
-        "noProto": "error",
-        "noUnnecessaryConditions": "error",
-        "noUnusedExpressions": "error",
-        "noUselessUndefined": "error",
-        "useArraySortCompare": "error",
-        "useFind": "error",
-        "useSpread": "error"
+        "noMisusedPromises": "error"
       },
       "performance": {
         "noAccumulatingSpread": "error",
@@ -166,6 +153,7 @@
         "noExportedImports": "error",
         "noImplicitBoolean": "error",
         "noMagicNumbers": "error",
+        "noMultiAssign": "error",
         "noNamespace": "error",
         "noNestedTernary": "error",
         "noParameterAssign": "error",
@@ -223,6 +211,7 @@
         "useReadonlyClassProperties": "error",
         "useSelfClosingElements": "error",
         "useSingleVarDeclarator": "error",
+        "useSpreadOverApply": "error",
         "useTemplate": "error",
         "useTrimStartEnd": "error",
         "useUnifiedTypeSignatures": "error"
@@ -233,23 +222,31 @@
         "noArrayIndexKey": "error",
         "noAssignInExpressions": "error",
         "noClassAssign": "error",
+        "noDeprecatedImports": "error",
         "noDoubleEquals": "error",
         "noDuplicateClassMembers": "error",
+        "noDuplicatedSpreadProps": "error",
         "noDuplicateJsxProps": "error",
         "noDuplicateObjectKeys": "error",
         "noDuplicateParameters": "error",
         "noEmptyBlockStatements": "error",
         "noEmptyInterface": "error",
+        "noEmptySource": "error",
+        "noEqualsToNull": "error",
         "noEvolvingTypes": "error",
         "noExplicitAny": "error",
+        "noForIn": "error",
         "noFunctionAssign": "error",
         "noGlobalAssign": "error",
         "noGlobalIsFinite": "error",
         "noGlobalIsNan": "error",
         "noImplicitAnyLet": "error",
         "noImportAssign": "error",
+        "noImportCycles": "error",
         "noIrregularWhitespace": "error",
+        "noLeakedRender": "error",
         "noMisleadingInstantiator": "error",
+        "noProto": "error",
         "noPrototypeBuiltins": "error",
         "noReactSpecificProps": "off",
         "noRedeclare": "error",
@@ -258,8 +255,14 @@
         "noShadowRestrictedNames": "error",
         "noSparseArray": "error",
         "noSuspiciousSemicolonInJsx": "error",
+        // Off since 2.5 made it type-aware: it reads `RegExp.exec()` as never
+        // null and a `useRef(false).current` as always false, which was 39
+        // false findings here and no real one. Revisit on the next minor.
+        "noUnnecessaryConditions": "off",
+        "noUnusedExpressions": "error",
         "noVar": "error",
         "noWith": "error",
+        "useArraySortCompare": "error",
         "useGetterReturn": "error",
         "useIsArray": "error"
       }

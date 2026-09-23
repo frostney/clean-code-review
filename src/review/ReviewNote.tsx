@@ -152,7 +152,7 @@ function ticked(text: string): ReactNode[] {
     part.length > 2 && part.startsWith('`') && part.endsWith('`') ? (
       <code
         className="rounded bg-track px-1 py-px font-mono text-xs text-ink"
-        // Index alone would keep a stale node while the text streams in.
+        // biome-ignore lint/suspicious/noArrayIndexKey: index alone would keep a stale node while the text streams in
         key={`${i}:${part}`}
       >
         {part.slice(1, -1)}

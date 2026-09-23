@@ -103,7 +103,6 @@ export default async function Image() {
             {SITE.tagline}
           </div>
         </div>
-        {/* biome-ignore lint/performance/noImgElement: Satori renders plain <img> only */}
         <img
           alt=""
           height={300}
