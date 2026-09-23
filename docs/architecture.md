@@ -20,7 +20,10 @@ One durable eve session per browser tab, and two turn kinds over it.
 1. A **judge** turn sends the files as JSON.
    [`jev-model.ts`](../agent/lib/judging/jev-model.ts) dispatches it, fans out
    one `evaluate()` call per window of each file to Jev — twice per window
-   where there are comments to strip — and replies with the answers.
+   where there are comments to strip — at most eight in flight at once, and
+   replies with the answers. Each file's answer says how many of its windows
+   answered, so the page can show a file Jev judged only in part and offer to
+   ask again; the windows that did answer come back from the cache.
 2. A **summarize** turn sends the files and the answers. Luna runs one call per
    six files plus one overall part, in parallel, streamed as they are written.
 3. The page paints one card per file: the rows Jev was asked about, the answer

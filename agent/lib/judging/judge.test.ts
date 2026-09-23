@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { MAX_JUDGED_CHARS, REVIEW_LIMITS } from '../review/review';
-import { judgePlan } from './judge';
+import {
+  MAX_JUDGED_CHARS,
+  REVIEW_LIMITS,
+  type ReviewFile,
+} from '../review/review';
+import { judgeFile, judgePlan, judgeReview } from './judge';
 import { afterImage, isHunkHeader } from './patch';
+import { parseReview } from './schema';
 
 const LINE = 'const a = 1;\n';
 
@@ -252,4 +257,257 @@ test('every reader agrees where a hunk starts', () => {
   const plan = judgePlan({ content: combined, patch: true, path: 'a.ts' });
 
   assert.ok(afterImage(plan.a[0].file.content).includes('const a = 1;'));
+});
+
+/** A certain answer at `level` of `levels`, counting from the top when negative. */
+function scored(levels: number, level: number) {
+  const score = level < 0 ? levels + level : level;
+  const probabilities = Object.fromEntries(
+    Array.from({ length: levels }, (_, i) => [String(i), i === score ? 1 : 0]),
+  );
+
+  return { probabilities, score, type: 'score' };
+}
+
+/**
+ * Stands in for AI Gateway's evaluation endpoint. Every call is recorded by
+ * the code it carried; `fails` picks the calls that answer 503. A window with
+ * `BAD` in it is judged "Rewrite it" with every smell, anything else "Ship it".
+ */
+function gateway(fails: (code: string) => boolean = () => false, delayMs = 0) {
+  const real = globalThis.fetch;
+  const key = process.env.AI_GATEWAY_API_KEY;
+  let open = 0;
+  const state = {
+    calls: [] as string[],
+    /** The most calls in flight at once. */
+    peak: 0,
+    restore() {
+      globalThis.fetch = real;
+      process.env.AI_GATEWAY_API_KEY = key;
+    },
+  };
+
+  // Never used: the fetch below answers before any credential is checked.
+  process.env.AI_GATEWAY_API_KEY = 'test';
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = input instanceof Request ? input.url : String(input);
+
+    assert.ok(url.endsWith('/evaluation-model'), `unexpected fetch ${url}`);
+    const body = JSON.parse(String(init?.body)) as {
+      questions: Record<string, { type: string; criteria?: string[] }>;
+      state: { code?: string; diff?: string };
+    };
+    const code = body.state.code ?? body.state.diff ?? '';
+
+    state.calls.push(code);
+    open++;
+    state.peak = Math.max(state.peak, open);
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    open--;
+    if (fails(code)) {
+      return Response.json(
+        {
+          error: {
+            message: 'Service temporarily unavailable',
+            type: 'internal_server_error',
+          },
+        },
+        // `withOneRetry` honours this, so the retry does not wait out a jitter.
+        { headers: { 'retry-after-ms': '0' }, status: 503 },
+      );
+    }
+    const bad = code.includes('BAD');
+    const answers = Object.fromEntries(
+      Object.entries(body.questions).map(([id, q]) => [
+        id,
+        q.type === 'score'
+          ? scored(q.criteria?.length ?? 1, bad ? 0 : -1)
+          : { probability: bad ? 0.9 : 0.1, type: 'boolean' },
+      ]),
+    );
+
+    return Response.json({
+      answers,
+      providerMetadata: { gateway: { cost: '0' } },
+      rounding: { probabilityDecimals: 2, scoreDecimals: 2 },
+      usage: { inputTokens: 10, outputTokens: 1 },
+      warnings: [],
+    });
+  }) as typeof fetch;
+
+  return state;
+}
+
+/**
+ * Two windows with comments, so four calls, the first exactly one window long
+ * so `second` is only in the other. `name` keeps each test's cache keys its
+ * own, since the judgment cache outlives a test.
+ */
+function twoWindows(
+  name: string,
+  second = `const ${name.replaceAll('-', '_')} = 2; // why`,
+): ReviewFile {
+  const lines = (line: string, chars: number) =>
+    Array.from({ length: Math.floor(chars / (line.length + 1)) }, () => line);
+  const head = [`// ${name}`, ...lines('const a = 1; // why', 15_000)].join(
+    '\n',
+  );
+  // A comment line that fills the window, so nothing after it fits.
+  const fill = `//${'x'.repeat(REVIEW_LIMITS.maxCharsPerFile - head.length - 3)}`;
+
+  return {
+    content: [head, fill, ...lines(second, 10_000)].join('\n'),
+    path: `${name}.ts`,
+  };
+}
+
+function sentOf(file: ReviewFile) {
+  const plan = judgePlan(file);
+
+  return {
+    a: plan.a.map((call) => call.file.content),
+    b: plan.b.map((call) => call.file.content),
+  };
+}
+
+describe('coverage', () => {
+  test('a window lost to the gateway is counted, not hidden', async () => {
+    const file = twoWindows('lost-window');
+    const sent = sentOf(file);
+    const jev = gateway((code) => code === sent.a[1]);
+
+    try {
+      assert.equal(sent.a.length, 2);
+      assert.ok(!sent.a[0].includes('lost_window'));
+      const { judgment } = await judgeFile(file);
+
+      assert.equal(judgment.windowsPlanned, 2);
+      assert.equal(judgment.windows, 1);
+      assert.equal(judgment.strippedMissing, undefined);
+      // The passes cover different code, so they are not compared.
+      assert.equal(judgment.commentLean, undefined);
+    } finally {
+      jev.restore();
+    }
+  });
+
+  test('a window read only with its comments says so', async () => {
+    const file = twoWindows('stripped-lost');
+    const sent = sentOf(file);
+    const jev = gateway((code) => code === sent.b[0]);
+
+    try {
+      const { judgment } = await judgeFile(file);
+
+      assert.equal(judgment.windowsPlanned, 2);
+      assert.equal(judgment.windows, 2);
+      assert.equal(judgment.strippedMissing, true);
+      assert.equal(judgment.commentLean, undefined);
+    } finally {
+      jev.restore();
+    }
+  });
+
+  test('a whole file says nothing is missing', async () => {
+    const jev = gateway();
+
+    try {
+      const { judgment } = await judgeFile(twoWindows('whole'));
+
+      assert.equal(judgment.windowsPlanned, 2);
+      assert.equal(judgment.windows, 2);
+      assert.equal(judgment.strippedMissing, undefined);
+      assert.equal(judgment.commentLean, 0);
+    } finally {
+      jev.restore();
+    }
+  });
+
+  test('reaches the page through the judge reply', async () => {
+    const lost = twoWindows('reply-lost');
+    const stripped = twoWindows('reply-stripped');
+    const failing = new Set([sentOf(lost).a[1], sentOf(stripped).b[1]]);
+    const jev = gateway((code) => failing.has(code));
+
+    try {
+      const { result } = await judgeReview({ files: [lost, stripped] });
+      // As `jev-model.ts` writes the reply and the page reads it.
+      const read = parseReview(JSON.stringify({ kind: 'judged', ...result }));
+
+      assert.equal(read?.files[lost.path].windows, 1);
+      assert.equal(read?.files[lost.path].windowsPlanned, 2);
+      assert.equal(read?.files[stripped.path].windows, 2);
+      assert.equal(read?.files[stripped.path].strippedMissing, true);
+    } finally {
+      jev.restore();
+    }
+  });
+});
+
+describe('judging a partly judged file again', () => {
+  test('sends only the windows that did not answer', async () => {
+    const file = twoWindows('retry', 'const BAD_retry = 2; // why');
+    const sent = sentOf(file);
+    let down = true;
+    const jev = gateway((code) => down && code === sent.a[1]);
+
+    try {
+      const first = await judgeFile(file);
+
+      // The lost window was tried twice, as `withOneRetry` does.
+      assert.equal(first.judgment.windows, 1);
+      assert.equal(jev.calls.filter((code) => code === sent.a[1]).length, 2);
+      down = false;
+      jev.calls.length = 0;
+      // A fresh object with the same text, as the page's next turn sends it.
+      const again = await judgeFile({ ...file });
+
+      assert.deepEqual(jev.calls, [sent.a[1]]);
+      assert.equal(again.judgment.windows, 2);
+      assert.equal(again.judgment.windowsPlanned, 2);
+    } finally {
+      jev.restore();
+    }
+  });
+
+  test('can only lower the verdict of the windows read', async () => {
+    const file = twoWindows('retry-verdict', 'const BAD_verdict = 2; // why');
+    const sent = sentOf(file);
+    let down = true;
+    // Both readings of the second window are lost, so nothing saw BAD.
+    const jev = gateway(
+      (code) => down && (code === sent.a[1] || code === sent.b[1]),
+    );
+
+    try {
+      const first = await judgeFile(file);
+      const verdict = (answers: typeof first.judgment.answers) =>
+        answers.verdict?.type === 'score' ? answers.verdict.score : null;
+
+      assert.equal(verdict(first.judgment.answers), 4);
+      down = false;
+      const again = await judgeFile({ ...file });
+
+      assert.equal(verdict(again.judgment.answers), 0);
+    } finally {
+      jev.restore();
+    }
+  });
+});
+
+test('one review keeps at most eight Jev calls in flight', async () => {
+  const files = ['cap-a', 'cap-b', 'cap-c', 'cap-d', 'cap-e'].map((name) =>
+    twoWindows(name),
+  );
+  const jev = gateway(undefined, 20);
+
+  try {
+    await judgeReview({ files });
+
+    assert.equal(jev.calls.length, 20);
+    assert.equal(jev.peak, 8);
+  } finally {
+    jev.restore();
+  }
 });

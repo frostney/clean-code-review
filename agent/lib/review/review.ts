@@ -32,8 +32,19 @@ export interface FileJudgment {
    * than inventing one. Absent when the file was judged in one pass.
    */
   commentLean?: number;
-  /** Windows of the file that answered; above one, it was read in parts. */
+  /** Windows of the file that answered as written; above one, it was read in parts. */
   windows?: number;
+  /**
+   * Windows the file was cut into. Fewer answered than this means part of the
+   * file went unjudged, so the answers are the worst of what was read: judging
+   * the rest can only lower the verdict and add smells.
+   */
+  windowsPlanned?: number;
+  /**
+   * A window answered as written but not with its comments removed, so its
+   * code was judged with the comments in view and there is no `commentLean`.
+   */
+  strippedMissing?: boolean;
   /** The file was longer than `maxJudgedChars`; the rest was not judged. */
   cut?: boolean;
 }

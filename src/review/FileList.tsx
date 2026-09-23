@@ -1,12 +1,22 @@
 'use client';
 
+import type { Answers } from '@/agent/lib/judging/schema';
 import {
   type FileJudgment,
   isProsePath,
   type ReviewFile,
 } from '@/agent/lib/review/review';
 
-import { fileVerdict, smellCount, verdictFill, verdictScore } from './display';
+import {
+  fileVerdict,
+  PARTLY_JUDGED,
+  type PartialCoverage,
+  partialCoverage,
+  smellCount,
+  type Verdict,
+  verdictFill,
+  verdictScore,
+} from './display';
 import { FilePath, LangChip, ProseChip, SmellCount } from './FileCard';
 import { PendingDot } from './PendingDot';
 
@@ -55,63 +65,17 @@ export function FileList({
           signals it scrolls. At lg the wrapper dissolves into the sidebar. */}
       <div className="relative lg:contents">
         <ul className="flex gap-2 overflow-x-auto pb-2 lg:block lg:gap-0 lg:overflow-visible lg:pb-0">
-          {files.map((file) => {
-            // No verdict or bar for prose: both would read as a judgment.
-            const prose = isProsePath(file.path);
-            const answers = judgments[file.path]?.answers;
-            const score = prose ? null : verdictScore(answers);
-            const verdict = prose
-              ? null
-              : fileVerdict(score, {
-                  empty: !file.content.trim(),
-                  failed: failed[file.path] === true,
-                  paused: paused[file.path] === true,
-                  stalled: stalled(file.path),
-                });
-
-            return (
-              <li className="shrink-0 lg:shrink" key={file.path}>
-                <button
-                  className="w-72 cursor-pointer rounded-md px-2 py-1.5 text-left outline-offset-[-2px] hover:bg-surface lg:w-full"
-                  data-file={file.path}
-                  data-verdict={verdict?.key}
-                  onClick={() => onSelect(file.path)}
-                  type="button"
-                >
-                  <FilePath path={file.path} stacked={true} />
-                  <span className="mt-1 flex flex-wrap items-center gap-1.5">
-                    <LangChip path={file.path} />
-                    {verdict === null ? (
-                      <ProseChip />
-                    ) : (
-                      <>
-                        {verdict.key === 'pending' ? <PendingDot /> : null}
-                        <span className="text-xs text-muted">
-                          {verdict.label}
-                        </span>
-                        {answers ? (
-                          <>
-                            <span className="text-xs text-subtle">·</span>
-                            <SmellCount count={smellCount(answers)} />
-                          </>
-                        ) : null}
-                      </>
-                    )}
-                  </span>
-                  {verdict === null ? null : (
-                    <span className="mt-1 block h-1 w-full overflow-hidden rounded-full bg-track">
-                      <span
-                        className="block h-full rounded-full bg-ink motion-safe:transition-transform motion-safe:duration-300"
-                        style={{
-                          transform: `translateX(${(verdictFill(score) - 1) * PERCENT}%)`,
-                        }}
-                      />
-                    </span>
-                  )}
-                </button>
-              </li>
-            );
-          })}
+          {files.map((file) => (
+            <FileRow
+              failed={failed[file.path] === true}
+              file={file}
+              judgment={judgments[file.path]}
+              key={file.path}
+              onSelect={onSelect}
+              paused={paused[file.path] === true}
+              stalled={stalled(file.path)}
+            />
+          ))}
         </ul>
         <span
           aria-hidden="true"
@@ -119,5 +83,109 @@ export function FileList({
         />
       </div>
     </nav>
+  );
+}
+
+/** The rail's label and bar for one file. */
+function Standing({
+  answers,
+  coverage,
+  path,
+  score,
+  verdict,
+}: {
+  answers: Answers | undefined;
+  path: string;
+  coverage: PartialCoverage | null;
+  score: number | null;
+  verdict: Verdict;
+}) {
+  return (
+    <>
+      <span className="mt-1 flex flex-wrap items-center gap-1.5">
+        <LangChip path={path} />
+        {verdict.key === 'pending' ? <PendingDot /> : null}
+        {/* The bar below still draws the verdict of the parts judged. */}
+        <span className={`text-xs ${coverage ? 'text-warn' : 'text-muted'}`}>
+          {coverage ? PARTLY_JUDGED : verdict.label}
+        </span>
+        {answers ? (
+          <>
+            <span className="text-xs text-subtle">·</span>
+            <SmellCount
+              atLeast={coverage?.unread}
+              count={smellCount(answers)}
+            />
+          </>
+        ) : null}
+      </span>
+      <span className="mt-1 block h-1 w-full overflow-hidden rounded-full bg-track">
+        <span
+          className="block h-full rounded-full bg-ink motion-safe:transition-transform motion-safe:duration-300"
+          style={{
+            transform: `translateX(${(verdictFill(score) - 1) * PERCENT}%)`,
+          }}
+        />
+      </span>
+    </>
+  );
+}
+
+function FileRow({
+  file,
+  judgment,
+  failed,
+  paused,
+  stalled,
+  onSelect,
+}: {
+  file: ReviewFile;
+  judgment: FileJudgment | undefined;
+  failed: boolean;
+  paused: boolean;
+  stalled: boolean;
+  onSelect: (path: string) => void;
+}) {
+  // No verdict or bar for prose: both would read as a judgment.
+  const prose = isProsePath(file.path);
+  const answers = judgment?.answers;
+  const score = prose ? null : verdictScore(answers);
+  const verdict = prose
+    ? null
+    : fileVerdict(score, {
+        empty: !file.content.trim(),
+        failed,
+        paused,
+        stalled,
+      });
+  const coverage = prose ? null : partialCoverage(judgment);
+
+  return (
+    <li className="shrink-0 lg:shrink">
+      <button
+        className="w-72 cursor-pointer rounded-md px-2 py-1.5 text-left outline-offset-[-2px] hover:bg-surface lg:w-full"
+        data-coverage={coverage ? 'partial' : undefined}
+        data-file={file.path}
+        data-verdict={verdict?.key}
+        onClick={() => onSelect(file.path)}
+        type="button"
+      >
+        <FilePath path={file.path} stacked={true} />
+        {verdict === null ? (
+          <span className="mt-1 flex flex-wrap items-center gap-1.5">
+            <LangChip path={file.path} />
+            <ProseChip />
+          </span>
+        ) : (
+          <Standing
+            answers={answers}
+            coverage={coverage}
+            path={file.path}
+            score={score}
+            verdict={verdict}
+          />
+        )}
+      </button>
+    </li>
   );
 }

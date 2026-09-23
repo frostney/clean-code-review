@@ -1,6 +1,12 @@
 'use client';
 
-import { reviewVerdict, smellCount, smellLabel, verdictScore } from './display';
+import {
+  partialCoverage,
+  reviewVerdict,
+  smellCount,
+  smellLabel,
+  verdictScore,
+} from './display';
 import { PendingDot } from './PendingDot';
 import type { ReviewState } from './useReview';
 
@@ -22,6 +28,7 @@ export function ReviewPills({
     !review.asking && stalled,
   );
   const smells = judged.reduce((total, j) => total + smellCount(j.answers), 0);
+  const unread = judged.some((j) => partialCoverage(j)?.unread === true);
 
   return (
     <>
@@ -39,7 +46,7 @@ export function ReviewPills({
           }`}
           data-smells-total={smells}
         >
-          {smellLabel(smells)}
+          {smellLabel(smells, unread)}
         </span>
       )}
       <ReviewStatus review={review} />

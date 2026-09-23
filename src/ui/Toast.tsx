@@ -1,7 +1,9 @@
 'use client';
 
 import { CircleAlert, Info, TriangleAlert, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+
+import { handOn } from './hand-on';
 
 /**
  * Floats so nothing moves when it comes or goes: at the foot of the file list's
@@ -25,6 +27,11 @@ export interface ToastItem {
   message: string;
   action?: { label: string; busyLabel: string; busy: boolean; run: () => void };
   onDismiss: () => void;
+  /**
+   * Where the focus goes if the toast leaves while holding it: dismissed, or
+   * gone because its Retry worked.
+   */
+  handOnTo?: string;
 }
 
 const TONE: Record<
@@ -54,11 +61,33 @@ const TONE: Record<
 function Toast({ item }: { item: ToastItem }) {
   const tone = TONE[item.tone];
   const Icon = tone.icon;
+  const node = useRef<HTMLDivElement>(null);
+  const handOnTo = useRef(item.handOnTo);
+
+  handOnTo.current = item.handOnTo;
+  // A layout cleanup runs while the node is still in the document, so the
+  // focus is still inside it to be handed on.
+  useLayoutEffect(() => {
+    const toast = node.current;
+
+    return () => {
+      const active = document.activeElement;
+
+      if (
+        handOnTo.current &&
+        active instanceof HTMLElement &&
+        toast?.contains(active)
+      ) {
+        handOn(active, handOnTo.current);
+      }
+    };
+  }, []);
 
   return (
     <div
       className={`pointer-events-auto flex flex-wrap items-start gap-x-2.5 rounded-md border border-l-4 border-line-strong bg-page py-2 pr-1 pl-3 text-sm text-ink shadow-toast ${tone.edge} opacity-100 motion-safe:transition-[opacity,translate] motion-safe:duration-200 starting:translate-y-2 starting:opacity-0`}
       data-toast={item.tone}
+      ref={node}
     >
       <Icon
         aria-hidden="true"

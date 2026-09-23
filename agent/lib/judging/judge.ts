@@ -57,6 +57,8 @@ interface JudgeCall {
   file: ReviewFile;
   key: string;
   pass: PassId;
+  /** Its place in the file; pass B skips a window stripping emptied. */
+  window: number;
 }
 
 function judgeKey(file: ReviewFile, pass: PassId, window: number): string {
@@ -167,7 +169,7 @@ function callsOf(
     truncated ||= content.length < whole.length;
     const part: ReviewFile = { ...file, content };
 
-    return { file: part, key: judgeKey(part, pass, i), pass };
+    return { file: part, key: judgeKey(part, pass, i), pass, window: i };
   });
 
   return { calls, truncated };
@@ -269,12 +271,81 @@ export class JudgeFailedError extends Error {
   }
 }
 
+/**
+ * Jev calls one review keeps in flight. Measured on four large pull requests
+ * (33 to 66 calls each, eight runs per setting, 2026-09-23): uncapped, 11.0%
+ * of calls were still lost after their retry and the judging took 1.9 s; at
+ * 16, 8.6% and 2.7 s; at 8, 6.1% and 3.7 s; at 4, 8.0% and 6.2 s. The gateway
+ * answers 503 more often the more a caller has in flight, but most of all the
+ * longer the window, which no cap changes; 8 is where the loss bottomed out.
+ */
+const MAX_JEV_CALLS_IN_FLIGHT = 8;
+
+type Slots = <T>(work: () => Promise<T>, signal?: AbortSignal) => Promise<T>;
+
+/** At most `max` pieces of work at once; the rest start in the order they asked. */
+function slotsOf(max: number): Slots {
+  let free = max;
+  const waiting: (() => void)[] = [];
+  const release = () => {
+    const next = waiting.shift();
+
+    if (next) {
+      next();
+    } else {
+      free++;
+    }
+  };
+  const turn = (signal?: AbortSignal) =>
+    new Promise<void>((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(signal.reason);
+
+        return;
+      }
+      const go = () => {
+        signal?.removeEventListener('abort', stop);
+        resolve();
+      };
+
+      function stop() {
+        waiting.splice(waiting.indexOf(go), 1);
+        reject(signal?.reason);
+      }
+
+      waiting.push(go);
+      signal?.addEventListener('abort', stop, { once: true });
+    });
+
+  return async (work, signal) => {
+    if (free > 0) {
+      free--;
+    } else {
+      await turn(signal);
+    }
+    try {
+      return await work();
+    } finally {
+      release();
+    }
+  };
+}
+
 /** Shared across every call for one file, since any of them may bill and fail. */
 interface Spent {
   failedUsd: number;
 }
 
-async function runCall(call: JudgeCall, spent: Spent, signal?: AbortSignal) {
+/**
+ * A cached answer takes no slot. A call keeps its slot through its retry, so
+ * a burst of 503s is not answered with a burst of retries.
+ */
+async function runCall(
+  call: JudgeCall,
+  spent: Spent,
+  slots: Slots,
+  signal?: AbortSignal,
+) {
   const once = async (attempt: AbortSignal) => {
     if (attempt.aborted) {
       // Not sent, so not charged.
@@ -292,7 +363,9 @@ async function runCall(call: JudgeCall, spent: Spent, signal?: AbortSignal) {
     }
   };
   const { value, hit } = await cached(call.key, 'jev-judgment', async () =>
-    toJudgment(await withOneRetry(once, CALL_TIMEOUT_MS, signal)),
+    toJudgment(
+      await slots(() => withOneRetry(once, CALL_TIMEOUT_MS, signal), signal),
+    ),
   );
 
   return { ...value, cost: hit ? 0 : value.cost, hit };
@@ -328,14 +401,13 @@ function worstOf(parts: readonly Answers[]): Answers {
 }
 
 interface PassResult {
-  answers: Answers;
+  /** By window, for the windows that answered. */
+  answers: Map<number, Answers>;
   cached: boolean;
   cost: number;
   model: string;
   usage: FileJudgment['usage'];
   warnings: Awaited<ReturnType<typeof runCall>>['warnings'];
-  /** Windows that answered, which is not always every window planned. */
-  windows: number;
   /** False when a window failed, so this pass does not cover the whole file. */
   complete: boolean;
 }
@@ -344,13 +416,16 @@ interface PassResult {
 async function runPass(
   calls: readonly JudgeCall[],
   spent: Spent,
+  slots: Slots,
   signal?: AbortSignal,
 ): Promise<PassResult> {
   const settled = await Promise.allSettled(
-    calls.map((call) => runCall(call, spent, signal)),
+    calls.map((call) => runCall(call, spent, slots, signal)),
   );
-  const done = settled.flatMap((outcome) =>
-    outcome.status === 'fulfilled' ? [outcome.value] : [],
+  const done = settled.flatMap((outcome, i) =>
+    outcome.status === 'fulfilled'
+      ? [{ ...outcome.value, window: calls[i].window }]
+      : [],
   );
 
   if (done.length === 0) {
@@ -364,14 +439,13 @@ async function runPass(
   }
 
   return {
-    answers: worstOf(done.map((part) => part.judgment.answers)),
+    answers: new Map(done.map((part) => [part.window, part.judgment.answers])),
     cached: done.length === calls.length && done.every((part) => part.hit),
     complete: done.length === calls.length,
     cost: done.reduce((total, part) => total + part.cost, 0),
     model: done[0].model,
     usage,
     warnings: done.flatMap((part) => part.warnings),
-    windows: done.length,
   };
 }
 
@@ -399,6 +473,57 @@ function answersOfPasses(a: Answers, b: Answers): Answers {
   return merged;
 }
 
+function only(answers: Answers, keep: (id: string) => boolean): Answers {
+  return Object.fromEntries(Object.entries(answers).filter(([id]) => keep(id)));
+}
+
+const isCommentQuestion = (id: string) => COMMENT_QUESTION_IDS.has(id);
+
+/**
+ * Window by window, as `answersOfPasses` merges whole passes, then the worst
+ * over the windows. A window whose reading without comments was lost falls
+ * back to the reading with them, which saw the same code; one that reading
+ * lost gives only its code answers. A window stripping emptied holds nothing
+ * but comments, so only the comment questions are asked of it.
+ */
+function answersOfWindows(
+  plan: JudgePlan,
+  written: PassResult,
+  bare: PassResult | null,
+): Answers {
+  const strippable = new Set(plan.b.map((call) => call.window));
+  const windows: Answers[] = [];
+
+  for (let window = 0; window < plan.a.length; window++) {
+    const a = written.answers.get(window);
+    const b = bare?.answers.get(window);
+
+    if (a && b) {
+      windows.push(answersOfPasses(a, b));
+    } else if (b) {
+      windows.push(only(b, (id) => !isCommentQuestion(id)));
+    } else if (a) {
+      const onlyComments = plan.b.length > 0 && !strippable.has(window);
+
+      windows.push(onlyComments ? only(a, isCommentQuestion) : a);
+    }
+  }
+
+  return worstOf(windows);
+}
+
+/** A window read as written whose reading without comments did not answer. */
+function strippedMissing(
+  plan: JudgePlan,
+  written: PassResult,
+  bare: PassResult | null,
+): boolean {
+  return plan.b.some(
+    (call) =>
+      written.answers.has(call.window) && !bare?.answers.has(call.window),
+  );
+}
+
 function verdictOf(answers: Answers): number | null {
   const verdict = answers[VERDICT_ID];
 
@@ -424,8 +549,8 @@ function leanForFile(
   if (!(written.complete && bare.complete)) {
     return;
   }
-  const asWritten = verdictOf(written.answers);
-  const stripped = verdictOf(bare.answers);
+  const asWritten = verdictOf(worstOf([...written.answers.values()]));
+  const stripped = verdictOf(worstOf([...bare.answers.values()]));
 
   return asWritten === null || stripped === null
     ? undefined
@@ -438,13 +563,17 @@ function leanForFile(
  * have succeeded and been billed; failure of pass B costs the file its lean
  * and whatever its own attempts spent.
  */
-export async function judgeFile(file: ReviewFile, signal?: AbortSignal) {
+export async function judgeFile(
+  file: ReviewFile,
+  signal?: AbortSignal,
+  slots: Slots = slotsOf(MAX_JEV_CALLS_IN_FLIGHT),
+) {
   const started = performance.now();
   const plan = judgePlan(file);
   const spent: Spent = { failedUsd: 0 };
   const [a, b] = await Promise.allSettled([
-    runPass(plan.a, spent, signal),
-    ...(plan.b.length ? [runPass(plan.b, spent, signal)] : []),
+    runPass(plan.a, spent, slots, signal),
+    ...(plan.b.length ? [runPass(plan.b, spent, slots, signal)] : []),
   ]);
   const bare = b?.status === 'fulfilled' ? b.value : null;
 
@@ -452,9 +581,7 @@ export async function judgeFile(file: ReviewFile, signal?: AbortSignal) {
     throw new JudgeFileError(spent.failedUsd + (bare?.cost ?? 0), a.reason);
   }
   const judgment: FileJudgment = {
-    answers: bare
-      ? answersOfPasses(a.value.answers, bare.answers)
-      : a.value.answers,
+    answers: answersOfWindows(plan, a.value, bare),
     // A failed attempt was paid for, so this is not a free answer.
     cached:
       spent.failedUsd === 0 && a.value.cached && (bare === null || bare.cached),
@@ -465,8 +592,10 @@ export async function judgeFile(file: ReviewFile, signal?: AbortSignal) {
       output_tokens:
         a.value.usage.output_tokens + (bare?.usage.output_tokens ?? 0),
     },
-    windows: a.value.windows,
+    windows: a.value.answers.size,
+    windowsPlanned: plan.a.length,
     ...(plan.cut ? { cut: true } : {}),
+    ...(strippedMissing(plan, a.value, bare) ? { strippedMissing: true } : {}),
   };
   const lean = leanForFile(plan, a.value, bare);
 
@@ -549,8 +678,9 @@ function toJudgment(result: Awaited<ReturnType<typeof evaluateFile>>) {
 
 /** Throws `JudgeFailedError` only when every file fails; otherwise failures are listed in `errors`. */
 export async function judgeReview(input: ReviewInput, signal?: AbortSignal) {
+  const slots = slotsOf(MAX_JEV_CALLS_IN_FLIGHT);
   const settled = await Promise.allSettled(
-    input.files.map((file) => judgeFile(file, signal)),
+    input.files.map((file) => judgeFile(file, signal, slots)),
   );
   const result: ReviewResult = {
     files: {},

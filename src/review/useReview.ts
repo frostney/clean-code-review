@@ -84,7 +84,7 @@ export interface ReviewState {
   judgments: Record<string, FileJudgment>;
   /** Paths with a request in flight or queued behind one. */
   pending: Record<string, true>;
-  /** Paths that came back unjudged twice and will not be asked about again. */
+  /** Paths that came back unjudged twice; only the reader's Retry asks again. */
   givenUp: Record<string, true>;
   asking: boolean;
   error: string | null;
@@ -188,19 +188,9 @@ function costOf(events: readonly { type: string; data?: unknown }[]): number {
     }, 0);
 }
 
-// Silently short answers are how a card gets stuck, so say how many are missing.
-function unjudgedError(
-  review: ReviewResult | null,
-  unjudged: number,
-): string | null {
-  if (!review) {
-    return 'the reply was not a review';
-  }
-  if (!unjudged) {
-    return null;
-  }
-
-  return `${unjudged} ${unjudged === 1 ? 'file' : 'files'} came back unjudged`;
+/** A file left unjudged is not an error of the turn: see `givenUp` and the coverage toast. */
+function replyError(review: ReviewResult | null): string | null {
+  return review ? null : 'the reply was not a review';
 }
 
 function without(
@@ -556,7 +546,6 @@ interface JudgeTurn {
   ms: number;
   paths: readonly string[];
   review: ReviewResult | null;
-  unjudged: number;
 }
 
 function withBudgetSpentTurn(
@@ -625,7 +614,7 @@ function withJudgeTurn(s: ReviewState, turn: JudgeTurn): ReviewState {
     ...s,
     asking: false,
     cached: turn.cached,
-    error: unjudgedError(turn.review, turn.unjudged),
+    error: replyError(turn.review),
     givenUp: {
       ...without(s.givenUp, turn.paths),
       ...Object.fromEntries(turn.failed.map((p) => [p, true as const])),
@@ -709,6 +698,12 @@ function unsent(
 export interface ReviewActions {
   /** Re-asks every unanswered file; false when there was nothing to ask. */
   retry: () => boolean;
+  /**
+   * Re-asks about files Jev answered in part or not at all. The windows that
+   * did answer come back from the agent's cache, so only the missing ones are
+   * sent to Jev again. False when none of them can be asked about now.
+   */
+  rejudge: (paths: readonly string[]) => boolean;
 }
 
 /**
@@ -1284,7 +1279,6 @@ export function useReview(
           ms,
           paths,
           review,
-          unjudged: unjudged.length,
         }),
       );
       if (Object.keys(fresh).length) {
@@ -1356,8 +1350,12 @@ export function useReview(
         return;
       }
       inFlightRef.current = true;
+      // A summary still waiting on its timer is displaced too, or a turn that
+      // brings nothing new (a lone unjudged file asked again) would lose it.
+      const summaryWanted =
+        summaryWantedRef.current || summaryTimerRef.current !== null;
+
       clearSummaryTimer();
-      const summaryWanted = summaryWantedRef.current;
 
       summaryWantedRef.current = false;
       const paths = batch.map((f) => f.path);
@@ -1562,7 +1560,38 @@ export function useReview(
     return true;
   }, [startTurn]);
 
-  const actions = useMemo<ReviewActions>(() => ({ retry }), [retry]);
+  const rejudge = useCallback(
+    (paths: readonly string[]): boolean => {
+      const s = stateRef.current;
+      const asked = new Set(paths);
+      const again = filesRef.current.filter(
+        (f) =>
+          asked.has(f.path) &&
+          s.pending[f.path] !== true &&
+          s.pausedFiles[f.path] !== true &&
+          !isProsePath(f.path) &&
+          f.content.trim(),
+      );
+
+      if (!again.length || budgetSpentRef.current) {
+        return false;
+      }
+      for (const file of again) {
+        sentRef.current.delete(file.path);
+      }
+      startTurn(again).catch(() => {
+        /* startTurn puts its own failures on screen. */
+      });
+
+      return true;
+    },
+    [startTurn],
+  );
+
+  const actions = useMemo<ReviewActions>(
+    () => ({ rejudge, retry }),
+    [rejudge, retry],
+  );
 
   useEffect(() => {
     return () => {

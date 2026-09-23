@@ -26,9 +26,13 @@ import {
 
 import { diffStats, parsePatch } from './diff';
 import {
+  coverageChip,
+  coverageSentence,
   fileSummaryStatus,
   fileVerdict,
   isWriting,
+  type PartialCoverage,
+  partialCoverage,
   pct,
   type SummaryView,
   smellCount,
@@ -128,9 +132,12 @@ export function ProseChip({ className = '' }: { className?: string }) {
 
 export function SmellCount({
   count,
+  atLeast = false,
   className = '',
 }: {
   count: number;
+  /** Part of the file went unread, so this is a floor. */
+  atLeast?: boolean;
   className?: string;
 }) {
   return (
@@ -138,7 +145,7 @@ export function SmellCount({
       className={`text-xs ${count ? 'text-bad' : 'text-muted'} ${className}`}
       data-smells={count}
     >
-      {smellLabel(count)}
+      {smellLabel(count, atLeast)}
     </span>
   );
 }
@@ -146,6 +153,7 @@ export function SmellCount({
 function CardHeader({
   answers,
   collapsed,
+  coverage,
   lineCount,
   onToggle,
   path,
@@ -157,6 +165,7 @@ function CardHeader({
 }: {
   answers: Answers | undefined;
   collapsed: boolean;
+  coverage: PartialCoverage | null;
   /** The lines the card draws, which is fewer than the file has when windowed. */
   lineCount: number;
   onToggle: () => void;
@@ -207,6 +216,11 @@ function CardHeader({
           Cut at {MAX_JUDGED_CHARS.toLocaleString()} characters
         </span>
       ) : null}
+      {coverage ? (
+        <span className="shrink-0 text-xs text-warn" data-coverage="partial">
+          {coverageChip(coverage)}
+        </span>
+      ) : null}
       <span className="ml-auto flex shrink-0 items-center gap-2">
         {verdict === null ? (
           <ProseChip />
@@ -215,7 +229,9 @@ function CardHeader({
             {confidence === null ? null : (
               <span className="text-xs text-muted">{pct(confidence)} sure</span>
             )}
-            {answers ? <SmellCount count={smells} /> : null}
+            {answers ? (
+              <SmellCount atLeast={coverage?.unread} count={smells} />
+            ) : null}
             <span
               className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold ${verdict.className}`}
               data-verdict={verdict.key}
@@ -238,6 +254,7 @@ function CardHeader({
 function Judgment({
   answers,
   changes,
+  coverage,
   findingsOpen,
   onToggleFindings,
   path,
@@ -246,6 +263,7 @@ function Judgment({
 }: {
   answers: Answers | undefined;
   changes: Changes;
+  coverage: PartialCoverage | null;
   findingsOpen: boolean;
   onToggleFindings: () => void;
   path: string;
@@ -281,6 +299,14 @@ function Judgment({
           )}
           {findingsOpen ? 'Hide full summary' : 'Show full summary'}
         </button>
+        {findingsOpen && coverage ? (
+          <p
+            className="mb-2 px-1.5 text-xs leading-relaxed text-warn"
+            data-coverage-note={true}
+          >
+            {coverageSentence(coverage)}
+          </p>
+        ) : null}
         {findingsOpen ? (
           <div className="grid grid-cols-1 items-start gap-x-5 @[800px]/card:grid-cols-2">
             {GROUPS.map((group) => (
@@ -581,6 +607,7 @@ export function FileCard({
         stalled,
       });
   const confidence = prose ? null : verdictConfidence(answers);
+  const coverage = prose ? null : partialCoverage(judgment);
   const stats = useMemo(
     () => (file.patch ? diffStats(parsePatch(file.content)) : null),
     [file.patch, file.content],
@@ -622,6 +649,7 @@ export function FileCard({
         answers={answers}
         collapsed={collapsed}
         confidence={confidence}
+        coverage={coverage}
         lineCount={drawnLines}
         onToggle={onToggle}
         path={file.path}
@@ -651,6 +679,7 @@ export function FileCard({
             <Judgment
               answers={answers}
               changes={changes}
+              coverage={coverage}
               findingsOpen={findingsOpen}
               onToggleFindings={() => setFindingsOpen((open) => !open)}
               path={file.path}

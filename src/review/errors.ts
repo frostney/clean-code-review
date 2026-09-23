@@ -1,7 +1,7 @@
 /**
  * `retry` is whether Retry can help: a failed turn forgot what it sent, so
- * asking again is what an edit would do, but a file Jev declined twice will
- * not be answered a third time.
+ * asking again is what an edit would do. Files Jev left unjudged are offered
+ * again by the coverage toast instead, not through a turn error.
  */
 export interface TurnTrouble {
   sentence: string;
@@ -12,21 +12,9 @@ export interface TurnTrouble {
 const NETWORK =
   /failed to fetch|networkerror|load failed|fetch failed|network/i;
 const HTTP_STATUS = /^HTTP (\d{3})$/;
-const UNJUDGED = /^(\d+) files? came back unjudged$/;
 const TOO_MANY_REQUESTS = 429;
 
 export function describeTurnError(message: string): TurnTrouble {
-  const unjudged = UNJUDGED.exec(message);
-
-  if (unjudged) {
-    const one = unjudged[1] === '1';
-
-    return {
-      retry: false,
-      sentence: `Jev sent no answer for ${one ? 'one file' : `${unjudged[1]} files`}.`,
-      tone: 'warn',
-    };
-  }
   if (message === 'the reply was not a review') {
     return {
       retry: false,

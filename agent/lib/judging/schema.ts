@@ -52,8 +52,10 @@ const fileSchema = z.object({
   commentLean: z.number().optional(),
   cut: z.boolean().optional(),
   ms: z.number(),
+  strippedMissing: z.boolean().optional(),
   usage: usageSchema,
   windows: z.number().optional(),
+  windowsPlanned: z.number().optional(),
 });
 
 const resultSchema = z.object({

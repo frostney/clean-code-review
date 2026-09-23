@@ -66,6 +66,8 @@ interface ReviewControls {
   dismissPrError: () => void;
   /** False when there was nothing to retry. */
   retryJudging: () => boolean;
+  /** Files judged in part or not at all; false when none could be asked. */
+  rejudge: (paths: readonly string[]) => boolean;
 }
 
 interface ReviewView {
@@ -609,6 +611,7 @@ export function ReviewProvider({
       openPreset,
       openPullRequest,
       pasteButtonRef,
+      rejudge: judging.rejudge,
       retryJudging: judging.retry,
       retryPullRequest,
       startPasting,

@@ -148,7 +148,10 @@ export default function PrivacyPage() {
             {REVIEW_LIMITS.maxCharsPerFile.toLocaleString('en-US')}, and each
             window twice — once as written, once with its comments removed — so
             one file is judged in up to {MAX_JUDGE_CALLS_PER_FILE} calls, and a
-            call that fails is retried once. Luna is given its first{' '}
+            call that fails is retried once. If some of a file still goes
+            unanswered, pressing Retry sends that file again, and the windows
+            Jev already answered come from the cache rather than being sent to
+            it again. Luna is given its first{' '}
             {FILE_EXCERPT_CHARS.toLocaleString('en-US')} characters and Jev's
             findings for the rest. Up to {REVIEW_LIMITS.maxProseFiles} prose
             files are shown beside them and never sent.

@@ -1,5 +1,6 @@
 import { type Question, SMELL_IDS } from '@/agent/lib/judging/questions';
 import type { Answer, Answers } from '@/agent/lib/judging/schema';
+import type { FileJudgment } from '@/agent/lib/review/review';
 import type { Summary } from '@/agent/lib/review/summary';
 
 const PERCENT = 100;
@@ -278,12 +279,74 @@ export function smellCount(answers: Answers | undefined): number {
   return n;
 }
 
-export function smellLabel(count: number): string {
+/** `atLeast` when part of the code went unread, where more may be hiding. */
+export function smellLabel(count: number, atLeast = false): string {
   if (count === 0) {
-    return 'no smells';
+    return atLeast ? 'no smells so far' : 'no smells';
+  }
+  if (atLeast) {
+    return `${count}+ ${count === 1 ? 'smell' : 'smells'}`;
   }
 
   return count === 1 ? '1 smell' : `${count} smells`;
+}
+
+/* ── Coverage ───────────────────────────────────────────────────────────── */
+
+/** How much of a file Jev answered for, when that was less than all of it. */
+export interface PartialCoverage {
+  /** Windows answered as written. */
+  judged: number;
+  planned: number;
+  /** Code answers are the worst of the windows read, so the rest can only add faults. */
+  unread: boolean;
+  /** Some code was judged with its comments in view only. */
+  strippedMissing: boolean;
+}
+
+/** Null when the whole file was judged, or the reply predates coverage. */
+export function partialCoverage(
+  judgment: FileJudgment | undefined,
+): PartialCoverage | null {
+  if (!judgment) {
+    return null;
+  }
+  const planned = judgment.windowsPlanned ?? 0;
+  const judged = judgment.windows ?? planned;
+  const unread = judged < planned;
+  const strippedMissing = judgment.strippedMissing === true;
+
+  return unread || strippedMissing
+    ? { judged, planned, strippedMissing, unread }
+    : null;
+}
+
+export const PARTLY_JUDGED = 'Partly judged';
+
+/** Short enough for a card header. */
+export function coverageChip(coverage: PartialCoverage): string {
+  return coverage.unread
+    ? `${coverage.judged} of ${coverage.planned} parts judged`
+    : 'Judged as written only';
+}
+
+/** What the verdict and smell count mean for a partly judged file. */
+export function coverageSentence(coverage: PartialCoverage): string {
+  const parts = coverage.unread
+    ? [
+        `Jev answered for ${coverage.judged} of this file's ${coverage.planned} parts; the rest went unjudged. These answers cover only the parts judged, so judging the rest can only lower the verdict or add smells.`,
+      ]
+    : [];
+
+  if (coverage.strippedMissing) {
+    parts.push(
+      coverage.unread
+        ? 'Some of it was also judged only with its comments in view, which can move the verdict either way.'
+        : 'Part of this file was judged only with its comments in view: the reading without them did not answer, so the verdict can move either way, and how far the comments sway it was not measured.',
+    );
+  }
+
+  return parts.join(' ');
 }
 
 /* ── Luna's review ──────────────────────────────────────────────────────── */
