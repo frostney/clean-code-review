@@ -1,14 +1,23 @@
-import { createMcpHandler } from 'mcp-handler';
+import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 
 import { MCP_SERVER_NAME, MCP_SERVER_VERSION } from '@/src/mcp/mcp-facts';
 import { registerReviewTools } from '@/src/mcp/mcp-server';
 import { SITE } from '@/src/site/site';
 
-// Stateless Streamable HTTP. `proxy.ts`'s matcher excludes `/api/`.
-const handler = createMcpHandler(registerReviewTools, {
-  instructions: `${SITE.name}: ${SITE.tagline} Jev judges the code file by file and Luna writes the review. Use review_pull_request for a public GitHub pull request, and review_pasted_code for a diff or files that are not on GitHub.`,
+const INSTRUCTIONS = `${SITE.name}: ${SITE.tagline} Jev judges the code file by file and Luna writes the review. Use review_pull_request for a public GitHub pull request, and review_pasted_code for a diff or files that are not on GitHub.`;
+
+// A server per request, for 2026-07-28 and, by the default `legacy:
+// 'stateless'`, for 2025-era clients. `proxy.ts`'s matcher excludes `/api/`.
+const handler = createMcpHandler(() => {
   // Must match the server card.
-  serverInfo: { name: MCP_SERVER_NAME, version: MCP_SERVER_VERSION },
+  const server = new McpServer(
+    { name: MCP_SERVER_NAME, version: MCP_SERVER_VERSION },
+    { instructions: INSTRUCTIONS },
+  );
+
+  registerReviewTools(server);
+
+  return server;
 });
 
 /** JSON-RPC "Invalid Request". */
@@ -38,10 +47,15 @@ async function post(request: Request): Promise<Response> {
     );
   }
 
-  return handler(request);
+  return handler.fetch(request);
+}
+
+/** Nothing is held open, so the SDK answers 405 with a JSON-RPC body a 2025 client reads; Next's own 405 has none. */
+function get(request: Request): Promise<Response> {
+  return handler.fetch(request);
 }
 
 /** Judging is seconds; Luna's written review can take most of a minute. */
 export const maxDuration = 120;
 
-export { handler as GET, post as POST };
+export { get as GET, post as POST };

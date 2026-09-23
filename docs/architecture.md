@@ -84,6 +84,14 @@ paths, the Boy Scout row only on diffs.
 `review_pull_request` takes a public GitHub pull request URL, and
 `review_pasted_code` takes a unified diff or files, up to 1,000,000 characters.
 
+The route serves it with `createMcpHandler` from `@modelcontextprotocol/server`,
+which builds a server per request. A request carrying the 2026-07-28 `_meta`
+envelope is served on that revision, as plain JSON with no `initialize`; one
+without it falls back to the 2025 revisions, stateless, from the same tools.
+The tools read the caller's address from the request headers, which the SDK
+hands them in both eras. GET answers 405: nothing is held open between
+requests.
+
 A server card sits at `/api/mcp/server-card` and the AI Catalog at
 `/.well-known/ai-catalog.json` lists it. Both follow the server card proposal
 (SEP-2127, `modelcontextprotocol/experimental-ext-server-card`), which is not
