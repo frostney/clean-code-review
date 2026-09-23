@@ -87,8 +87,8 @@ export function readChoice(): ThemeChoice {
 
 - Prefer the platform, Next or eve before adding a package.
 - Add with an exact version: `bun add --exact <pkg>` (`-d` for dev tooling).
-  About half of `package.json` is still on `^` ranges (`ai`, `eve`, `shiki`,
-  `knip` and others); they predate this rule and are not a pattern to copy.
+  Some of `package.json` is still on `^` ranges (`shiki`, `lucide-react`,
+  `lefthook` and others); they predate this rule and are not a pattern to copy.
 - Bun 1.4 (`packageManager: bun@1.4.0`) writes the text `bun.lock`. Commit it
   with the `package.json` change; Vercel and CI install with
   `bun install --frozen-lockfile`.

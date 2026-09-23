@@ -28,6 +28,13 @@ export function buildInstructions(): string {
   ].join('\n');
 }
 
+/**
+ * What `agent.ts` tells eve the model's context window is. It is not one: it
+ * keeps turn messages of printable text at every page cap under eve's
+ * compaction trigger (`prompt.test.ts`). `agent.ts` says what it misses.
+ */
+export const TURN_CONTEXT_WINDOW_TOKENS = 2_000_000;
+
 export function judgeMessage(input: ReviewInput): string {
   return JSON.stringify({
     kind: 'judge',
@@ -104,10 +111,7 @@ function parseJsonMessage(trimmed: string): ParsedMessage | null {
   return null;
 }
 
-/**
- * Plain text (eve TUI, curl) is judged as a snippet or diff. Anything else,
- * such as framework notifications about background tasks, is `other`.
- */
+/** Plain text (eve TUI, curl) is judged as a snippet or diff; anything else is `other`. */
 export function parseMessage(text: string): ParsedMessage {
   const trimmed = text.trim();
 
@@ -157,12 +161,7 @@ function readFiles(raw: unknown): ReviewFile[] | null {
   return partitionJudgeable(files).judgeable;
 }
 
-/** Keeps framework notifications from being judged as snippets. */
 function looksLikeCode(text: string): boolean {
-  if (/^(\[Task state\]|Background task)/.test(text)) {
-    return false;
-  }
-
   return /[{};=()]|^\s*(def |class |import |function |const |let |var |public |fn |func )/m.test(
     text,
   );

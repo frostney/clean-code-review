@@ -7,7 +7,6 @@
     "agent/instructions.ts",
     "agent/channels/*.ts",
     "agent/schedules/*.ts",
-    "agent/subagents/**/*.ts",
     "agent/**/*.test.ts",
     "scripts/*.ts",
     "agent/**/*.test.ts",
