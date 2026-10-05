@@ -60,6 +60,7 @@ describe('withoutComments', () => {
 
   test('a language with no scanner has no second pass', () => {
     assert.equal(strip({ content: '-- a\nb;\n', path: 'a.sql' }), 'none');
+    assert.equal(strip({ content: '/* a */\n', path: 'a.css' }), 'none');
   });
 
   test('leaves the code byte for byte', () => {
@@ -92,10 +93,6 @@ describe('withoutComments', () => {
     assert.equal(
       strip({ content: 'var x = 1; // gone\n', path: 'A.cs' }),
       'var x = 1;\n',
-    );
-    assert.equal(
-      strip({ content: 'a { color: red } /* gone */\n', path: 'a.css' }),
-      'a { color: red }\n',
     );
   });
 });

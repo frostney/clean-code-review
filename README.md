@@ -102,9 +102,12 @@ MCP surface and every limit and budget are in
 
 24 code files per review, the largest changes first, 64,000 characters per file
 read in windows of 16,000, public GitHub repositories only. Images, binaries,
-lockfiles, minified and generated files are skipped. Markdown, plain text,
-reStructuredText and AsciiDoc are prose: up to 10 of them are shown with the
-review, read-only, and neither model sees them. Around sixty-five file types
+lockfiles, minified and generated files are skipped, and so are data,
+configuration, markup, stylesheet, SQL and Dockerfiles (JSON, YAML, TOML, XML,
+HTML, CSS and the like), which have no functions or classes for the questions
+to ask about. Markdown, plain text, reStructuredText, AsciiDoc, changelog
+fragments and `LICENSE`-style files are prose: up to 10 of them are shown with
+the review, read-only, and neither model sees them. Around sixty-five file types
 are highlighted, each grammar fetched the first time a review needs it.
 
 The page and the MCP server talk to the models anonymously, so the deployment

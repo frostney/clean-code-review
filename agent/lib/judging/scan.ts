@@ -7,8 +7,8 @@
  * need their own parser anyway. `scan.test.ts` checks these ranges against the
  * TypeScript scanner's over every `.ts` and `.tsx` file in the repository.
  *
- * A comment is never recognised inside a string, template literal, regex, JSX
- * text or a CSS `url()`, because those are scanned and skipped whole.
+ * A comment is never recognised inside a string, template literal, regex or JSX
+ * text, because those are scanned and skipped whole.
  */
 
 export interface CommentRange {
@@ -17,7 +17,7 @@ export interface CommentRange {
   end: number;
 }
 
-type Family = 'c' | 'csharp' | 'css' | 'go' | 'java' | 'js' | 'python' | 'rust';
+type Family = 'c' | 'csharp' | 'go' | 'java' | 'js' | 'python' | 'rust';
 
 const FAMILY_BY_EXTENSION: Readonly<Record<string, Family>> = {
   c: 'c',
@@ -25,7 +25,6 @@ const FAMILY_BY_EXTENSION: Readonly<Record<string, Family>> = {
   cjs: 'js',
   cpp: 'c',
   cs: 'csharp',
-  css: 'css',
   cts: 'js',
   cxx: 'c',
   go: 'go',
@@ -36,7 +35,6 @@ const FAMILY_BY_EXTENSION: Readonly<Record<string, Family>> = {
   java: 'java',
   js: 'js',
   jsx: 'js',
-  less: 'css',
   m: 'c',
   mjs: 'js',
   mm: 'c',
@@ -44,8 +42,6 @@ const FAMILY_BY_EXTENSION: Readonly<Record<string, Family>> = {
   py: 'python',
   pyi: 'python',
   rs: 'rust',
-  sass: 'css',
-  scss: 'css',
   ts: 'js',
   tsx: 'js',
 };
@@ -162,8 +158,6 @@ interface Syntax {
   cppRaw?: boolean;
   /** `@"…"`. */
   verbatim?: boolean;
-  /** An unquoted `url(…)` may hold a `//`. */
-  cssUrl?: boolean;
   /** `f"…{expr}…"`, whose expression may hold the string's own quote. */
   formatStrings?: boolean;
 }
@@ -182,15 +176,6 @@ const QUOTED: readonly StringSpec[] = [
 const SYNTAX: Readonly<Record<Exclude<Family, 'js'>, Syntax>> = {
   c: { ...SLASH_COMMENTS, cppRaw: true, strings: QUOTED },
   csharp: { ...SLASH_COMMENTS, strings: QUOTED, verbatim: true },
-  css: {
-    block: [['/*', '*/']],
-    cssUrl: true,
-    // Plain CSS has no line comment; SCSS, Sass and Less do, and reading one
-    // in a `.css` file would only ever remove a line that cannot be there.
-    line: ['//'],
-    nestedBlock: false,
-    strings: QUOTED,
-  },
   go: {
     ...SLASH_COMMENTS,
     strings: [...QUOTED, { close: '`', escape: false, open: '`' }],
@@ -221,10 +206,6 @@ const SYNTAX: Readonly<Record<Exclude<Family, 'js'>, Syntax>> = {
 };
 
 const MAX_RAW_PREFIX_CHARS = 24;
-
-const CSS_URL = /^url\(/i;
-
-const CSS_URL_CHARS = 4;
 
 const RUST_CHAR = /^'(?:\\.|[^\\'])'/;
 const RUST_RAW = /^r(#*)"/;
@@ -348,10 +329,6 @@ function scanSyntax(text: string, syntax: Syntax): CommentRange[] | null {
   let i = 0;
 
   while (i < text.length) {
-    if (syntax.cssUrl && CSS_URL.test(text.slice(i, i + CSS_URL_CHARS))) {
-      i = closeOf(text, i, ')');
-      continue;
-    }
     const block = blockCommentEnd(text, i, syntax);
 
     if (block !== null) {

@@ -1,6 +1,6 @@
 import type { BundledLanguage } from 'shiki/langs';
 
-import { isProsePath } from '@/agent/lib/review/review';
+import { isNotCodePath, isProsePath } from '@/agent/lib/review/review';
 
 /** "text" is shiki's no-op grammar, used when nothing places a file. */
 export type Lang = BundledLanguage | 'text';
@@ -487,14 +487,20 @@ export function extensionFromHint(firstLine: string): string | null {
   if (/^#!.*\b(ba|z|k)?sh\b/.test(line)) {
     return 'sh';
   }
-  // e.g. `// src/thing.ts`. Prose names are ignored: `// README.md — usage`
-  // above code is about the README, and would make the paste unjudged.
+  // e.g. `// src/thing.ts`. Prose and data names are ignored: `// README.md —
+  // usage` or `// package.json scripts run this` above code is about that
+  // file, and would make the paste unjudged.
   const named = /^(?:\/\/|#|\/\*)\s*\S*?\.([A-Za-z0-9]+)\b/.exec(line);
 
   if (named) {
     const extension = named[1].toLowerCase();
+    const sample = `x.${extension}`;
 
-    if (BY_EXTENSION[extension] && !isProsePath(`x.${extension}`)) {
+    if (
+      BY_EXTENSION[extension] &&
+      !isProsePath(sample) &&
+      !isNotCodePath(sample)
+    ) {
       return extension;
     }
   }

@@ -167,18 +167,6 @@ describe('other languages', () => {
     assert.ok(!stripped('var x = 1; // gone', 'A.cs').includes('gone'));
   });
 
-  test('CSS: url() and strings', () => {
-    keeps(
-      'a.css',
-      'a { background: url(http://x/y.png); content: "/* q */"; }\n/* gone */',
-      'http://x/y.png',
-      '"/* q */"',
-    );
-    assert.ok(
-      !stripped('a { color: red } /* gone */', 'a.css').includes('gone'),
-    );
-  });
-
   test('Python: f-strings keep their expressions', () => {
     keeps(
       'a.py',
@@ -199,6 +187,7 @@ describe('other languages', () => {
 
   test('an unknown language has no scanner', () => {
     assert.equal(commentRanges('-- a\n', 'a.sql'), null);
+    assert.equal(commentRanges('/* a */', 'a.css'), null);
     assert.equal(commentRanges('# a\n', 'Makefile'), null);
   });
 });

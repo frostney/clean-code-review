@@ -154,8 +154,39 @@ const BINARY_EXT =
 /** Shown for context but never judged: the questions are about code. */
 const PROSE_EXT = /\.(md|mdx|markdown|mkd|txt|text|rst|adoc|asciidoc|org)$/i;
 
+/**
+ * Changelog fragments (`changelog/fix-thing`) and `LICENSE`-style files carry
+ * no extension. Case-sensitive, so a `bin/changelog` script is still code.
+ */
+const PROSE_NAME =
+  /(^|\/)(changelog|changes)\/[^/.]+$|(^|\/)(LICEN[CS]E|Licen[cs]e|COPYING)([.-][\w.-]+)?$|(^|\/)(NOTICE|AUTHORS|CONTRIBUTORS|CHANGELOG|CHANGES|README)$/;
+
 export function isProsePath(path: string): boolean {
-  return PROSE_EXT.test(path);
+  return PROSE_EXT.test(path) || PROSE_NAME.test(path);
+}
+
+/** For every place that tells a reader what is skipped, so they agree. */
+export const NOT_CODE_FILES =
+  'data, config and markup files (JSON, YAML, TOML, XML, HTML, CSS, SQL, templates, Dockerfiles)';
+
+/**
+ * The questions ask about names, functions, classes and error handling, which
+ * these files do not have, so judging them only adds noise to the verdict.
+ * `phpunit.xml.dist` and `.env.example`-style copies count as what they copy.
+ */
+const NOT_CODE_EXT =
+  /\.(json[5cl]?|ndjson|geojson|ya?ml|toml|ini|cfg|conf|properties|xml|xaml|resx|resw|plist|csproj|vbproj|fsproj|props|targets|html?|css|scss|sass|less|sql|j2|jinja2?|njk|hbs|handlebars|twig|liquid|mustache|dockerfile)(\.(dist|example|sample))?$/i;
+
+/**
+ * Case-sensitive, and a container name ending in a source extension is code,
+ * so `Dockerfile.dev` is skipped while `src/dockerfile.ts`, `Dockerfile.test.ts`
+ * and a `Models/Dockerfile.cs` class are still judged.
+ */
+const NOT_CODE_NAME =
+  /(^|\/)(Dockerfile|Containerfile)(?![\w.-]*\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|kts|cs|swift|rb|php|c|cc|cpp|h|hpp|scala)$)([._-][\w.-]+)?$|(^|\/)\.(gitignore|gitattributes|gitmodules|editorconfig|dockerignore|npmrc|nvmrc|node-version|python-version|ruby-version|tool-versions|prettierrc|eslintrc|stylelintrc|babelrc|browserslistrc)$|(^|\/)(go\.mod|go\.work|CODEOWNERS)$/;
+
+export function isNotCodePath(path: string): boolean {
+  return NOT_CODE_EXT.test(path) || NOT_CODE_NAME.test(path);
 }
 
 const GENERATED_PATH =
@@ -194,7 +225,7 @@ function looksBinary(content: string): boolean {
   return sample.length > 0 && controlCount / sample.length > MAX_CONTROL_SHARE;
 }
 
-export type SkipReason = 'binary' | 'generated';
+export type SkipReason = 'binary' | 'generated' | 'not_code';
 
 export function skipReason(file: {
   path: string;
@@ -205,6 +236,9 @@ export function skipReason(file: {
   }
   if (GENERATED_PATH.test(file.path)) {
     return 'generated';
+  }
+  if (isNotCodePath(file.path)) {
+    return 'not_code';
   }
 
   return null;

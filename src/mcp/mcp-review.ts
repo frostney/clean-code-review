@@ -25,6 +25,7 @@ import { selectReviewFiles } from '@/agent/lib/judging/select';
 import {
   type FileJudgment,
   isProsePath,
+  NOT_CODE_FILES,
   REVIEW_LIMITS,
   type ReviewFile,
   skipReason,
@@ -95,6 +96,17 @@ const REPLY_ROOM_MS = 15_000;
  */
 export const JUDGE_DEADLINE_MS =
   MCP_MAX_DURATION_SECONDS * MS_PER_SECOND - REVIEW_TIMEOUT_MS - REPLY_ROOM_MS;
+
+/**
+ * Whole milliseconds: Node's `AbortSignal.timeout` throws on a fraction, which
+ * `performance.now()` usually gives. Bun, which runs the tests, accepts one.
+ */
+export function judgingMsLeft(
+  started: number,
+  now = performance.now(),
+): number {
+  return Math.max(0, Math.floor(JUDGE_DEADLINE_MS - (now - started)));
+}
 
 /** Quoted by the tools' descriptions. */
 export const TIMING_SECONDS = {
@@ -255,7 +267,7 @@ async function openPullRequest(input: string): Promise<Opened> {
 
   if (!review) {
     throw new ReviewError(
-      'Nothing in that pull request is code to judge: every file it changes is prose, generated, binary or deleted.',
+      `Nothing in that pull request is code to judge: every file it changes is prose, generated, binary, deleted or one of the ${NOT_CODE_FILES}.`,
     );
   }
 
@@ -543,9 +555,7 @@ async function reviewOpened(
     throw new ReviewError('Nothing in that input is code to judge.');
   }
 
-  const deadline = AbortSignal.timeout(
-    Math.max(0, JUDGE_DEADLINE_MS - (performance.now() - started)),
-  );
+  const deadline = AbortSignal.timeout(judgingMsLeft(started));
   const judged = await judgeCode(code, signal, deadline);
   // Parsed as the page parses a judge turn, so review-part cache keys match.
   const answers =

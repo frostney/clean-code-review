@@ -6,7 +6,12 @@ import type { SpendBrake } from '@/agent/lib/spend/spend';
 
 import { MCP_MAX_DURATION_SECONDS } from './mcp-facts';
 import { renderReviewText, reviewOutputSchema } from './mcp-result';
-import { JUDGE_DEADLINE_MS, judgeCode, ReviewError } from './mcp-review';
+import {
+  JUDGE_DEADLINE_MS,
+  judgeCode,
+  judgingMsLeft,
+  ReviewError,
+} from './mcp-review';
 
 test('the route lives as long as the deadlines assume', () => {
   const route = readFileSync(
@@ -263,4 +268,12 @@ test('the published output schema admits fields added later', () => {
 
   walk(schema, '$');
   assert.deepEqual(closed, []);
+});
+
+test('the judging deadline is whole milliseconds, as Node requires', () => {
+  const left = judgingMsLeft(100.25, 1100.875);
+
+  assert.ok(Number.isInteger(left));
+  assert.equal(left, JUDGE_DEADLINE_MS - 1001);
+  assert.equal(judgingMsLeft(0, JUDGE_DEADLINE_MS + 0.5), 0);
 });

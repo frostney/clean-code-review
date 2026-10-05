@@ -192,6 +192,7 @@ export function skippedText(
 ): string | null {
   const binary = skipped.filter((s) => s.reason === 'binary').length;
   const generated = skipped.filter((s) => s.reason === 'generated').length;
+  const notCode = skipped.filter((s) => s.reason === 'not_code').length;
   const parts: string[] = [];
 
   if (binary) {
@@ -201,6 +202,11 @@ export function skippedText(
   }
   if (generated) {
     parts.push(`${generated} generated ${generated === 1 ? 'file' : 'files'}`);
+  }
+  if (notCode) {
+    parts.push(
+      `${notCode} data, config or other non-code ${notCode === 1 ? 'file' : 'files'}`,
+    );
   }
   const unattributed = Math.max(0, count - skipped.length);
 
