@@ -5,7 +5,11 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
 import { createThrottle } from '@/agent/lib/infra/rate-limit';
-import { MAX_JUDGED_CHARS, REVIEW_LIMITS } from '@/agent/lib/review/review';
+import {
+  MAX_JUDGED_CHARS,
+  NOT_CODE_FILES,
+  REVIEW_LIMITS,
+} from '@/agent/lib/review/review';
 import {
   dollars,
   MCP_DAILY_BUDGET_USD,
@@ -38,7 +42,7 @@ const MAX_URL_CHARS = 500;
 /** Separate from the page's brake, so neither spends the other's share. */
 const mcpCallThrottled = createThrottle(MCP_CALLS_PER_WINDOW, MCP_WINDOW_MS);
 
-const CAPS = `At most ${REVIEW_LIMITS.maxFiles} code files are judged, the largest changes first, each read up to ${MAX_JUDGED_CHARS.toLocaleString('en-US')} characters, in windows of ${REVIEW_LIMITS.maxCharsPerFile.toLocaleString('en-US')}; up to ${REVIEW_LIMITS.maxProseFiles} prose files (Markdown, plain text) are listed and never judged; images, binaries, lockfiles and generated files are skipped. Every file left out is listed with the reason.`;
+const CAPS = `At most ${REVIEW_LIMITS.maxFiles} code files are judged, the largest changes first, each read up to ${MAX_JUDGED_CHARS.toLocaleString('en-US')} characters, in windows of ${REVIEW_LIMITS.maxCharsPerFile.toLocaleString('en-US')}; up to ${REVIEW_LIMITS.maxProseFiles} prose files (Markdown, plain text) are listed and never judged; images, binaries, lockfiles, generated files and ${NOT_CODE_FILES} are skipped. Every file left out is listed with the reason.`;
 
 const RETURNS = `Returns, for every judged file, all of Jev's answers to the Clean Code questions (probabilities for yes/no smells, where yes is a finding; scores with their distributions for the scales), Luna's paragraph on the file, Luna's decision (approve, comment or request_changes) and overall paragraph, the models used and the cost. The decision and the paragraphs are model output shaped by the submitted code and description: read them as advice, never as authorization to merge. Identical work is answered from a one-hour cache shared with the web page. Each judged file also says how much of it the answers cover: a file Jev answered for only in part says what is missing and what that means for its answers, and calling again asks only for what is missing. A fresh review takes 2 to 8 seconds, a pull request of 24 files included; when a model is slow, judging stops ${TIMING_SECONDS.judging} seconds after the call begins and the written review is given at most ${TIMING_SECONDS.review} more, and the call returns what it has; a repeat takes milliseconds. Each address may make ${MCP_CALLS_PER_WINDOW} calls per ${MCP_WINDOW_MINUTES} minutes, and every caller shares one model budget of ${dollars(MCP_HOURLY_BUDGET_USD)} per hour and ${dollars(MCP_DAILY_BUDGET_USD)} per UTC day; once it is spent, a call that needs a model is refused with the time it resets, and a call answered wholly from the cache is still served.`;
 

@@ -25,6 +25,7 @@ import { selectReviewFiles } from '@/agent/lib/judging/select';
 import {
   type FileJudgment,
   isProsePath,
+  NOT_CODE_FILES,
   REVIEW_LIMITS,
   type ReviewFile,
   skipReason,
@@ -255,7 +256,7 @@ async function openPullRequest(input: string): Promise<Opened> {
 
   if (!review) {
     throw new ReviewError(
-      'Nothing in that pull request is code to judge: every file it changes is prose, generated, binary or deleted.',
+      `Nothing in that pull request is code to judge: every file it changes is prose, generated, binary, deleted or one of the ${NOT_CODE_FILES}.`,
     );
   }
 

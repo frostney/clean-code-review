@@ -1,5 +1,9 @@
 import { QUESTION_COUNT, SMELL_IDS } from '@/agent/lib/judging/questions';
-import { REVIEW_LIMITS, SESSION_COST_CAP_USD } from '@/agent/lib/review/review';
+import {
+  NOT_CODE_FILES,
+  REVIEW_LIMITS,
+  SESSION_COST_CAP_USD,
+} from '@/agent/lib/review/review';
 import { REVIEWER_MODEL } from '@/agent/lib/review/summary';
 import {
   dollars,
@@ -40,7 +44,7 @@ export const FAQ: readonly { q: string; a: string }[] = [
     q: 'Is my code stored?',
   },
   {
-    a: `A pull request arrives as one unified diff and is split per file. The question set adjusts: a diff is also asked whether it leaves the code worse than it found it, and only a test file is asked whether its tests are clear. One turn judges at most ${REVIEW_LIMITS.maxFiles} code files, whichever changed most, and shows up to ${REVIEW_LIMITS.maxProseFiles} prose files beside them. Images, lockfiles and generated files are skipped. Public repositories only.`,
+    a: `A pull request arrives as one unified diff and is split per file. The question set adjusts: a diff is also asked whether it leaves the code worse than it found it, and only a test file is asked whether its tests are clear. One turn judges at most ${REVIEW_LIMITS.maxFiles} code files, whichever changed most, and shows up to ${REVIEW_LIMITS.maxProseFiles} prose files beside them. Images, lockfiles, generated files and ${NOT_CODE_FILES} are skipped. Public repositories only.`,
     q: 'How is a pull request judged?',
   },
   {

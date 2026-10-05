@@ -14,6 +14,7 @@ import { QUESTION_COUNT } from '@/agent/lib/judging/questions';
 import {
   MAX_JUDGE_CALLS_PER_FILE,
   MAX_JUDGED_CHARS,
+  NOT_CODE_FILES,
   REVIEW_LIMITS,
 } from '@/agent/lib/review/review';
 import { FILE_EXCERPT_CHARS } from '@/agent/lib/review/reviewer';
@@ -73,7 +74,7 @@ const LIMITS = [
   `- One turn judges at most ${REVIEW_LIMITS.maxFiles} code files, the largest changes first.`,
   `- Each file is read up to ${MAX_JUDGED_CHARS.toLocaleString('en-US')} characters, in windows of ${REVIEW_LIMITS.maxCharsPerFile.toLocaleString('en-US')}. Anything past that is cut.`,
   `- Up to ${REVIEW_LIMITS.maxProseFiles} prose files (Markdown, plain text) are shown beside the review and never judged.`,
-  '- Images, binaries, lockfiles, minified files and generated files never become a card.',
+  `- Images, binaries, lockfiles, minified files, generated files and ${NOT_CODE_FILES} never become a card.`,
   '- Identical work comes back from a cache for one hour rather than being judged again.',
   '- Each browser tab is one agent session with its own spending cap and an hour-long lifetime.',
 ].join('\n');

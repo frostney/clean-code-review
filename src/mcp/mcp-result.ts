@@ -2,6 +2,8 @@
 // leaves files out reads as a review of the whole change.
 import { z } from 'zod';
 
+import { NOT_CODE_FILES } from '@/agent/lib/review/review';
+
 // Every object is loose, so the published schema allows properties it does
 // not name: a field added later cannot fail a client that cached this schema
 // and validates against it.
@@ -106,6 +108,7 @@ const judgedFile = z.looseObject({
 const NOT_JUDGED_REASONS = [
   'binary',
   'generated',
+  'not_code',
   'no_hunks',
   'deleted',
   'empty',
@@ -123,6 +126,7 @@ const NOT_JUDGED_TEXT: Record<NotJudgedReason, string> = {
   generated: 'a lockfile, bundle, snapshot or other generated file',
   judge_failed: 'Jev did not answer for it',
   no_hunks: 'no changed lines: a binary, a pure rename or a mode change',
+  not_code: `one of the ${NOT_CODE_FILES}, which the code questions do not fit`,
   over_code_cap: 'past the cap on code files per review',
   over_prose_cap: 'past the cap on prose files per review',
 };
