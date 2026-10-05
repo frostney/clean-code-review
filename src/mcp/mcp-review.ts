@@ -544,8 +544,10 @@ async function reviewOpened(
     throw new ReviewError('Nothing in that input is code to judge.');
   }
 
+  // Node throws on a fractional delay, which `performance.now()` always gives;
+  // Bun, which runs the tests, does not.
   const deadline = AbortSignal.timeout(
-    Math.max(0, JUDGE_DEADLINE_MS - (performance.now() - started)),
+    Math.max(0, Math.floor(JUDGE_DEADLINE_MS - (performance.now() - started))),
   );
   const judged = await judgeCode(code, signal, deadline);
   // Parsed as the page parses a judge turn, so review-part cache keys match.
