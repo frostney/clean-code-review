@@ -1,12 +1,17 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { questionById } from '@/agent/lib/judging/questions';
 import type { FileJudgment } from '@/agent/lib/review/review';
 
 import {
+  answerDetail,
+  answerHeadline,
   coverageChip,
   coverageSentence,
+  isMeaningfulChange,
   partialCoverage,
+  smellCount,
   smellLabel,
 } from './display';
 
@@ -78,4 +83,45 @@ test('an unread window beside a missing comment-free reading is no floor', () =>
   assert.equal(coverageChip(coverage), '1 of 2 parts judged');
   assert.equal(smellLabel(2, coverage.floor), '2 smells');
   assert.doesNotMatch(coverageSentence(coverage), /can only lower/);
+});
+
+test('the yes/no headline and the smell count follow each question’s cutoff', () => {
+  const obscured = questionById('obscured_intent') ?? assert.fail('missing');
+  const answers = {
+    obscured_intent: { noul: 0.3, type: 'noul' as const },
+    too_many_arguments: { noul: 0.52, type: 'noul' as const },
+  };
+
+  assert.equal(answerHeadline(obscured, answers.obscured_intent), 'Yes');
+  assert.equal(smellCount(answers), 1);
+});
+
+test('crossing a question’s cutoff is a meaningful change', () => {
+  assert.equal(
+    isMeaningfulChange(
+      'too_many_arguments',
+      { noul: 0.52, type: 'noul' },
+      { noul: 0.6, type: 'noul' },
+    ),
+    true,
+  );
+  assert.equal(
+    isMeaningfulChange(
+      'too_many_arguments',
+      { noul: 0.45, type: 'noul' },
+      { noul: 0.52, type: 'noul' },
+    ),
+    false,
+  );
+});
+
+test('a yes/no detail names its cutoff only when it is not even odds', () => {
+  const obscured = questionById('obscured_intent') ?? assert.fail('missing');
+  const swallowed = questionById('swallowed_errors') ?? assert.fail('missing');
+
+  assert.equal(
+    answerDetail(obscured, { noul: 0.3, type: 'noul' }),
+    '30% · cutoff 20%',
+  );
+  assert.equal(answerDetail(swallowed, { noul: 0.3, type: 'noul' }), '30%');
 });

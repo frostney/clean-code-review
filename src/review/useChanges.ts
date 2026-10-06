@@ -39,7 +39,7 @@ export function useChanges(
       const before = prev.current[m.id];
       const after = answers[m.id];
 
-      if (!isMeaningfulChange(before, after)) {
+      if (!isMeaningfulChange(m.id, before, after)) {
         continue;
       }
       changed.push(m.id);

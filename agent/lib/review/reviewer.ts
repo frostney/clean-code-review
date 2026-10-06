@@ -13,7 +13,12 @@
 import { streamText } from 'ai';
 
 import { cacheGet, cacheKey, cacheSet } from '../infra/cache';
-import { questionById, SMELL_IDS } from '../judging/questions';
+import {
+  findingMargin,
+  isFinding,
+  questionById,
+  SMELL_IDS,
+} from '../judging/questions';
 import {
   failureMayHaveBilled,
   lunaCostUsd,
@@ -36,7 +41,7 @@ import {
 } from './summary';
 
 /** Bump when the reviewer's instructions or output handling change, so cached parts expire. */
-const REVIEW_VERSION = 11;
+const REVIEW_VERSION = 12;
 
 /** The findings cover the rest of the file. Quoted by `/privacy` and its twin. */
 export const FILE_EXCERPT_CHARS = 8_000;
@@ -103,13 +108,25 @@ function timedOut(reason: unknown): string {
  */
 const MS_PER_OUTPUT_TOKEN = 20;
 
-/** Jev's yes/no answers are probabilities; at or above this, the smell is a finding. */
-const EVEN_ODDS = 0.5;
-
 /** Index of the top level on the five-level score scale. */
 const TOP_LEVEL = 4;
 
 const OVERALL_FINDINGS = 5;
+
+/**
+ * Margins over the cutoff (see `findingMargin`) that read as "clear" and
+ * "probable". Chosen by judgement for wording, not fitted like the cutoffs.
+ */
+const CLEAR_MARGIN = 0.5;
+const PROBABLE_MARGIN = 0.2;
+
+function strengthOf(margin: number): 'clear' | 'probable' | 'borderline' {
+  if (margin >= CLEAR_MARGIN) {
+    return 'clear';
+  }
+
+  return margin >= PROBABLE_MARGIN ? 'probable' : 'borderline';
+}
 
 function reviewerMessage(
   input: SummarizeInput,
@@ -120,13 +137,14 @@ function reviewerMessage(
     const findings = SMELL_IDS.filter(
       (id) =>
         answers[id]?.type === 'noul' &&
-        (answers[id] as { noul: number }).noul >= EVEN_ODDS,
+        isFinding(id, (answers[id] as { noul: number }).noul),
     )
       .map((id) => ({
-        probability: (answers[id] as { noul: number }).noul,
+        margin: findingMargin(id, (answers[id] as { noul: number }).noul),
         smell: questionById(id)?.label ?? id,
       }))
-      .sort((a, b) => b.probability - a.probability);
+      .sort((a, b) => b.margin - a.margin)
+      .map(({ margin, smell }) => ({ smell, strength: strengthOf(margin) }));
     const scales = Object.fromEntries(
       Object.entries(answers)
         .filter(([, a]) => a.type === 'score')

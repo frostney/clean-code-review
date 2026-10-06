@@ -277,3 +277,51 @@ test('the judging deadline is whole milliseconds, as Node requires', () => {
   assert.equal(left, JUDGE_DEADLINE_MS - 1001);
   assert.equal(judgingMsLeft(0, JUDGE_DEADLINE_MS + 0.5), 0);
 });
+
+test('a text-only client sees findings by each question’s cutoff', () => {
+  const noul = (label: string, probability: number, cutoff: number) => ({
+    cutoff,
+    group: 'g',
+    label,
+    probability,
+    type: 'noul' as const,
+  });
+  const text = renderReviewText({
+    cache: { judgedFromCache: 0, pullRequest: null, review: false },
+    costUsd: { judge: 0, review: 0, total: 0 },
+    decision: null,
+    files: [
+      {
+        answers: {
+          obscured_intent: noul('Obscured intent', 0.3, 0.2),
+          too_many_arguments: noul('Too many arguments', 0.52, 0.55),
+        },
+        cached: false,
+        coverage: { complete: true, note: null, parts: 1, partsJudged: 1 },
+        kind: 'file' as const,
+        path: 'a.ts',
+        review: null,
+        reviewIncomplete: false,
+        truncated: false,
+      },
+    ],
+    models: { judge: 'jev', reviewer: 'luna' },
+    ms: 0,
+    notices: [],
+    notJudged: [],
+    overall: null,
+    overallIncomplete: false,
+    prose: [],
+    source: { kind: 'paste' },
+    unlistedFiles: 0,
+  });
+  const findings = text.slice(
+    text.indexOf('Findings:'),
+    text.indexOf('Other answers:'),
+  );
+  const rest = text.slice(text.indexOf('Other answers:'));
+
+  assert.match(findings, /obscured_intent .*: 30% \(cutoff 20%\)/);
+  assert.doesNotMatch(findings, /too_many_arguments/);
+  assert.match(rest, /too_many_arguments/);
+});

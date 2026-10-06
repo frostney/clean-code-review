@@ -344,7 +344,13 @@ function labelledAnswer(id: string, a: Answers[string]): LabelledAnswer | null {
   const group = GROUPS.find((g) => g.id === q.group)?.title ?? q.group;
 
   if (a.type === 'noul') {
-    return { group, label: q.label, probability: a.noul, type: 'noul' };
+    return {
+      group,
+      label: q.label,
+      probability: a.noul,
+      type: 'noul',
+      ...(q.type === 'noul' ? { cutoff: q.cutoff } : {}),
+    };
   }
   if (a.type !== 'score' || q.type !== 'score') {
     return null;

@@ -1,12 +1,9 @@
-import type { Question } from '@/agent/lib/judging/questions';
+import { isFinding, type Question } from '@/agent/lib/judging/questions';
 import type { Answer } from '@/agent/lib/judging/schema';
 
 import { answerDetail, answerHeadline, levelsOf } from './display';
 
 const PERCENT = 100;
-
-/** A yes/no probability at or above this reads as "yes". */
-const EVEN_ODDS = 0.5;
 
 // Deliberately plain: no ticks or colour scale; a row says more in words.
 function Bar({ value }: { value: number }) {
@@ -69,10 +66,9 @@ export function Meter({
   changed?: boolean;
   delta?: string;
 }) {
-  const finding =
-    meta.type === 'noul' && answer?.type === 'noul' && answer.noul >= EVEN_ODDS;
-  const quiet =
-    meta.type === 'noul' && answer?.type === 'noul' && answer.noul < EVEN_ODDS;
+  const noul = meta.type === 'noul' && answer?.type === 'noul';
+  const finding = noul && isFinding(meta.id, answer.noul);
+  const quiet = noul && !finding;
 
   return (
     <div
@@ -95,7 +91,7 @@ export function Meter({
           <span className="truncate text-xs text-muted">{delta}</span>
         ) : (
           <span className="truncate text-xs text-subtle">
-            {answerDetail(answer)}
+            {answerDetail(meta, answer)}
           </span>
         )}
         <span

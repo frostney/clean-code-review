@@ -227,7 +227,7 @@ function judgmentMoved(before: Answers | undefined, after: Answers): boolean {
     if (!prev || prev.type !== answer.type) {
       return true;
     }
-    if (isMeaningfulChange(prev, answer)) {
+    if (isMeaningfulChange(id, prev, answer)) {
       return true;
     }
   }

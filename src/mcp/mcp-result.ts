@@ -2,6 +2,7 @@
 // leaves files out reads as a review of the whole change.
 import { z } from 'zod';
 
+import { findingMargin, isFinding } from '@/agent/lib/judging/questions';
 import { NOT_CODE_FILES } from '@/agent/lib/review/review';
 
 // Every object is loose, so the published schema allows properties it does
@@ -11,12 +12,17 @@ import { NOT_CODE_FILES } from '@/agent/lib/review/review';
 const probability = z.number().min(0).max(1);
 
 const noulAnswer = z.looseObject({
+  cutoff: probability
+    .optional()
+    .describe(
+      "This question's own threshold: at or above it the answer is a finding and the page lights the row. Thresholds differ per question because Jev's probabilities are not calibrated alike.",
+    ),
   group: z
     .string()
     .describe('The Clean Code chapter this question belongs to.'),
   label: z.string().describe('The question, as the page labels its row.'),
   probability: probability.describe(
-    'Probability that the statement in the label is true. Every yes/no question is phrased so that yes is a finding; at 0.5 or more the page lights the row.',
+    'Probability that the statement in the label is true. Every yes/no question is phrased so that yes is a finding; compare it with `cutoff`, not with 0.5.',
   ),
   type: z.literal('noul'),
 });
@@ -239,14 +245,14 @@ type AnswerOutput = JudgedFile['answers'][string];
 const PERCENT = 100;
 const percent = (p: number) => `${Math.round(p * PERCENT)}%`;
 
-/** Same finding threshold as the page. */
-const EVEN_ODDS = 0.5;
-
 const COST_DIGITS = 4;
 
 function answerLine(id: string, a: AnswerOutput): string {
   if (a.type === 'noul') {
-    return `${id} (${a.label}): ${percent(a.probability)}`;
+    const cutoff =
+      a.cutoff === undefined ? '' : ` (cutoff ${percent(a.cutoff)})`;
+
+    return `${id} (${a.label}): ${percent(a.probability)}${cutoff}`;
   }
   const spread = a.probabilities
     ? `; ${Object.entries(a.probabilities)
@@ -260,15 +266,15 @@ function answerLine(id: string, a: AnswerOutput): string {
 function fileText(file: JudgedFile): string {
   const entries = Object.entries(file.answers);
   const findings = entries
-    .filter(([, a]) => a.type === 'noul' && a.probability >= EVEN_ODDS)
+    .filter(([id, a]) => a.type === 'noul' && isFinding(id, a.probability))
     .sort(
-      ([, a], [, b]) =>
-        (b.type === 'noul' ? b.probability : 0) -
-        (a.type === 'noul' ? a.probability : 0),
+      ([idA, a], [idB, b]) =>
+        (b.type === 'noul' ? findingMargin(idB, b.probability) : 0) -
+        (a.type === 'noul' ? findingMargin(idA, a.probability) : 0),
     );
   const scales = entries.filter(([, a]) => a.type === 'score');
   const rest = entries.filter(
-    ([, a]) => a.type === 'noul' && a.probability < EVEN_ODDS,
+    ([id, a]) => a.type === 'noul' && !isFinding(id, a.probability),
   );
   const flags = [
     file.kind,
@@ -285,7 +291,7 @@ function fileText(file: JudgedFile): string {
       : [`Partly judged: ${file.coverage.note}`]),
     file.review ?? '(No paragraph was written for this file.)',
     '',
-    `Findings: ${findings.length ? '' : 'none at even odds or better.'}`,
+    `Findings: ${findings.length ? '' : "none at or above any question's cutoff."}`,
     ...findings.map(([id, a]) => `- ${answerLine(id, a)}`),
     'Scales:',
     ...scales.map(([id, a]) => `- ${answerLine(id, a)}`),
