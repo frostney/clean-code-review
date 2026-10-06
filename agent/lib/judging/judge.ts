@@ -46,8 +46,8 @@ function evaluateFile(file: ReviewFile, signal: AbortSignal) {
   });
 }
 
-/** Bump when a question's wording changes, so cached answers to the old wording expire. */
-const QUESTIONS_VERSION = 3;
+/** Bump when a question's wording or yes/no definition changes, so cached answers to the old wording expire. A cutoff change needs no bump. */
+const QUESTIONS_VERSION = 4;
 
 /** Pass A is the file as written; pass B is the same file without its comments. */
 type PassId = 'a' | 'b';

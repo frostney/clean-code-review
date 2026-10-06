@@ -1,12 +1,15 @@
-import { type Question, SMELL_IDS } from '@/agent/lib/judging/questions';
+import {
+  cutoffOf,
+  DEFAULT_CUTOFF,
+  isFinding,
+  type Question,
+  SMELL_IDS,
+} from '@/agent/lib/judging/questions';
 import type { Answer, Answers } from '@/agent/lib/judging/schema';
 import type { FileJudgment } from '@/agent/lib/review/review';
 import type { Summary } from '@/agent/lib/review/summary';
 
 const PERCENT = 100;
-
-/** A yes/no probability at or above this reads as "yes". */
-const EVEN_ODDS = 0.5;
 
 export function pct(p: number): string {
   return `${Math.round(p * PERCENT)}%`;
@@ -30,7 +33,7 @@ export function answerHeadline(
     return '—';
   }
   if (answer.type === 'noul') {
-    return answer.noul >= EVEN_ODDS ? 'Yes' : 'No';
+    return isFinding(meta.id, answer.noul) ? 'Yes' : 'No';
   }
   // No question asks for a choice, but the payload schema still accepts one,
   // so print it rather than drop the row.
@@ -44,13 +47,24 @@ export function answerHeadline(
     : answer.score.toFixed(2);
 }
 
-/** Confidence is optional for scores and choices, so this may be empty. */
-export function answerDetail(answer: Answer | undefined): string {
+/**
+ * Confidence is optional for scores and choices, so this may be empty. A
+ * yes/no answer names its cutoff when that is not even odds, so a red "Yes"
+ * at 30% explains itself.
+ */
+export function answerDetail(
+  meta: Question,
+  answer: Answer | undefined,
+): string {
   if (!answer) {
     return '';
   }
   if (answer.type === 'noul') {
-    return pct(answer.noul);
+    const cutoff = cutoffOf(meta.id);
+
+    return cutoff === DEFAULT_CUTOFF
+      ? pct(answer.noul)
+      : `${pct(answer.noul)} · cutoff ${pct(cutoff)}`;
   }
 
   return answer.confidence === undefined
@@ -65,6 +79,7 @@ const SCORE_SHIFT = 0.75;
 
 // Deliberately coarse: a bar that twitches on every pause teaches nothing.
 export function isMeaningfulChange(
+  id: string,
   prev: Answer | undefined,
   next: Answer | undefined,
 ): boolean {
@@ -73,7 +88,7 @@ export function isMeaningfulChange(
   }
   if (prev.type === 'noul' && next.type === 'noul') {
     return (
-      prev.noul >= EVEN_ODDS !== next.noul >= EVEN_ODDS ||
+      isFinding(id, prev.noul) !== isFinding(id, next.noul) ||
       Math.abs(prev.noul - next.noul) >= NOUL_SHIFT
     );
   }
@@ -260,10 +275,6 @@ export function verdictFill(score: number | null): number {
 
 /* ── Smells ─────────────────────────────────────────────────────────────── */
 
-function isFinding(answer: Answer | undefined): boolean {
-  return answer?.type === 'noul' && answer.noul >= EVEN_ODDS;
-}
-
 export function smellCount(answers: Answers | undefined): number {
   if (!answers) {
     return 0;
@@ -271,7 +282,9 @@ export function smellCount(answers: Answers | undefined): number {
   let n = 0;
 
   for (const id of SMELL_IDS) {
-    if (isFinding(answers[id])) {
+    const answer = answers[id];
+
+    if (answer?.type === 'noul' && isFinding(id, answer.noul)) {
       n++;
     }
   }

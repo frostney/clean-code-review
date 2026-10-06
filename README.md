@@ -82,7 +82,11 @@ calls in parallel and streams the combined review. Cancelling the turn aborts
 the calls.
 
 Jev answers with probabilities and scores rather than sentences, so a verdict is
-made of things a reader can check against the code. The set is per file: the
+made of things a reader can check against the code. A yes/no answer is a finding
+at or above its question's own cutoff rather than at 50%, and the questions Jev
+read most loosely carry definitions of what counts as yes and what does not;
+both were fitted against blind, code-quoting reviews of 200 public pull
+requests and checked on 25 others. The set is per file: the
 test question is asked only on test paths and the Boy Scout question only on
 diffs, so a plain source file gets two fewer than a test diff does. Luna gets 300 characters per
 file section, by instruction rather than truncation, and writes the decision for

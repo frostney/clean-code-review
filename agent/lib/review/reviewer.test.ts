@@ -19,6 +19,7 @@ import {
   runReview,
   TIMED_OUT,
 } from './reviewer';
+import { REVIEWER_INSTRUCTIONS } from './reviewer-prompt';
 import { REVIEWER_MODEL } from './summary';
 
 const input = {
@@ -157,4 +158,27 @@ test('a stream that stops mid-answer fails within the bound', async () => {
   } finally {
     mock.timers.reset();
   }
+});
+
+test('Luna is given findings by each question’s cutoff, strongest first', async () => {
+  const plan = await planReview({
+    ...input,
+    judgments: {
+      'src/total.ts': {
+        obscured_intent: { noul: 0.3, type: 'noul' },
+        swallowed_errors: { noul: 0.97, type: 'noul' },
+        too_many_arguments: { noul: 0.52, type: 'noul' },
+      },
+    },
+  });
+  const files = plan.parts.find((p) => p.part.role === 'files');
+  const message = JSON.parse(files?.message ?? '{}') as {
+    files: { findings: { smell: string; strength: string }[] }[];
+  };
+
+  assert.deepEqual(message.files[0].findings, [
+    { smell: 'Swallowed or empty catch', strength: 'clear' },
+    { smell: 'Obscured intent', strength: 'borderline' },
+  ]);
+  assert.doesNotMatch(REVIEWER_INSTRUCTIONS, /50%|calibrated/);
 });
