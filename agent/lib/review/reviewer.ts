@@ -73,6 +73,8 @@ const RETRY_CEILING_FACTOR = 2;
  * `streamRetries` stays at its default of none: deltas go straight to the
  * page, so a restarted stream would repeat a section already on screen.
  */
+export const LUNA_FUNCTION_ID = 'luna-review-part';
+
 export const REVIEWER_TIMEOUT = {
   chunkMs: 10_000,
   firstChunkMs: 20_000,
@@ -366,6 +368,8 @@ async function attempt(
     model: REVIEWER_MODEL,
     prompt: p.message,
     system: REVIEWER_INSTRUCTIONS,
+    // Names Luna's spans apart from the judge's in eve's OpenTelemetry trace.
+    telemetry: { functionId: LUNA_FUNCTION_ID },
     timeout: {
       ...REVIEWER_TIMEOUT,
       // The longest start allowed plus the longest this ceiling could take to
